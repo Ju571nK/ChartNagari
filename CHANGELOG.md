@@ -36,6 +36,24 @@
 
 ---
 
+## [0.3.0] - 2026-03-07
+
+### Added
+- `internal/config/config.go`: .env + YAML 통합 설정 로더
+- `internal/storage/db.go`: SQLite 초기화, WAL 모드, 스키마 마이그레이션
+- `internal/storage/ohlcv.go`: OHLCV CRUD (SaveOHLCV, SaveOHLCVBatch, GetOHLCV, GetOHLCVSince)
+- `internal/collector/binance.go`: Binance WebSocket 수집기 (자동 재연결, 확정 캔들만 저장)
+- `internal/collector/yahoo.go`: Yahoo Finance REST 수집기 (장중/장외 시간 구분)
+- `internal/collector/timeframe.go`: 1H → 4H/1D/1W 자동 재구성 유틸리티
+- `cmd/server/main.go`: 수집기 goroutine 연결, SIGTERM graceful shutdown
+- 테스트 11개 (collector 6, storage 5) — 전체 PASS
+
+### Changed
+- PRD.md: 1-1, 1-2, 1-3 → `[DONE]`
+- 의존성 추가: `modernc.org/sqlite`, `gorilla/websocket`, `yaml.v3`, `godotenv`
+
+---
+
 ## [0.2.0] - 2026-03-07
 
 ### Added

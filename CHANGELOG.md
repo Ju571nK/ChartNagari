@@ -95,4 +95,86 @@
 - PRD.md: Phase 1-4, 1-5 → `[DONE]`
 - 전체 테스트: 25개 PASS (기존 11개 유지 + 신규 14개)
 
+---
+
+## [0.5.0] - 2026-03-07
+
+### Added
+- `internal/methodology/general_ta/` 패키지 — 일반 기술적분석 플러그인 (Phase 1-6)
+  - `helpers.go`: 패키지 내부 유틸리티 (`rollingRSI`, `rollingEMA`, `swingLowPair`, `swingHighPair`)
+  - `rsi_overbought_oversold.go`: RSI(14)≥70 → SHORT, ≤30 → LONG, 전 TF 스캔
+  - `rsi_divergence.go`: 가격/RSI 다이버전스 감지 (강세/약세), rollingRSI 내부 계산
+  - `ema_cross.go`: EMA(9)/EMA(20) 골든크로스·데드크로스 감지
+  - `support_resistance_breakout.go`: SWING_HIGH/LOW 돌파 감지
+  - `fibonacci_confluence.go`: 가격이 주요 피보나치 레벨(0.5% 허용오차) 근처일 때 신호
+  - `volume_spike.go`: 거래량 2×MA20 초과 시 방향 신호
+  - `general_ta_test.go`: 18개 테스트 — 전체 PASS
+- `internal/methodology/ict/` 패키지 — ICT 방법론 플러그인 (Phase 1-8)
+  - `order_block.go`: 마지막 약세/강세 캔들 → 충격파 → 가격 복귀 시 신호
+  - `fair_value_gap.go`: 3캔들 불균형 갭(FVG) 감지, 가격이 갭 진입 시 신호
+  - `liquidity_sweep.go`: 스윙 레벨 위/아래 위크 돌파 후 복귀 — 유동성 스윕 신호
+  - `breaker_block.go`: 실패한 오더블록(브레이커) 감지 — 반대 방향 신호
+  - `kill_zone.go`: 런던(08:00-11:00 UTC) / 뉴욕(13:00-16:00 UTC) 킬존 시간 감지
+  - `ict_test.go`: 15개 테스트 — 전체 PASS
+- `internal/methodology/wyckoff/` 패키지 — Wyckoff 방법론 플러그인 (Phase 1-9)
+  - `accumulation.go`: 좁은 레인지(<8%) + EMA50 하단 + 낮은 거래량 → LONG
+  - `distribution.go`: 좁은 레인지 + EMA50 상단 + 낮은 거래량 → SHORT
+  - `spring.go`: 스윙저점 아래 위크 후 복귀 + 고거래량 → LONG
+  - `upthrust.go`: 스윙고점 위 위크 후 반전 + 고거래량 → SHORT
+  - `volume_anomaly.go`: 거래량 2.5×MA20 초과 → 방향 신호
+  - `wyckoff_test.go`: 14개 테스트 — 전체 PASS
+
+### Changed
+- `config/rules.yaml`: 16개 룰 모두 `enabled: true` 활성화 (구현 완료)
+- `PRD.md`: Phase 1-6, 1-8, 1-9 → `[DONE]`
+- 전체 테스트: 82개 PASS (기존 35개 유지 + 신규 47개)
+
+---
+
+## [0.6.0] - 2026-03-07
+
+### Added
+- `internal/notifier/` 패키지 — Telegram/Discord 알림 시스템 (Phase 1-7)
+  - `notifier.go`: `Notifier` — 스코어 임계값 필터, 쿨다운 검사, 멀티 Sender 디스패치
+  - `cooldown.go`: `Cooldown` — `{symbol}|{rule}` 키 기반 in-memory 쿨다운 (기본 4시간)
+  - `format.go`: `formatTelegram`, `discordColor`, `directionIcon` 메시지 포매터
+  - `telegram.go`: `TelegramSender` — Bot API `/sendMessage`, HTML parse_mode
+  - `discord.go`: `DiscordSender` — Webhook embed 메시지 (컬러 코딩: 녹색/빨간/황색)
+  - `notifier_test.go`: 18개 테스트 — 전체 PASS (httptest.Server로 실제 HTTP 검증 포함)
+
+### Design
+- `Sender` 인터페이스로 백엔드 교체/확장 가능 (Slack 등 추후 추가 용이)
+- HTTP 클라이언트 주입 가능 → 테스트에서 실제 API 호출 없음
+- 쿨다운 시계(`now` func) 주입 가능 → 만료 테스트 가능
+
+### Changed
+- 전체 테스트: 100개 PASS (기존 82개 유지 + 신규 18개)
+
+---
+
+## [0.7.0] - 2026-03-07
+
+### Added
+- `internal/api/` 패키지 — Go REST API 서버 (Phase 1-10)
+  - `server.go`: `Server` — 5개 엔드포인트, YAML 파일 읽기/쓰기, CORS 미들웨어
+    - `GET /api/status` — 시스템 요약 (phase, symbols, rules, tests)
+    - `GET /api/symbols` — 전체 종목 목록 (crypto + stock)
+    - `PUT /api/symbols/{symbol}` — 종목 enabled 토글
+    - `GET /api/rules` — 전체 룰 목록
+    - `PUT /api/rules/{name}` — 룰 enabled 토글
+    - `GET /` — React 정적 파일 서빙 (web/dist/)
+  - `api_test.go`: 16개 테스트 — 전체 PASS
+- `web/` — React + TypeScript 설정 UI
+  - `vite.config.ts`: 개발 모드에서 `/api/*` → Go 서버 프록시
+  - `src/App.tsx`: 3탭 UI (종목 / 룰 / 상태), 실시간 토글 반영
+  - `src/App.css`: 다크 테마, 방법론별 컬러 배지
+  - `npm run build` → `web/dist/` 빌드 성공 (27 모듈, 148KB JS)
+
+### Changed
+- `cmd/server/main.go`: HTTP API 서버 goroutine 추가 (port `:8080`)
+- `PRD.md`: Phase 1-10 → `[DONE]`, Phase 1 전체 → `[DONE]`
+- 전체 테스트: 116개 PASS (기존 100개 유지 + 신규 16개)
+
+### 🎉 Phase 1: Core MVP 완료
+
 <!-- 이후 항목은 Recorder가 자동으로 추가한다 -->

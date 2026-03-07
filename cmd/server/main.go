@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/Ju571nK/Chatter/internal/api"
 	"github.com/Ju571nK/Chatter/internal/collector"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/storage"
@@ -71,7 +73,15 @@ func main() {
 		log.Info().Msg("활성화된 주식 종목 없음 — watchlist.yaml에서 enabled: true 설정 필요")
 	}
 
-	// TODO Phase 1-4~: 인디케이터 엔진, 룰 엔진, 알림 시스템
+	// ── HTTP API + 설정 UI 서버 (Phase 1-10) ─────────────────────────
+	apiSrv := api.New("config", "web/dist")
+	httpAddr := ":" + cfg.ServerPort
+	go func() {
+		log.Info().Str("addr", httpAddr).Msg("HTTP API 서버 시작")
+		if err := http.ListenAndServe(httpAddr, apiSrv.Handler()); err != nil {
+			log.Error().Err(err).Msg("HTTP API 서버 종료")
+		}
+	}()
 
 	// ── Graceful shutdown 대기 ────────────────────────────────────────
 	<-ctx.Done()

@@ -4,7 +4,7 @@
 rules:
   # ── 일반 기술적분석 ──────────────────────────────────────────────────
   - name: rsi_overbought_oversold
-    enabled: false          # Phase 1-6 구현 후 true로 변경
+    enabled: true           # Phase 1-6 구현 완료
     methodology: general_ta
     params:
       period: 14
@@ -13,7 +13,7 @@ rules:
       strength: 3.0         # 룰 강도 (스코어링에 사용)
 
   - name: rsi_divergence
-    enabled: false
+    enabled: true           # Phase 1-6 구현 완료
     methodology: general_ta
     params:
       period: 14
@@ -21,29 +21,29 @@ rules:
       strength: 4.0
 
   - name: support_resistance_breakout
-    enabled: false
+    enabled: true           # Phase 1-6 구현 완료
     methodology: general_ta
     params:
       lookback: 20
       strength: 3.5
 
   - name: ema_cross
-    enabled: false
+    enabled: true           # Phase 1-6 구현 완료
     methodology: general_ta
     params:
       fast: 9
-      slow: 21
+      slow: 20
       strength: 2.5
 
   - name: fibonacci_confluence
-    enabled: false
+    enabled: true           # Phase 1-6 구현 완료
     methodology: general_ta
     params:
       levels: [0.236, 0.382, 0.5, 0.618, 0.786]
       strength: 3.0
 
   - name: volume_spike
-    enabled: false
+    enabled: true           # Phase 1-6 구현 완료
     methodology: general_ta
     params:
       ma_period: 20
@@ -52,35 +52,35 @@ rules:
 
   # ── ICT 방법론 ───────────────────────────────────────────────────────
   - name: ict_order_block
-    enabled: false          # Phase 1-8 구현 후 true로 변경
+    enabled: true           # Phase 1-8 구현 완료
     methodology: ict
     params:
       lookback: 10
       strength: 5.0
 
   - name: ict_fair_value_gap
-    enabled: false
+    enabled: true           # Phase 1-8 구현 완료
     methodology: ict
     params:
       min_gap_pct: 0.1
       strength: 4.0
 
   - name: ict_liquidity_sweep
-    enabled: false
+    enabled: true           # Phase 1-8 구현 완료
     methodology: ict
     params:
       lookback: 20
       strength: 4.5
 
   - name: ict_breaker_block
-    enabled: false
+    enabled: true           # Phase 1-8 구현 완료
     methodology: ict
     params:
       lookback: 15
       strength: 5.0
 
   - name: ict_kill_zone
-    enabled: false
+    enabled: true           # Phase 1-8 구현 완료
     methodology: ict
     params:
       # UTC 기준 세션 시간
@@ -91,35 +91,35 @@ rules:
 
   # ── Wyckoff 방법론 ───────────────────────────────────────────────────
   - name: wyckoff_accumulation
-    enabled: false          # Phase 1-9 구현 후 true로 변경
+    enabled: true           # Phase 1-9 구현 완료
     methodology: wyckoff
     params:
       lookback: 50
       strength: 5.0
 
   - name: wyckoff_distribution
-    enabled: false
+    enabled: true           # Phase 1-9 구현 완료
     methodology: wyckoff
     params:
       lookback: 50
       strength: 5.0
 
   - name: wyckoff_spring
-    enabled: false
+    enabled: true           # Phase 1-9 구현 완료
     methodology: wyckoff
     params:
       lookback: 20
       strength: 6.0
 
   - name: wyckoff_upthrust
-    enabled: false
+    enabled: true           # Phase 1-9 구현 완료
     methodology: wyckoff
     params:
       lookback: 20
       strength: 6.0
 
   - name: wyckoff_volume_anomaly
-    enabled: false
+    enabled: true           # Phase 1-9 구현 완료
     methodology: wyckoff
     params:
       ma_period: 20

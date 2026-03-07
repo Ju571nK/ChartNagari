@@ -27,14 +27,17 @@
 | 2026-03-07 | 테스트 11개 전체 PASS | Developer |
 | 2026-03-07 | Phase 1-4: 인디케이터 엔진 (14개 테스트 PASS) | Developer |
 | 2026-03-07 | Phase 1-5: 룰 엔진 (10개 테스트 PASS) | Developer |
+| 2026-03-07 | Phase 1-6: 일반 기술적분석 플러그인 6종 (18개 테스트 PASS) | Developer |
+| 2026-03-07 | Phase 1-8: ICT 방법론 플러그인 5종 (15개 테스트 PASS) | Developer |
+| 2026-03-07 | Phase 1-9: Wyckoff 방법론 플러그인 5종 (14개 테스트 PASS) | Developer |
+| 2026-03-07 | Phase 1-7: Telegram/Discord 알림 시스템 (18개 테스트 PASS) | Developer |
+| 2026-03-07 | Phase 1-10: React + TypeScript 설정 UI + Go REST API (16개 테스트 PASS) | Developer |
 
 ---
 
 ## 진행 중
 
-| 항목 | 담당 | 상태 |
-|------|------|------|
-| Phase 1-6: 일반 기술적분석 플러그인 | Developer | 대기 중 |
+없음. **Phase 1: Core MVP 전체 완료.**
 
 ---
 
@@ -46,10 +49,7 @@
 
 ## 다음 할 일 (우선순위 순)
 
-1. **Phase 1-6**: 일반 기술적분석 방법론 플러그인 (RSI 과매수/과매도, EMA 크로스, S/R 돌파, Fibonacci, Volume Spike)
-2. **Phase 1-7**: Telegram/Discord 알림 시스템
-3. **Phase 1-8**: ICT 방법론 플러그인 (병렬 가능)
-4. **Phase 1-9**: Wyckoff 방법론 플러그인 (병렬 가능)
+Phase 1 완료. 다음 목표: **Phase 2** (차트 대시보드, 백테스팅, Claude AI 해석 레이어, SMC 방법론)
 
 ---
 

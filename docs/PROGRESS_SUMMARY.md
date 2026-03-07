@@ -118,6 +118,44 @@
 
 ---
 
+### Phase 1-6: 일반 기술적분석 플러그인 ✅
+
+**패키지**: `internal/methodology/general_ta/`
+
+- `RSIOverboughtOversoldRule` — RSI(14)≥70→SHORT / ≤30→LONG, 전 TF 스캔
+- `RSIDivergenceRule` — 가격/RSI 다이버전스, 내부 rollingRSI 계산 (lookback=20)
+- `EMACrossRule` — EMA(9)/EMA(20) 골든·데드크로스 (rollingEMA 사용)
+- `SupportResistanceBreakoutRule` — SWING_HIGH/LOW 돌파 감지
+- `FibonacciConfluenceRule` — 가격이 FIB_236/382/500/618/786 ±0.5% 내에 있을 때
+- `VolumeSpikeRule` — 거래량 ≥ 2×VOLUME_MA_20, 캔들 방향으로 LONG/SHORT
+- 공통 helpers: `rollingRSI`, `rollingEMA`, `swingLowPair`, `swingHighPair`
+
+---
+
+### Phase 1-8: ICT 방법론 플러그인 ✅
+
+**패키지**: `internal/methodology/ict/`
+
+- `ICTOrderBlockRule` — 마지막 약세/강세 캔들 + 충격파 패턴, 가격 복귀 시 신호
+- `ICTFairValueGapRule` — 3캔들 불균형 갭(bars[i].high < bars[i+2].low 등), 진입 감지
+- `ICTLiquiditySweepRule` — curr.Low < SWING_LOW && curr.Close > SWING_LOW → LONG 등
+- `ICTBreakerBlockRule` — 이전 바들이 스윙 레벨 너머 마감, 현재 바 복귀 → 반대 방향
+- `ICTKillZoneRule` — 런던(08-11 UTC) / 뉴욕(13-16 UTC) 킬존, `now` 주입 가능
+
+---
+
+### Phase 1-9: Wyckoff 방법론 플러그인 ✅
+
+**패키지**: `internal/methodology/wyckoff/`
+
+- `WyckoffAccumulationRule` — 20바 레인지<8% + Close<EMA_50 + Volume<MA → LONG
+- `WyckoffDistributionRule` — 20바 레인지<8% + Close>EMA_50 + Volume<MA → SHORT
+- `WyckoffSpringRule` — 이전 바 Low<SWING_LOW + 현재 Close>SWING_LOW + 고거래량 → LONG
+- `WyckoffUpthrustRule` — 이전 바 High>SWING_HIGH + 현재 Close<SWING_HIGH + 고거래량 → SHORT
+- `WyckoffVolumeAnomalyRule` — Volume ≥ 2.5×MA_20, 캔들 방향으로 신호
+
+---
+
 ### Phase 1-5: 룰 엔진 ✅
 
 **패키지**: `internal/engine/`
@@ -138,7 +176,10 @@
 | `internal/storage` | 5 | ✅ PASS |
 | `internal/indicator` | 14 | ✅ PASS |
 | `internal/engine` | 10 | ✅ PASS |
-| **합계** | **35** | **전체 PASS** |
+| `internal/methodology/general_ta` | 18 | ✅ PASS |
+| `internal/methodology/ict` | 15 | ✅ PASS |
+| `internal/methodology/wyckoff` | 14 | ✅ PASS |
+| **합계** | **82** | **전체 PASS** |
 
 ---
 
@@ -223,8 +264,8 @@ Chatter/
 |------|------|------|
 | Phase 1-4 | 인디케이터 엔진 (RSI/MACD/EMA/SMA/BB/OBV/ATR/Fibonacci) | ✅ 완료 |
 | Phase 1-5 | 룰 엔진 (AnalysisRule 인터페이스 구현 + YAML 로더 + 스코어링) | ✅ 완료 |
-| Phase 1-6 | 일반 기술적분석 방법론 플러그인 | 대기 중 |
+| Phase 1-6 | 일반 기술적분석 방법론 플러그인 6종 | ✅ 완료 |
 | Phase 1-7 | Telegram/Discord 알림 시스템 | 대기 중 |
-| Phase 1-8 | ICT 방법론 플러그인 | 대기 중 |
-| Phase 1-9 | Wyckoff 방법론 플러그인 | 대기 중 |
+| Phase 1-8 | ICT 방법론 플러그인 5종 | ✅ 완료 |
+| Phase 1-9 | Wyckoff 방법론 플러그인 5종 | ✅ 완료 |
 | Phase 1-10 | React + TypeScript 설정 UI | 대기 중 |

@@ -60,7 +60,7 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - [x] Go 프로젝트 scaffold
 - [x] Docker Compose 기본 구성
 
-### Phase 1: Core MVP `[IN PROGRESS]`
+### Phase 1: Core MVP `[DONE]`
 
 > **의존관계 (구현 순서)**
 > ```
@@ -103,32 +103,32 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - YAML 설정 파일 로더
 - 신호 스코어링 (TF 가중치 × 룰 강도)
 
-#### 1-6. 일반 기술적분석 방법론 `[TODO]` ← 의존: 1-5 (1-8, 1-9와 병렬 가능)
+#### 1-6. 일반 기술적분석 방법론 `[DONE]` ← 의존: 1-5 (1-8, 1-9와 병렬 가능)
 - RSI 과매수/과매도, 다이버전스
 - 지지/저항 돌파
 - EMA 크로스
 - Fibonacci Confluence
 - Volume Spike
 
-#### 1-7. 알림 시스템 `[TODO]` ← 의존: 1-5 (룰 엔진에서 신호 수신)
+#### 1-7. 알림 시스템 `[DONE]` ← 의존: 1-5 (룰 엔진에서 신호 수신)
 - Telegram Bot 발송
 - Discord Webhook
 - 중복 방지 쿨다운 (4시간)
 - 스코어 임계값 필터
 
-#### 1-8. ICT 방법론 `[TODO]` ← 의존: 1-5 (1-6, 1-9와 병렬 가능)
+#### 1-8. ICT 방법론 `[DONE]` ← 의존: 1-5 (1-6, 1-9와 병렬 가능)
 - Order Block
 - Fair Value Gap
 - Liquidity Sweep
 - Breaker Block
 - Kill Zone (세션 시간 가중치)
 
-#### 1-9. Wyckoff 방법론 `[TODO]` ← 의존: 1-5 (1-6, 1-8과 병렬 가능)
+#### 1-9. Wyckoff 방법론 `[DONE]` ← 의존: 1-5 (1-6, 1-8과 병렬 가능)
 - Accumulation / Distribution Phase
 - Spring / Upthrust
 - Volume Anomaly
 
-#### 1-10. 프론트엔드 설정 UI `[TODO]` ← 의존: 1-7 (최종 단계)
+#### 1-10. 프론트엔드 설정 UI `[DONE]` ← 의존: 1-7 (최종 단계)
 - 종목 추가/삭제 (React + TypeScript)
 - 방법론 룰 ON/OFF
 - Telegram/Discord 설정

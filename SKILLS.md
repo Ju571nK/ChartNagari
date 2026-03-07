@@ -18,10 +18,10 @@
 
 | 기능 | 상태 | 비고 |
 |------|------|------|
-| Binance WebSocket (코인 실시간) | 📋 | Phase 1-2 |
-| Yahoo Finance REST Polling (주식) | 📋 | Phase 1-3 |
-| OHLCV → SQLite 저장 | 📋 | Phase 1-2 |
-| 타임프레임 자동 재구성 (1H/4H/1D/1W) | 📋 | Phase 1-2 |
+| Binance WebSocket (코인 실시간) | ✅ | Phase 1-2 |
+| Yahoo Finance REST Polling (주식) | ✅ | Phase 1-3 |
+| OHLCV → SQLite 저장 | ✅ | Phase 1-2 |
+| 타임프레임 자동 재구성 (1H/4H/1D/1W) | ✅ | Phase 1-2 |
 | Alpha Vantage (보조 주식) | ❌ | 무료 25req/day 제한, Phase 2 검토 |
 | Bloomberg API | ❌ | 유료, Phase 2+ |
 
@@ -31,16 +31,16 @@
 
 | 인디케이터 | 상태 | 파라미터 |
 |-----------|------|---------|
-| RSI | 📋 | period=14 |
-| MACD | 📋 | 12/26/9 |
-| EMA | 📋 | 9/21/50/200 |
-| SMA | 📋 | 20/50/200 |
-| Bollinger Bands | 📋 | period=20, std=2 |
-| OBV | 📋 | - |
-| Volume MA | 📋 | period=20 |
-| Swing High/Low | 📋 | lookback=5 |
-| ATR | 📋 | period=14 |
-| Fibonacci Retracement | 📋 | 0.236/0.382/0.5/0.618/0.786 |
+| RSI | ✅ | period=14 |
+| MACD | ✅ | 12/26/9 |
+| EMA | ✅ | 9/20/50/200 |
+| SMA | ✅ | 20/50/200 |
+| Bollinger Bands | ✅ | period=20, std=2 |
+| OBV | ✅ | - |
+| Volume MA | ✅ | period=20 |
+| Swing High/Low | ✅ | lookback=5 |
+| ATR | ✅ | period=14 |
+| Fibonacci Retracement | ✅ | 0.236/0.382/0.5/0.618/0.786 |
 
 ---
 
@@ -76,7 +76,7 @@
 |------|------|------|
 | Telegram Bot 발송 | 📋 | Phase 1-7 |
 | Discord Webhook | 📋 | Phase 1-7 |
-| 신호 스코어링 (가중합산) | 📋 | Phase 1-7 |
+| 신호 스코어링 (가중합산) | ✅ | Phase 1-5 (engine) |
 | 중복 알림 방지 (쿨다운) | 📋 | Phase 1-7 |
 | Slack | ❌ | Phase 2 |
 | Email (일간 리포트) | ❌ | Phase 2 |
@@ -102,7 +102,7 @@
 |------|------|------|
 | Docker Compose (로컬) | 📋 | Phase 1-1 |
 | SQLite 로컬 저장 | 📋 | Phase 1-2 |
-| YAML 룰 설정 | 📋 | Phase 1-5 |
+| YAML 룰 설정 | ✅ | Phase 1-5 |
 | .env 환경변수 관리 | 📋 | Phase 1-1 |
 | 구조화 로깅 (zerolog) | 📋 | Phase 1-1 |
 | 클라우드 배포 | ❌ | Phase 3 |
@@ -111,5 +111,5 @@
 
 ## 마지막 갱신
 - Date: 2026-03-07
-- Updated by: Recorder (초기 설정)
-- Next review: Phase 1-1 완료 시
+- Updated by: Recorder (Phase 1-4, 1-5 완료)
+- Next review: Phase 1-6 완료 시

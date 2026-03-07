@@ -93,12 +93,12 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - Yahoo Finance REST Polling
 - 장중/장외 시간 구분 처리
 
-#### 1-4. 인디케이터 엔진 `[TODO]` ← 의존: 1-2, 1-3
+#### 1-4. 인디케이터 엔진 `[DONE]` ← 의존: 1-2, 1-3
 - RSI, MACD, EMA, SMA
 - Bollinger Bands, OBV, Volume MA
 - Swing High/Low, ATR, Fibonacci
 
-#### 1-5. 룰 엔진 인터페이스 `[TODO]` ← 의존: 1-4
+#### 1-5. 룰 엔진 인터페이스 `[DONE]` ← 의존: 1-4
 - `AnalysisRule` 인터페이스 정의
 - YAML 설정 파일 로더
 - 신호 스코어링 (TF 가중치 × 룰 강도)

@@ -72,4 +72,27 @@
 ### Changed
 - PRD.md: Phase 0 → `[DONE]`, Phase 1 → `[IN PROGRESS]`
 
+## [0.4.0] - 2026-03-07
+
+### Added
+- `internal/indicator/` 패키지 — 인디케이터 엔진 (Phase 1-4)
+  - `indicator.go`: `Compute(bars map[string][]OHLCV) map[string]float64` — 전체 TF 인디케이터 일괄 계산, 키 형식 `"{TF}:{지표명}"` (예: `"1H:RSI_14"`)
+  - `rsi.go`: RSI(14) — Wilder's smoothing
+  - `ema_sma.go`: EMA(9/20/50/200), SMA(20/50/200), VolumeMA(20)
+  - `macd.go`: MACD(12,26,9) — line/signal/histogram
+  - `bb.go`: Bollinger Bands(20, 2σ) — upper/middle/lower/width/%B
+  - `obv.go`: OBV (누적 거래량 방향 지표)
+  - `atr.go`: ATR(14) — Wilder's smoothing
+  - `swing.go`: Swing High/Low (lookback=5)
+  - `fibonacci.go`: Fibonacci 7레벨 (0/23.6/38.2/50/61.8/78.6/100%)
+  - `indicator_test.go`: 14개 테스트 — 전체 PASS
+- `internal/engine/` 패키지 — 룰 엔진 (Phase 1-5)
+  - `config.go`: `RuleConfig`, `RuleEntry`, `TFWeight()` (1W=2.0/1D=1.5/4H=1.2/1H=1.0)
+  - `engine.go`: `RuleEngine` — Register/Run, RequiredIndicators 검증, Score=룰점수×TF가중치×룰가중치, 내림차순 정렬
+  - `engine_test.go`: 10개 테스트 — 전체 PASS
+
+### Changed
+- PRD.md: Phase 1-4, 1-5 → `[DONE]`
+- 전체 테스트: 25개 PASS (기존 11개 유지 + 신규 14개)
+
 <!-- 이후 항목은 Recorder가 자동으로 추가한다 -->

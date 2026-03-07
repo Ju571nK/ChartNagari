@@ -99,13 +99,46 @@
 
 ---
 
+### Phase 1-4: 인디케이터 엔진 ✅
+
+**패키지**: `internal/indicator/`
+
+- `Compute(bars map[string][]OHLCV) map[string]float64` — 전체 TF 일괄 계산
+- 키 형식: `"{TF}:{지표명}"` (예: `"1H:RSI_14"`, `"4H:EMA_200"`)
+- 구현 인디케이터:
+  - RSI(14) — Wilder's smoothing
+  - EMA(9/20/50/200), SMA(20/50/200), VolumeMA(20)
+  - MACD(12,26,9) — line/signal/histogram
+  - Bollinger Bands(20, 2σ) — upper/middle/lower/width/%B
+  - OBV — 누적 거래량 방향 지표
+  - ATR(14) — Wilder's smoothing
+  - Swing High/Low (lookback=5)
+  - Fibonacci 7레벨 (0/23.6/38.2/50/61.8/78.6/100%)
+- 데이터 부족 시 해당 키 미설정 (ok=false 패턴)
+
+---
+
+### Phase 1-5: 룰 엔진 ✅
+
+**패키지**: `internal/engine/`
+
+- `RuleEngine.Register(rule)` — active 룰만 등록
+- `RuleEngine.Run(ctx)` — RequiredIndicators 검증 후 Analyze 호출, Score 정렬 반환
+- Score = 룰점수 × TFWeight × RuleEntry.Weight
+- TF 가중치: 1W=2.0 / 1D=1.5 / 4H=1.2 / 1H=1.0
+- YAML config 연동 (`RuleConfig`, `RuleEntry`)
+
+---
+
 ## 테스트 현황
 
 | 패키지 | 테스트 수 | 결과 |
 |--------|---------|------|
 | `internal/collector` | 6 | ✅ PASS |
 | `internal/storage` | 5 | ✅ PASS |
-| **합계** | **11** | **전체 PASS** |
+| `internal/indicator` | 14 | ✅ PASS |
+| `internal/engine` | 10 | ✅ PASS |
+| **합계** | **35** | **전체 PASS** |
 
 ---
 
@@ -136,6 +169,21 @@ Chatter/
 │   │   └── yahoo.go
 │   ├── config/
 │   │   └── config.go
+│   ├── engine/                ← Phase 1-5 (NEW)
+│   │   ├── config.go
+│   │   ├── engine.go
+│   │   └── engine_test.go
+│   ├── indicator/             ← Phase 1-4 (NEW)
+│   │   ├── atr.go
+│   │   ├── bb.go
+│   │   ├── ema_sma.go
+│   │   ├── fibonacci.go
+│   │   ├── indicator.go
+│   │   ├── indicator_test.go
+│   │   ├── macd.go
+│   │   ├── obv.go
+│   │   ├── rsi.go
+│   │   └── swing.go
 │   ├── rule/
 │   │   └── interface.go
 │   └── storage/
@@ -173,8 +221,8 @@ Chatter/
 
 | 단계 | 항목 | 상태 |
 |------|------|------|
-| Phase 1-4 | 인디케이터 엔진 (RSI/MACD/EMA/SMA/BB/OBV/ATR/Fibonacci) | 대기 중 |
-| Phase 1-5 | 룰 엔진 (AnalysisRule 인터페이스 구현 + YAML 로더 + 스코어링) | 대기 중 |
+| Phase 1-4 | 인디케이터 엔진 (RSI/MACD/EMA/SMA/BB/OBV/ATR/Fibonacci) | ✅ 완료 |
+| Phase 1-5 | 룰 엔진 (AnalysisRule 인터페이스 구현 + YAML 로더 + 스코어링) | ✅ 완료 |
 | Phase 1-6 | 일반 기술적분석 방법론 플러그인 | 대기 중 |
 | Phase 1-7 | Telegram/Discord 알림 시스템 | 대기 중 |
 | Phase 1-8 | ICT 방법론 플러그인 | 대기 중 |

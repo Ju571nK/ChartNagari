@@ -1,0 +1,27 @@
+# config/watchlist.yaml — 모니터링할 종목 목록
+# 최대 6개 권장 (PRD 기준: 6종목 × 4TF = 24 시계열)
+
+symbols:
+  crypto:
+    - symbol: "BTCUSDT"
+      exchange: "binance"
+      enabled: true
+
+    - symbol: "ETHUSDT"
+      exchange: "binance"
+      enabled: true
+
+  stocks:
+    - symbol: "AAPL"
+      exchange: "nasdaq"
+      enabled: false        # Phase 1-3 주식 수집기 완료 후 활성화
+
+    - symbol: "NVDA"
+      exchange: "nasdaq"
+      enabled: false
+
+timeframes:
+  - "1W"
+  - "1D"
+  - "4H"
+  - "1H"

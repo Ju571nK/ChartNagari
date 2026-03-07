@@ -7,7 +7,7 @@
 
 ## 현재 Phase
 
-**Phase 0: Setup — IN PROGRESS**
+**Phase 1: Core MVP — IN PROGRESS**
 
 ---
 
@@ -19,6 +19,12 @@
 | 2026-03-07 | CHANGELOG 파일 경로 오기재 수정 | Recorder |
 | 2026-03-07 | PRD Phase 1 의존관계 다이어그램 추가 | Recorder |
 | 2026-03-07 | docs/ 하위 폴더 구조 생성 | Developer |
+| 2026-03-07 | GitHub 원격 저장소 연결 + 초기 push | Developer |
+| 2026-03-07 | Go 프로젝트 scaffold 완료 (Phase 0 완료) | Developer |
+| 2026-03-07 | `AnalysisRule` 인터페이스 정의 | Developer |
+| 2026-03-07 | `Signal`, `OHLCV`, `AnalysisContext` 모델 정의 | Developer |
+| 2026-03-07 | Docker Compose + Dockerfile 작성 (Phase 0 완료) | Developer |
+| 2026-03-07 | config/rules.yaml, watchlist.yaml 초기 작성 | Developer |
 
 ---
 
@@ -26,26 +32,22 @@
 
 | 항목 | 담당 | 상태 |
 |------|------|------|
-| Phase 0 완료 (Go scaffold, Docker Compose) | Developer | 대기 중 — Go 미설치 |
+| Phase 1-1: 프로젝트 구조 | Developer | ✅ 완료 |
+| Phase 1-2: Binance WebSocket 수집기 | Developer | 대기 중 |
 
 ---
 
 ## 블로커
 
-| 항목 | 이유 | 해결 방법 |
-|------|------|---------|
-| Go 미설치 | Phase 1-1 구현 불가 | `brew install go` 실행 필요 |
-| Docker 미설치 | Docker Compose 실행 불가 | Docker Desktop 설치 필요 |
+없음.
 
 ---
 
 ## 다음 할 일 (우선순위 순)
 
-1. `brew install go` — Go 설치
-2. Docker Desktop 설치
-3. Phase 0: Go 프로젝트 scaffold
-4. Phase 0: Docker Compose 기본 구성
-5. Phase 1-1 착수
+1. Phase 1-2: Binance WebSocket 수집기 구현
+2. Phase 1-3: Yahoo Finance 주식 수집기 구현 (1-2와 병렬 가능)
+3. Phase 1-4: 인디케이터 엔진 (1-2, 1-3 완료 후)
 
 ---
 

@@ -36,4 +36,22 @@
 
 ---
 
+## [0.2.0] - 2026-03-07
+
+### Added
+- Go 프로젝트 디렉토리 구조 생성 (`cmd/`, `internal/`, `pkg/`, `config/`, `web/`)
+- `go.mod` 초기화 (`github.com/Ju571nK/Chatter`, Go 1.26)
+- `cmd/server/main.go` — zerolog 구조화 로깅 포함 서버 진입점
+- `pkg/models/signal.go` — 공유 데이터 모델 (`Signal`, `OHLCV`, `AnalysisContext`)
+- `internal/rule/interface.go` — `AnalysisRule` 플러그인 인터페이스 정의
+- `config/rules.yaml` — 전체 룰 설정 파일 (모든 룰 비활성 상태로 초기 세팅)
+- `config/watchlist.yaml` — 모니터링 종목 설정 (BTC, ETH 활성화)
+- `Dockerfile` — 멀티 스테이지 빌드 (builder + alpine 런타임)
+- `docker-compose.yml` — SQLite 볼륨 마운트 + 헬스체크 포함
+- `.env.example` — 환경변수 템플릿
+- `.gitignore` — `.env`, 바이너리, SQLite 데이터 제외
+
+### Changed
+- PRD.md: Phase 0 → `[DONE]`, Phase 1 → `[IN PROGRESS]`
+
 <!-- 이후 항목은 Recorder가 자동으로 추가한다 -->

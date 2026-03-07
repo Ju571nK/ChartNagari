@@ -1,0 +1,28 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chart-analyzer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # SQLite DB 영속화
+      - ./data:/app/data
+      # 설정 파일 핫 리로드 (개발용)
+      - ./config:/app/config:ro
+    env_file:
+      - .env
+    environment:
+      - ENV=${ENV:-development}
+      - DB_PATH=/app/data/chart_analyzer.db
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  data:

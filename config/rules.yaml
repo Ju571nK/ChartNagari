@@ -1,0 +1,142 @@
+# config/rules.yaml — 활성화할 분석 룰 목록
+# Developer는 새 룰 파일 + 이 파일에 항목 추가만 하면 된다. 기존 코드 수정 금지.
+
+rules:
+  # ── 일반 기술적분석 ──────────────────────────────────────────────────
+  - name: rsi_overbought_oversold
+    enabled: false          # Phase 1-6 구현 후 true로 변경
+    methodology: general_ta
+    params:
+      period: 14
+      overbought: 70
+      oversold: 30
+      strength: 3.0         # 룰 강도 (스코어링에 사용)
+
+  - name: rsi_divergence
+    enabled: false
+    methodology: general_ta
+    params:
+      period: 14
+      lookback: 10
+      strength: 4.0
+
+  - name: support_resistance_breakout
+    enabled: false
+    methodology: general_ta
+    params:
+      lookback: 20
+      strength: 3.5
+
+  - name: ema_cross
+    enabled: false
+    methodology: general_ta
+    params:
+      fast: 9
+      slow: 21
+      strength: 2.5
+
+  - name: fibonacci_confluence
+    enabled: false
+    methodology: general_ta
+    params:
+      levels: [0.236, 0.382, 0.5, 0.618, 0.786]
+      strength: 3.0
+
+  - name: volume_spike
+    enabled: false
+    methodology: general_ta
+    params:
+      ma_period: 20
+      spike_multiplier: 2.0
+      strength: 2.0
+
+  # ── ICT 방법론 ───────────────────────────────────────────────────────
+  - name: ict_order_block
+    enabled: false          # Phase 1-8 구현 후 true로 변경
+    methodology: ict
+    params:
+      lookback: 10
+      strength: 5.0
+
+  - name: ict_fair_value_gap
+    enabled: false
+    methodology: ict
+    params:
+      min_gap_pct: 0.1
+      strength: 4.0
+
+  - name: ict_liquidity_sweep
+    enabled: false
+    methodology: ict
+    params:
+      lookback: 20
+      strength: 4.5
+
+  - name: ict_breaker_block
+    enabled: false
+    methodology: ict
+    params:
+      lookback: 15
+      strength: 5.0
+
+  - name: ict_kill_zone
+    enabled: false
+    methodology: ict
+    params:
+      # UTC 기준 세션 시간
+      sessions:
+        london:  { start: "08:00", end: "11:00", weight: 1.5 }
+        new_york: { start: "13:00", end: "16:00", weight: 1.5 }
+      strength: 3.0
+
+  # ── Wyckoff 방법론 ───────────────────────────────────────────────────
+  - name: wyckoff_accumulation
+    enabled: false          # Phase 1-9 구현 후 true로 변경
+    methodology: wyckoff
+    params:
+      lookback: 50
+      strength: 5.0
+
+  - name: wyckoff_distribution
+    enabled: false
+    methodology: wyckoff
+    params:
+      lookback: 50
+      strength: 5.0
+
+  - name: wyckoff_spring
+    enabled: false
+    methodology: wyckoff
+    params:
+      lookback: 20
+      strength: 6.0
+
+  - name: wyckoff_upthrust
+    enabled: false
+    methodology: wyckoff
+    params:
+      lookback: 20
+      strength: 6.0
+
+  - name: wyckoff_volume_anomaly
+    enabled: false
+    methodology: wyckoff
+    params:
+      ma_period: 20
+      anomaly_multiplier: 2.5
+      strength: 3.5
+
+# ── 신호 스코어링 임계값 ─────────────────────────────────────────────
+scoring:
+  mtf_bonus: 3.0            # 3개 TF 이상 동일 방향 시 보너스
+  thresholds:
+    weak: 5.0               # 약한 신호 (참고용)
+    medium: 8.0             # 중간 신호
+    strong: 12.0            # 강한 신호 → 즉시 Telegram 발송
+
+# ── MTF 가중치 ───────────────────────────────────────────────────────
+timeframe_weights:
+  "1W": 2.0
+  "1D": 1.5
+  "4H": 1.2
+  "1H": 1.0

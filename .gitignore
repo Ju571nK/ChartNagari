@@ -1,0 +1,25 @@
+# 환경변수 (절대 커밋 금지)
+.env
+
+# 빌드 산출물
+/chart-analyzer
+/bin/
+
+# SQLite 데이터
+/data/*.db
+/data/*.db-shm
+/data/*.db-wal
+
+# Go 테스트 캐시
+*.test
+*.out
+coverage.html
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

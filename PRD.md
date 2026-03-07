@@ -12,7 +12,7 @@
 |------|------|
 | 버전 | v0.1 |
 | 최종 갱신 | 2026-03-07 |
-| 현재 Phase | **Phase 0: Setup** |
+| 현재 Phase | **Phase 1: Core MVP** |
 | Owner | (사장) |
 
 ---
@@ -51,16 +51,16 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 
 ## 3. Phase 로드맵
 
-### Phase 0: Setup `[IN PROGRESS]`
+### Phase 0: Setup `[DONE]`
 - [x] CLAUDE.md 생성
 - [x] AGENTS.md 생성
 - [x] PRD.md 생성
 - [x] SKILLS.md 생성
 - [x] CHANGELOG.md 생성
-- [ ] Go 프로젝트 scaffold
-- [ ] Docker Compose 기본 구성
+- [x] Go 프로젝트 scaffold
+- [x] Docker Compose 기본 구성
 
-### Phase 1: Core MVP `[TODO]`
+### Phase 1: Core MVP `[IN PROGRESS]`
 
 > **의존관계 (구현 순서)**
 > ```

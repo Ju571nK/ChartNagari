@@ -19,8 +19,9 @@ func directionIcon(dir string) string {
 }
 
 // formatTelegram produces an HTML-formatted message for Telegram.
+// When sig.AIInterpretation is set, it is appended as an italic paragraph.
 func formatTelegram(sig models.Signal) string {
-	return fmt.Sprintf(
+	text := fmt.Sprintf(
 		"%s <b>%s</b> — %s [%s]\n룰: %s\n스코어: %.2f\n%s\n⏰ %s UTC",
 		directionIcon(sig.Direction),
 		sig.Direction,
@@ -31,6 +32,10 @@ func formatTelegram(sig models.Signal) string {
 		sig.Message,
 		sig.CreatedAt.UTC().Format("2006-01-02 15:04:05"),
 	)
+	if sig.AIInterpretation != "" {
+		text += "\n\n💡 <i>" + sig.AIInterpretation + "</i>"
+	}
+	return text
 }
 
 // discordColor maps signal direction to a Discord embed color (decimal RGB).

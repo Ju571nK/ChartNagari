@@ -18,11 +18,12 @@ type Config struct {
 	LogLevel   string
 	DBPath     string
 
-	Binance  BinanceConfig
-	Yahoo    YahooConfig
-	Telegram TelegramConfig
-	Discord  DiscordConfig
-	Alert    AlertConfig
+	Binance   BinanceConfig
+	Yahoo     YahooConfig
+	Telegram  TelegramConfig
+	Discord   DiscordConfig
+	Alert     AlertConfig
+	Anthropic AnthropicConfig
 
 	Rules     RulesConfig
 	Watchlist WatchlistConfig
@@ -48,6 +49,11 @@ type DiscordConfig struct {
 
 type AlertConfig struct {
 	CooldownHours int
+}
+
+type AnthropicConfig struct {
+	APIKey   string
+	MinScore float64 // minimum total signal score to trigger AI interpretation
 }
 
 // RulesConfig mirrors config/rules.yaml structure.
@@ -112,6 +118,10 @@ func Load(envFile, configDir string) (*Config, error) {
 		Alert: AlertConfig{
 			CooldownHours: parseInt(getEnv("ALERT_COOLDOWN_HOURS", "4")),
 		},
+		Anthropic: AnthropicConfig{
+			APIKey:   getEnv("ANTHROPIC_API_KEY", ""),
+			MinScore: parseFloat(getEnv("AI_MIN_SCORE", "12.0")),
+		},
 	}
 
 	// rules.yaml 로드
@@ -167,6 +177,14 @@ func getEnv(key, fallback string) string {
 
 func parseInt(s string) int {
 	v, _ := strconv.Atoi(s)
+	return v
+}
+
+func parseFloat(s string) float64 {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 12.0
+	}
 	return v
 }
 

@@ -7,7 +7,7 @@
 
 ## 현재 Phase
 
-**Phase 1: Core MVP — IN PROGRESS**
+**Phase 2: Enhancement — IN PROGRESS**
 
 ---
 
@@ -32,12 +32,13 @@
 | 2026-03-07 | Phase 1-9: Wyckoff 방법론 플러그인 5종 (14개 테스트 PASS) | Developer |
 | 2026-03-07 | Phase 1-7: Telegram/Discord 알림 시스템 (18개 테스트 PASS) | Developer |
 | 2026-03-07 | Phase 1-10: React + TypeScript 설정 UI + Go REST API (16개 테스트 PASS) | Developer |
+| 2026-03-08 | Phase 2-1: Claude AI 해석 레이어 + 분석 파이프라인 (13개 테스트 PASS) | Developer |
 
 ---
 
 ## 진행 중
 
-없음. **Phase 1: Core MVP 전체 완료.**
+**Phase 2: Enhancement — 2-1 완료, 2-2(SMC) 대기 중**
 
 ---
 
@@ -49,7 +50,9 @@
 
 ## 다음 할 일 (우선순위 순)
 
-Phase 1 완료. 다음 목표: **Phase 2** (차트 대시보드, 백테스팅, Claude AI 해석 레이어, SMC 방법론)
+1. **Phase 2-2: SMC 방법론** (CHoCH, BOS) — PRD Research 백로그 높음
+2. Phase 2-3: 차트 대시보드 (TradingView Lightweight Charts)
+3. Phase 2-4: 백테스팅 엔진
 
 ---
 

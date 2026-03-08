@@ -10,8 +10,9 @@ type Signal struct {
 	Rule      string    `json:"rule"`      // 신호를 생성한 룰 이름
 	Direction string    `json:"direction"` // "LONG" | "SHORT" | "NEUTRAL"
 	Score     float64   `json:"score"`     // 룰 강도 × TF 가중치
-	Message   string    `json:"message"`   // 사람이 읽을 수 있는 신호 설명
-	CreatedAt time.Time `json:"created_at"`
+	Message          string    `json:"message"`            // 사람이 읽을 수 있는 신호 설명
+	AIInterpretation string    `json:"ai_interpretation"`  // Claude AI 해석 텍스트 (선택)
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // OHLCV represents a single candlestick bar.

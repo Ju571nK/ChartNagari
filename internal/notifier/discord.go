@@ -34,12 +34,16 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 		return fmt.Errorf("discord: webhookURL 미설정")
 	}
 
+	desc := fmt.Sprintf("**룰:** %s\n**스코어:** %.2f\n**메시지:** %s",
+		sig.Rule, sig.Score, sig.Message)
+	if sig.AIInterpretation != "" {
+		desc += "\n\n💡 " + sig.AIInterpretation
+	}
+
 	embed := map[string]interface{}{
-		"title": fmt.Sprintf("%s [%s] %s",
-			directionIcon(sig.Direction), sig.Timeframe, sig.Symbol),
-		"description": fmt.Sprintf("**룰:** %s\n**스코어:** %.2f\n**메시지:** %s",
-			sig.Rule, sig.Score, sig.Message),
-		"color": discordColor(sig.Direction),
+		"title":       fmt.Sprintf("%s [%s] %s", directionIcon(sig.Direction), sig.Timeframe, sig.Symbol),
+		"description": desc,
+		"color":       discordColor(sig.Direction),
 		"footer": map[string]string{
 			"text": sig.CreatedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
 		},

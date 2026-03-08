@@ -177,4 +177,36 @@
 
 ### 🎉 Phase 1: Core MVP 완료
 
+## [0.8.0] - 2026-03-08
+
+### Added
+- `internal/interpreter/` 패키지 — Claude AI 해석 레이어 (Phase 2-1)
+  - `interpreter.go`: `Interpreter` — `New(apiKey, minScore, clientOpts...)`, `Enrich(ctx, []SignalGroup) []Signal`
+  - SignalGroup 총 스코어 ≥ minScore 일 때만 Claude API 호출 (비용 절감)
+  - API 키 미설정 시 자동 비활성화 (파이프라인 전체 정상 동작 유지)
+  - 모델: `claude-opus-4-6` / max_tokens: 600 / 언어: 한국어 200자
+  - 오류 시 원본 신호 그대로 반환 (Graceful degradation)
+  - `interpreter_test.go`: 7개 테스트 — 전체 PASS (httptest.Server 기반)
+- `internal/pipeline/` 패키지 — 분석 파이프라인 (Phase 2-1)
+  - `pipeline.go`: SQLite → 인디케이터 → 룰 엔진 → AI 해석 → 알림 전체 연결
+  - `OHLCVReader` 인터페이스로 DB 의존성 분리 (테스트 용이)
+  - 1분 간격 ticker, 심볼별 독립 처리 (한 심볼 실패가 다른 심볼에 영향 없음)
+  - `pipeline_test.go`: 6개 테스트 — 전체 PASS
+
+### Changed
+- `pkg/models/signal.go`: `Signal`에 `AIInterpretation string` 필드 추가
+- `internal/notifier/format.go`: AI 해석이 있으면 Telegram 메시지 끝에 `💡 <i>해석</i>` 추가
+- `internal/notifier/discord.go`: AI 해석이 있으면 embed description에 `💡 해석` 추가
+- `internal/config/config.go`: `AnthropicConfig{APIKey, MinScore}` 추가 + `parseFloat` 헬퍼
+- `cmd/server/main.go`: 룰 엔진 플러그인 전체 등록, Notifier/Interpreter 초기화, 파이프라인 goroutine 시작, `toEngineConfig()` 변환 함수
+- `.env.example`: `ANTHROPIC_API_KEY`, `AI_MIN_SCORE` 추가
+- 의존성 추가: `github.com/anthropics/anthropic-sdk-go v1.26.0`
+- 전체 테스트: 129개 PASS (기존 116개 유지 + 신규 13개)
+
+### Design
+- 룰 엔진 (마이크로초, 무료, 24/7) → AI (레이턴시, 유료, 선택) 1차/2차 필터 구조
+- `ANTHROPIC_API_KEY` 미설정 = Phase 1 동작과 100% 동일 (하위 호환)
+
+---
+
 <!-- 이후 항목은 Recorder가 자동으로 추가한다 -->

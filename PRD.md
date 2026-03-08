@@ -134,12 +134,25 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - Telegram/Discord 설정
 - 수집기 상태 표시
 
-### Phase 2: Enhancement `[TODO]`
-- 차트 대시보드 (TradingView Lightweight Charts)
-- 백테스팅 엔진
-- AI 해석 레이어 (Claude API)
-- SMC 방법론 (CHoCH, BOS)
-- Bloomberg/유료 데이터 피드
+### Phase 2: Enhancement `[IN PROGRESS]`
+
+#### 2-1. AI 해석 레이어 `[DONE]` ← 의존: Phase 1 완료
+- Claude API (`claude-opus-4-6`) 통합
+- 룰 엔진 신호 → AI 컨텍스트 프롬프트 → 해석 텍스트 → Telegram/Discord 첨부
+- Score ≥ `AI_MIN_SCORE`(기본 12.0) 그룹만 AI 호출 (비용 최적화)
+- API 키 미설정 시 자동 비활성화 (Phase 1 동작과 동일)
+- `internal/interpreter/`, `internal/pipeline/` 패키지 신설
+
+#### 2-2. SMC 방법론 (CHoCH, BOS) `[TODO]` ← Research 백로그 높음
+- Change of Character (CHoCH)
+- Break of Structure (BOS)
+
+#### 2-3. 차트 대시보드 `[TODO]`
+- TradingView Lightweight Charts
+
+#### 2-4. 백테스팅 엔진 `[TODO]`
+
+#### 2-5. Bloomberg/유료 데이터 피드 `[TODO]`
 
 ### Phase 3: Cloud `[TODO]`
 - 클라우드 배포

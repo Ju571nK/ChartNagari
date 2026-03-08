@@ -1,25 +1,79 @@
-# 환경변수 (절대 커밋 금지)
+# ─── 환경 변수 (절대 커밋 금지) ───
 .env
+.env.local
+.env.*.local
+!.env.example
 
-# 빌드 산출물
+# ─── Go ───
+# Binaries (root or bin/)
 /chart-analyzer
+/server
+/chatter
 /bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# SQLite 데이터
-/data/*.db
-/data/*.db-shm
-/data/*.db-wal
-
-# Go 테스트 캐시
+# Test & coverage
 *.test
 *.out
 coverage.html
+coverage.txt
+__debug_bin
 
-# OS
+# Go workspace (go.work)
+go.work
+go.work.sum
+
+# ─── Frontend (Vite + React + TypeScript) ───
+web/node_modules/
+web/dist/
+web/.vite/
+web/*.local
+*.tsbuildinfo
+
+# ─── SQLite & 로컬 데이터 ───
+/data/*.db
+/data/*.db-shm
+/data/*.db-wal
+/data/*.db-journal
+*.db
+*.db-shm
+*.db-wal
+
+# ─── 로그 & 임시 ───
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ─── OS ───
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+ehthumbs.db
 
-# IDE
+# ─── IDE / 에디터 ───
 .idea/
 .vscode/
-*.swp
+*.sublime-project
+*.sublime-workspace
+
+# Cursor (선택: 팀 공유 룰만 커밋할 경우 제거 가능)
+# .cursor/
+
+# Claude Code (로컬 설정만 제외, 프로젝트 설정은 유지)
+.claude/settings.local.json
+
+# ─── 기타 ───
+# Local overrides for config (if any)
+config/*.local.yaml
+*.local.yaml

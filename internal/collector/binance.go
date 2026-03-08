@@ -123,20 +123,36 @@ type binanceStreamMsg struct {
 }
 
 type binanceKlineMsg struct {
-	EventType string       `json:"e"`
-	Kline     binanceKline `json:"k"`
+	EventType json.RawMessage `json:"e"` // Binance may send string or number (e.g. 24 for kline)
+	Kline     binanceKline    `json:"k"`
+}
+
+// flexStr unmarshals from JSON string or number (Binance may send OHLCV as either).
+type flexStr string
+
+func (s *flexStr) UnmarshalJSON(data []byte) error {
+	if len(data) >= 2 && data[0] == '"' {
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return err
+		}
+		*s = flexStr(str)
+		return nil
+	}
+	*s = flexStr(string(data))
+	return nil
 }
 
 type binanceKline struct {
-	Symbol    string `json:"s"`
-	Interval  string `json:"i"`
-	OpenTime  int64  `json:"t"` // milliseconds
-	Open      string `json:"o"`
-	High      string `json:"h"`
-	Low       string `json:"l"`
-	Close     string `json:"c"`
-	Volume    string `json:"v"`
-	IsClosed  bool   `json:"x"` // true = 캔들 확정
+	Symbol    string  `json:"s"`
+	Interval  string  `json:"i"`
+	OpenTime  int64   `json:"t"` // milliseconds
+	Open      flexStr `json:"o"`
+	High      flexStr `json:"h"`
+	Low       flexStr `json:"l"`
+	Close     flexStr `json:"c"`
+	Volume    flexStr `json:"v"`
+	IsClosed  bool    `json:"x"` // true = 캔들 확정
 }
 
 func (c *BinanceCollector) handleMessage(raw []byte) error {
@@ -156,11 +172,11 @@ func (c *BinanceCollector) handleMessage(raw []byte) error {
 		Symbol:    strings.ToUpper(k.Symbol),
 		Timeframe: tf,
 		OpenTime:  time.UnixMilli(k.OpenTime).UTC(),
-		Open:      parseFloat(k.Open),
-		High:      parseFloat(k.High),
-		Low:       parseFloat(k.Low),
-		Close:     parseFloat(k.Close),
-		Volume:    parseFloat(k.Volume),
+		Open:      parseFloat(string(k.Open)),
+		High:      parseFloat(string(k.High)),
+		Low:       parseFloat(string(k.Low)),
+		Close:     parseFloat(string(k.Close)),
+		Volume:    parseFloat(string(k.Volume)),
 	}
 
 	if err := c.db.SaveOHLCV(bar, "binance"); err != nil {

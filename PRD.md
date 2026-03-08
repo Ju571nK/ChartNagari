@@ -147,8 +147,11 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - Change of Character (CHoCH)
 - Break of Structure (BOS)
 
-#### 2-3. 차트 대시보드 `[TODO]`
-- TradingView Lightweight Charts
+#### 2-3. 차트 대시보드 `[DONE]`
+- TradingView Lightweight Charts (v5)
+- OHLCV 캔들차트 + 신호 마커 오버레이
+- 종목 셀렉터 + TF 세그먼트 컨트롤 (1H/4H/1D/1W)
+- 신호 영속성 (SQLite signals 테이블)
 
 #### 2-4. 백테스팅 엔진 `[TODO]`
 

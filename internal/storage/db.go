@@ -80,6 +80,21 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_alert_history_lookup
 		ON alert_history(symbol, rule_name, sent_at DESC);
+
+	-- 신호 영속성 테이블 (Phase 2-3 차트 대시보드용)
+	CREATE TABLE IF NOT EXISTS signals (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		symbol     TEXT    NOT NULL,
+		timeframe  TEXT    NOT NULL,
+		rule       TEXT    NOT NULL,
+		direction  TEXT    NOT NULL,
+		score      REAL    NOT NULL,
+		message    TEXT    NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL  -- Unix 초
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_signals_lookup
+		ON signals(symbol, created_at DESC);
 	`
 	_, err := db.conn.Exec(schema)
 	return err

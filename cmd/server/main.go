@@ -147,6 +147,7 @@ func main() {
 			timeframes,
 			log.Logger,
 		)
+		pipe.SetSignalSaver(db)
 		go pipe.Run(ctx)
 		log.Info().
 			Strs("symbols", allSymbols).
@@ -156,6 +157,7 @@ func main() {
 
 	// ── HTTP API + 설정 UI 서버 ───────────────────────────────────────
 	apiSrv := api.New("config", "web/dist")
+	apiSrv.WithChartStore(db)
 	httpAddr := ":" + cfg.ServerPort
 	go func() {
 		log.Info().Str("addr", httpAddr).Msg("HTTP API 서버 시작")

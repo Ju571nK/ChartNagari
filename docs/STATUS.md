@@ -34,12 +34,13 @@
 | 2026-03-07 | Phase 1-10: React + TypeScript 설정 UI + Go REST API (16개 테스트 PASS) | Developer |
 | 2026-03-08 | Phase 2-1: Claude AI 해석 레이어 + 분석 파이프라인 (13개 테스트 PASS) | Developer |
 | 2026-03-08 | Phase 2-2: SMC 방법론 (BOS, CHoCH) 플러그인 2종 (14개 테스트 PASS) | Developer |
+| 2026-03-08 | Phase 2-3: 차트 대시보드 (TradingView + 신호 영속성 + API 엔드포인트) | Developer |
 
 ---
 
 ## 진행 중
 
-**Phase 2: Enhancement — 2-2 완료, 2-3(차트 대시보드) 대기 중**
+**Phase 2: Enhancement — 2-3 완료, 2-4(백테스팅 엔진) 대기 중**
 
 ---
 
@@ -51,9 +52,8 @@
 
 ## 다음 할 일 (우선순위 순)
 
-1. **Phase 2-3: 차트 대시보드** (TradingView Lightweight Charts)
-2. Phase 2-4: 백테스팅 엔진
-3. Phase 2-5: Bloomberg/유료 데이터 피드
+1. **Phase 2-4: 백테스팅 엔진**
+2. Phase 2-5: Bloomberg/유료 데이터 피드
 
 ---
 

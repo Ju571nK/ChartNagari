@@ -36,6 +36,23 @@
 
 ---
 
+## [1.0.0] - 2026-03-08
+
+### Added
+- `internal/storage/signals.go`: SaveSignal, GetSignals — 신호 영속성
+- `internal/pipeline/pipeline.go`: SignalSaver 인터페이스 + SetSignalSaver + 신호 자동 저장
+- `internal/api/server.go`: ChartStore 인터페이스 + `GET /api/ohlcv/{symbol}/{tf}` + `GET /api/signals` 엔드포인트
+- `web/src/App.tsx`: ChartTab 컴포넌트 (TradingView Lightweight Charts v5, 캔들차트 + 신호 마커)
+- `web/src/App.css`: 차트 컨트롤 스타일 (chart-controls, tf-group, chart-area) + .badge-smc
+- `lightweight-charts` npm 패키지 (v5.1.0)
+
+### Changed
+- `internal/storage/db.go`: signals 테이블 스키마 추가
+- `cmd/server/main.go`: DB → API WithChartStore, Pipeline SetSignalSaver 연결
+- PRD.md: Phase 2-3 → `[DONE]`
+
+---
+
 ## [0.9.0] - 2026-03-08
 
 ### Added

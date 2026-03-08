@@ -144,6 +144,7 @@ body {
 .badge-general_ta { background: rgba(143, 128, 115, 0.2);  color: var(--muted); }
 .badge-ict        { background: rgba(91, 146, 121, 0.15);  color: var(--green); }
 .badge-wyckoff    { background: rgba(143, 203, 155, 0.1);  color: var(--green); }
+.badge-smc        { background: rgba(143, 203, 155, 0.18); color: var(--mint);  }
 
 /* ── toggle switch ───────────────────────────────────────────────────────── */
 .toggle {
@@ -234,6 +235,71 @@ input:checked + .slider::before {
   border-left: 2px solid var(--green);
   background: rgba(91, 146, 121, 0.04);
   border-radius: 0 4px 4px 0;
+}
+
+/* ── chart tab ───────────────────────────────────────────────────────────── */
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.chart-select {
+  background: rgba(91, 146, 121, 0.06);
+  border: 1px solid rgba(91, 146, 121, 0.25);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 120px;
+}
+
+.chart-select:focus {
+  outline: none;
+  border-color: var(--green);
+}
+
+.tf-group {
+  display: flex;
+  gap: 2px;
+  background: rgba(91, 146, 121, 0.06);
+  border: 1px solid rgba(91, 146, 121, 0.15);
+  padding: 3px;
+  border-radius: 6px;
+}
+
+.tf-btn {
+  padding: 4px 14px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+}
+
+.tf-btn:hover {
+  color: var(--text);
+  background: rgba(91, 146, 121, 0.1);
+}
+
+.tf-btn.active {
+  background: var(--green);
+  color: var(--bg);
+}
+
+.chart-area {
+  border: 1px solid rgba(91, 146, 121, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 /* ── utility ─────────────────────────────────────────────────────────────── */

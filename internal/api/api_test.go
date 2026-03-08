@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // ── test fixtures ─────────────────────────────────────────────────────────────
@@ -292,6 +295,126 @@ func TestCORSHeaders_Present(t *testing.T) {
 	w := do(t, srv, "GET", "/api/status", nil)
 	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
 		t.Errorf("Access-Control-Allow-Origin: want \"*\", got %q", got)
+	}
+}
+
+// ── Chart store mock ──────────────────────────────────────────────────────────
+
+type mockChartStore struct {
+	bars []models.OHLCV
+	sigs []models.Signal
+	err  error
+}
+
+func (m *mockChartStore) GetOHLCV(_, _ string, _ int) ([]models.OHLCV, error) {
+	return m.bars, m.err
+}
+
+func (m *mockChartStore) GetSignals(_ string, _ int) ([]models.Signal, error) {
+	return m.sigs, m.err
+}
+
+func setupTestWithChart(t *testing.T, cs ChartStore) *Server {
+	t.Helper()
+	srv := setupTest(t)
+	srv.WithChartStore(cs)
+	return srv
+}
+
+// Test 17: GET /api/ohlcv/{symbol}/{timeframe} with no chart store returns 200 empty array.
+func TestGetChartOHLCV_NoStore_ReturnsEmpty(t *testing.T) {
+	srv := setupTest(t) // no chart store wired
+	w := do(t, srv, "GET", "/api/ohlcv/BTCUSDT/1H", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var bars []OHLCVBar
+	if err := json.Unmarshal(w.Body.Bytes(), &bars); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(bars) != 0 {
+		t.Errorf("expected empty array, got %d bars", len(bars))
+	}
+}
+
+// Test 18: GET /api/ohlcv/{symbol}/{timeframe} returns bars in ascending time order.
+func TestGetChartOHLCV_ReturnsAscending(t *testing.T) {
+	t1 := time.Unix(1700000000, 0).UTC()
+	t2 := time.Unix(1700003600, 0).UTC()
+	// DB returns DESC; mock returns DESC to simulate storage behavior.
+	store := &mockChartStore{bars: []models.OHLCV{
+		{Symbol: "BTCUSDT", Timeframe: "1H", OpenTime: t2, Open: 102, High: 105, Low: 101, Close: 103, Volume: 500},
+		{Symbol: "BTCUSDT", Timeframe: "1H", OpenTime: t1, Open: 100, High: 104, Low: 99, Close: 102, Volume: 400},
+	}}
+	srv := setupTestWithChart(t, store)
+	w := do(t, srv, "GET", "/api/ohlcv/BTCUSDT/1H", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var bars []OHLCVBar
+	json.Unmarshal(w.Body.Bytes(), &bars) //nolint:errcheck
+	if len(bars) != 2 {
+		t.Fatalf("want 2 bars, got %d", len(bars))
+	}
+	// First bar should be the older one (ascending order).
+	if bars[0].Time != t1.Unix() {
+		t.Errorf("want first bar time %d, got %d", t1.Unix(), bars[0].Time)
+	}
+	if bars[0].Close != 102 {
+		t.Errorf("want close 102, got %f", bars[0].Close)
+	}
+}
+
+// Test 19: GET /api/signals with no chart store returns 200 empty array.
+func TestGetChartSignals_NoStore_ReturnsEmpty(t *testing.T) {
+	srv := setupTest(t)
+	w := do(t, srv, "GET", "/api/signals?symbol=BTCUSDT", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var sigs []SignalBar
+	if err := json.Unmarshal(w.Body.Bytes(), &sigs); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(sigs) != 0 {
+		t.Errorf("expected empty array, got %d signals", len(sigs))
+	}
+}
+
+// Test 20: GET /api/signals returns signal bars with correct fields.
+func TestGetChartSignals_ReturnsData(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	store := &mockChartStore{sigs: []models.Signal{
+		{Symbol: "BTCUSDT", Timeframe: "1H", Rule: "smc_bos", Direction: "LONG", Score: 0.9, Message: "test", CreatedAt: now},
+	}}
+	srv := setupTestWithChart(t, store)
+	w := do(t, srv, "GET", "/api/signals?symbol=BTCUSDT", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var sigs []SignalBar
+	json.Unmarshal(w.Body.Bytes(), &sigs) //nolint:errcheck
+	if len(sigs) != 1 {
+		t.Fatalf("want 1 signal, got %d", len(sigs))
+	}
+	if sigs[0].Direction != "LONG" {
+		t.Errorf("want LONG, got %s", sigs[0].Direction)
+	}
+	if sigs[0].Rule != "smc_bos" {
+		t.Errorf("want smc_bos, got %s", sigs[0].Rule)
+	}
+	if sigs[0].Time != now.Unix() {
+		t.Errorf("want time %d, got %d", now.Unix(), sigs[0].Time)
+	}
+}
+
+// Test 21: GET /api/signals without symbol param returns 400.
+func TestGetChartSignals_MissingSymbol_Returns400(t *testing.T) {
+	store := &mockChartStore{}
+	srv := setupTestWithChart(t, store)
+	w := do(t, srv, "GET", "/api/signals", nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
 	}
 }
 

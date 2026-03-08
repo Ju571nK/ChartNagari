@@ -7,10 +7,10 @@ symbols:
           exchange: binance
           enabled: true
     stocks:
-        - symbol: AAPL
+        - symbol: PLTR
           exchange: nasdaq
           enabled: true
-        - symbol: NVDA
+        - symbol: TSLA
           exchange: nasdaq
           enabled: true
 timeframes:

@@ -1,8 +1,34 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  createChart,
+  createSeriesMarkers,
+  CandlestickSeries,
+  CrosshairMode,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from 'lightweight-charts'
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart'
+
+interface OHLCVBar {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+interface SignalBar {
+  time: number
+  direction: string
+  rule: string
+  score: number
+  message: string
+}
 
 interface SymbolItem {
   symbol: string
@@ -190,6 +216,141 @@ function StatusTab() {
   )
 }
 
+// ── Chart Tab ─────────────────────────────────────────────────────────────────
+
+const TFS = ['1H', '4H', '1D', '1W'] as const
+type TF = (typeof TFS)[number]
+
+function ChartTab() {
+  const [symbol, setSymbol] = useState('')
+  const [symbols, setSymbols] = useState<string[]>([])
+  const [tf, setTf] = useState<TF>('1H')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+
+  // Load enabled symbols for the selector
+  useEffect(() => {
+    apiFetch<SymbolItem[]>('/symbols').then((items) => {
+      const enabled = items.filter((i) => i.enabled).map((i) => i.symbol)
+      setSymbols(enabled)
+      if (enabled.length > 0) setSymbol(enabled[0])
+    }).catch(() => {/* silently ignore */})
+  }, [])
+
+  // Create the chart instance once on mount
+  useEffect(() => {
+    if (!containerRef.current) return
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { color: '#12130F' },
+        textColor: '#8F8073',
+      },
+      grid: {
+        vertLines: { color: 'rgba(234,230,229,0.06)' },
+        horzLines: { color: 'rgba(234,230,229,0.06)' },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      width: containerRef.current.clientWidth,
+      height: 420,
+      timeScale: { borderColor: 'rgba(91,146,121,0.25)' },
+      rightPriceScale: { borderColor: 'rgba(91,146,121,0.25)' },
+    })
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: '#8FCB9B',
+      downColor: 'rgba(143,128,115,0.7)',
+      borderUpColor: '#8FCB9B',
+      borderDownColor: 'rgba(143,128,115,0.7)',
+      wickUpColor: '#8FCB9B',
+      wickDownColor: 'rgba(143,128,115,0.7)',
+    })
+    chartRef.current = chart
+    seriesRef.current = series
+
+    const onResize = () => {
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      chart.remove()
+      chartRef.current = null
+      seriesRef.current = null
+    }
+  }, [])
+
+  // Load OHLCV + signals whenever symbol or TF changes
+  useEffect(() => {
+    if (!symbol || !seriesRef.current) return
+    setLoading(true)
+    setError('')
+
+    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`)
+      .then((bars) => {
+        seriesRef.current?.setData(
+          bars.map((b) => ({
+            time: b.time as UTCTimestamp,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+          })),
+        )
+        return apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`)
+      })
+      .then((sigs) => {
+        if (!seriesRef.current) return
+        const markers = sigs
+          .filter((s) => s.direction !== 'NEUTRAL')
+          .map((s) => ({
+            time: s.time as UTCTimestamp,
+            position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
+            color: s.direction === 'LONG' ? '#8FCB9B' : 'rgba(143,128,115,0.9)',
+            shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
+            text: s.rule,
+          }))
+        createSeriesMarkers(seriesRef.current, markers)
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [symbol, tf])
+
+  return (
+    <>
+      <div className="chart-controls">
+        <select
+          className="chart-select"
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value)}
+        >
+          {symbols.length === 0 && <option value="">종목 없음</option>}
+          {symbols.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <div className="tf-group">
+          {TFS.map((t) => (
+            <button
+              key={t}
+              className={`tf-btn${tf === t ? ' active' : ''}`}
+              onClick={() => setTf(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading && <p className="loading">차트 로딩 중...</p>}
+      {error && <p className="error-msg">데이터 없음 — {error}</p>}
+      <div ref={containerRef} className="chart-area" />
+    </>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -210,12 +371,16 @@ export function App() {
           <button className={`tab-btn${tab === 'status' ? ' active' : ''}`} onClick={() => setTab('status')}>
             상태
           </button>
+          <button className={`tab-btn${tab === 'chart' ? ' active' : ''}`} onClick={() => setTab('chart')}>
+            차트
+          </button>
         </nav>
       </header>
       <main>
         {tab === 'symbols' && <SymbolsTab />}
         {tab === 'rules' && <RulesTab />}
         {tab === 'status' && <StatusTab />}
+        {tab === 'chart' && <ChartTab />}
       </main>
     </div>
   )

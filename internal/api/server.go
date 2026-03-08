@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"github.com/Ju571nK/Chatter/pkg/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,15 +40,43 @@ type StatusItem struct {
 	Tests   int    `json:"tests"`
 }
 
+// OHLCVBar is the chart-compatible OHLCV response.
+// Time is Unix seconds (TradingView Lightweight Charts convention).
+type OHLCVBar struct {
+	Time   int64   `json:"time"`
+	Open   float64 `json:"open"`
+	High   float64 `json:"high"`
+	Low    float64 `json:"low"`
+	Close  float64 `json:"close"`
+	Volume float64 `json:"volume"`
+}
+
+// SignalBar is the chart signal marker response.
+type SignalBar struct {
+	Time      int64   `json:"time"`
+	Direction string  `json:"direction"`
+	Rule      string  `json:"rule"`
+	Score     float64 `json:"score"`
+	Message   string  `json:"message"`
+}
+
+// ChartStore provides OHLCV and signal data for the chart dashboard.
+// *storage.DB satisfies this interface.
+type ChartStore interface {
+	GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, error)
+	GetSignals(symbol string, limit int) ([]models.Signal, error)
+}
+
 // ── Server ────────────────────────────────────────────────────────────────────
 
 // Server is the HTTP API server for the settings UI.
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
-	configDir string
-	static    http.Handler // nil when webDist is absent or not built yet
-	mu        sync.RWMutex
+	configDir  string
+	static     http.Handler // nil when webDist is absent or not built yet
+	chartStore ChartStore   // optional; set via WithChartStore
+	mu         sync.RWMutex
 }
 
 // New creates a Server.
@@ -61,6 +91,11 @@ func New(configDir, webDist string) *Server {
 		}
 	}
 	return s
+}
+
+// WithChartStore wires the chart data store (OHLCV + signals) to the server.
+func (s *Server) WithChartStore(cs ChartStore) {
+	s.chartStore = cs
 }
 
 // Handler returns the fully configured http.Handler for the server.
@@ -79,6 +114,10 @@ func (s *Server) Handler() http.Handler {
 	// Analysis rules
 	mux.HandleFunc("GET /api/rules", s.getRules)
 	mux.HandleFunc("PUT /api/rules/{name}", s.updateRule)
+
+	// Chart dashboard data
+	mux.HandleFunc("GET /api/ohlcv/{symbol}/{timeframe}", s.getChartOHLCV)
+	mux.HandleFunc("GET /api/signals", s.getChartSignals)
 
 	// Static frontend (SPA)
 	if s.static != nil {
@@ -229,6 +268,81 @@ func (s *Server) updateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// getChartOHLCV returns OHLCV bars for a symbol+timeframe in ascending time order.
+// Query param: limit (default 200).
+func (s *Server) getChartOHLCV(w http.ResponseWriter, r *http.Request) {
+	if s.chartStore == nil {
+		jsonOK(w, []OHLCVBar{})
+		return
+	}
+	symbol := r.PathValue("symbol")
+	timeframe := r.PathValue("timeframe")
+	limit := 200
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	bars, err := s.chartStore.GetOHLCV(symbol, timeframe, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to chart format; DB returns DESC, chart expects ASC.
+	result := make([]OHLCVBar, len(bars))
+	for i, b := range bars {
+		result[len(bars)-1-i] = OHLCVBar{
+			Time:   b.OpenTime.Unix(),
+			Open:   b.Open,
+			High:   b.High,
+			Low:    b.Low,
+			Close:  b.Close,
+			Volume: b.Volume,
+		}
+	}
+	jsonOK(w, result)
+}
+
+// getChartSignals returns recent signals for a symbol as chart markers.
+// Query params: symbol (required), limit (default 50).
+func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
+	if s.chartStore == nil {
+		jsonOK(w, []SignalBar{})
+		return
+	}
+	symbol := r.URL.Query().Get("symbol")
+	if symbol == "" {
+		http.Error(w, "symbol parameter required", http.StatusBadRequest)
+		return
+	}
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	sigs, err := s.chartStore.GetSignals(symbol, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	result := make([]SignalBar, len(sigs))
+	for i, sig := range sigs {
+		result[i] = SignalBar{
+			Time:      sig.CreatedAt.Unix(),
+			Direction: sig.Direction,
+			Rule:      sig.Rule,
+			Score:     sig.Score,
+			Message:   sig.Message,
+		}
+	}
+	jsonOK(w, result)
 }
 
 // ── YAML file helpers ─────────────────────────────────────────────────────────

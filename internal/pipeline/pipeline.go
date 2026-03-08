@@ -25,6 +25,12 @@ type OHLCVReader interface {
 	GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, error)
 }
 
+// SignalSaver persists generated signals for later retrieval (e.g., chart markers).
+// *storage.DB satisfies this interface.
+type SignalSaver interface {
+	SaveSignal(sig models.Signal) error
+}
+
 // Config controls pipeline timing and data parameters.
 type Config struct {
 	Interval time.Duration // how often to run analysis (default: 1 minute)
@@ -45,6 +51,7 @@ func DefaultConfig() Config {
 type Pipeline struct {
 	cfg        Config
 	db         OHLCVReader
+	sigSaver   SignalSaver // optional; set via SetSignalSaver
 	eng        *engine.RuleEngine
 	interp     *interpreter.Interpreter
 	notif      *notifier.Notifier
@@ -74,6 +81,12 @@ func New(
 		timeframes: timeframes,
 		log:        log,
 	}
+}
+
+// SetSignalSaver wires an optional signal persistence store.
+// Call before Run; safe to call only once.
+func (p *Pipeline) SetSignalSaver(ss SignalSaver) {
+	p.sigSaver = ss
 }
 
 // Run starts the periodic analysis loop. It blocks until ctx is cancelled.
@@ -132,6 +145,15 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		Indicators: indicators,
 	}
 	signals := p.eng.Run(analysisCtx)
+
+	// Persist signals for chart dashboard markers.
+	if p.sigSaver != nil {
+		for _, sig := range signals {
+			if err := p.sigSaver.SaveSignal(sig); err != nil {
+				p.log.Warn().Err(err).Str("symbol", sym).Msg("신호 저장 실패")
+			}
+		}
+	}
 
 	if len(signals) == 0 {
 		p.log.Debug().Str("symbol", sym).Msg("신호 없음")

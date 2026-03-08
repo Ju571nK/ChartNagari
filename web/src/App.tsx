@@ -120,7 +120,6 @@ function RulesTab() {
   if (loading) return <p className="loading">로딩 중...</p>
   if (error) return <p className="error-msg">오류: {error}</p>
 
-  // Group by methodology
   const grouped = rules.reduce<Record<string, RuleItem[]>>((acc, r) => {
     ;(acc[r.methodology] ??= []).push(r)
     return acc
@@ -168,7 +167,7 @@ function StatusTab() {
   return (
     <>
       <p className="section-title">시스템 상태</p>
-      <p style={{ color: '#444', fontSize: '0.8rem', marginBottom: '4px' }}>{status.phase}</p>
+      <p className="phase-info">{status.phase}</p>
       <div className="status-grid">
         <div className="stat-card">
           <div className="stat-value">{status.symbols}</div>
@@ -183,8 +182,8 @@ function StatusTab() {
           <div className="stat-label">통과 테스트</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#4ade80' }}>✓</div>
-          <div className="stat-label">전체 PASS</div>
+          <div className="stat-pass">✓ PASS</div>
+          <div className="stat-label">전체 테스트</div>
         </div>
       </div>
     </>
@@ -199,7 +198,8 @@ export function App() {
   return (
     <div className="container">
       <header className="header">
-        <h1>📈 Chart Analyzer</h1>
+        <h1><span className="brand">Chart</span> Analyzer</h1>
+        <p className="header-sub">ICT · Wyckoff · General TA — MTF 신호 분석 플랫폼</p>
         <nav className="tabs">
           <button className={`tab-btn${tab === 'symbols' ? ' active' : ''}`} onClick={() => setTab('symbols')}>
             종목

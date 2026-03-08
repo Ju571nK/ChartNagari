@@ -18,6 +18,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/interpreter"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
+	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
@@ -99,6 +100,9 @@ func main() {
 	eng.Register(&wyckoff.WyckoffSpringRule{})
 	eng.Register(&wyckoff.WyckoffUpthrustRule{})
 	eng.Register(&wyckoff.WyckoffVolumeAnomalyRule{})
+	// SMC
+	eng.Register(&smc.SMCBOSRule{})
+	eng.Register(&smc.SMCChoCHRule{})
 
 	// ── 알림 시스템 ───────────────────────────────────────────────────
 	notifCfg := notifier.Config{

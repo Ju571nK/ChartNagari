@@ -143,7 +143,7 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - API 키 미설정 시 자동 비활성화 (Phase 1 동작과 동일)
 - `internal/interpreter/`, `internal/pipeline/` 패키지 신설
 
-#### 2-2. SMC 방법론 (CHoCH, BOS) `[TODO]` ← Research 백로그 높음
+#### 2-2. SMC 방법론 (CHoCH, BOS) `[DONE]` ← Research 백로그 높음
 - Change of Character (CHoCH)
 - Break of Structure (BOS)
 

@@ -126,6 +126,21 @@ rules:
       anomaly_multiplier: 2.5
       strength: 3.5
 
+  # ── SMC 방법론 ────────────────────────────────────────────────────────
+  - name: smc_bos
+    enabled: true           # Phase 2-2 구현 완료
+    methodology: smc
+    params:
+      lookback: 30
+      strength: 5.0
+
+  - name: smc_choch
+    enabled: true           # Phase 2-2 구현 완료
+    methodology: smc
+    params:
+      lookback: 30
+      strength: 6.0
+
 # ── 신호 스코어링 임계값 ─────────────────────────────────────────────
 scoring:
   mtf_bonus: 3.0            # 3개 TF 이상 동일 방향 시 보너스

@@ -36,6 +36,22 @@
 
 ---
 
+## [0.9.0] - 2026-03-08
+
+### Added
+- `internal/methodology/smc/helpers.go`: trendDir, structuralHigh, structuralLow 공통 헬퍼
+- `internal/methodology/smc/bos.go`: SMCBOSRule — Break of Structure (추세 지속 신호)
+- `internal/methodology/smc/choch.go`: SMCChoCHRule — Change of Character (추세 전환 신호)
+- `internal/methodology/smc/smc_test.go`: SMC 패키지 테스트 14개 전체 PASS
+- `config/rules.yaml`: smc_bos (strength: 5.0), smc_choch (strength: 6.0) 항목 추가
+- `cmd/server/main.go`: SMCBOSRule, SMCChoCHRule 룰 엔진 등록
+
+### Changed
+- PRD.md: Phase 2-2 → `[DONE]`
+- docs/STATUS.md: 팀 상태 갱신
+
+---
+
 ## [0.3.0] - 2026-03-07
 
 ### Added

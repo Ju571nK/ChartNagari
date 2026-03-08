@@ -153,7 +153,12 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - 종목 셀렉터 + TF 세그먼트 컨트롤 (1H/4H/1D/1W)
 - 신호 영속성 (SQLite signals 테이블)
 
-#### 2-4. 백테스팅 엔진 `[TODO]`
+#### 2-4. 백테스팅 엔진 `[DONE]`
+- `internal/backtest/engine.go` — 슬라이딩 윈도우 룰 재실행
+- `internal/backtest/stats.go` — 승률/손익비/MDD/샤프비율 산출
+- `internal/backtest/runner.go` — 스토리지 + 엔진 통합 서비스
+- `POST /api/backtest` 엔드포인트 (symbol, timeframe, rule 필터)
+- 프론트엔드 백테스트 탭 (설정 폼 + 통계 카드 + 거래 목록 테이블)
 
 #### 2-5. Bloomberg/유료 데이터 피드 `[TODO]`
 

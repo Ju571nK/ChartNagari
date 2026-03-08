@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"github.com/Ju571nK/Chatter/internal/backtest"
 	"github.com/Ju571nK/Chatter/pkg/models"
 	"gopkg.in/yaml.v3"
 )
@@ -67,16 +68,23 @@ type ChartStore interface {
 	GetSignals(symbol string, limit int) ([]models.Signal, error)
 }
 
+// BacktestRunner executes a backtest and returns the result.
+// *backtest.Runner satisfies this interface.
+type BacktestRunner interface {
+	RunBacktest(symbol, timeframe, ruleFilter string) (*backtest.BacktestResult, error)
+}
+
 // ── Server ────────────────────────────────────────────────────────────────────
 
 // Server is the HTTP API server for the settings UI.
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
-	configDir  string
-	static     http.Handler // nil when webDist is absent or not built yet
-	chartStore ChartStore   // optional; set via WithChartStore
-	mu         sync.RWMutex
+	configDir       string
+	static          http.Handler    // nil when webDist is absent or not built yet
+	chartStore      ChartStore      // optional; set via WithChartStore
+	backtestRunner  BacktestRunner  // optional; set via WithBacktestRunner
+	mu              sync.RWMutex
 }
 
 // New creates a Server.
@@ -96,6 +104,11 @@ func New(configDir, webDist string) *Server {
 // WithChartStore wires the chart data store (OHLCV + signals) to the server.
 func (s *Server) WithChartStore(cs ChartStore) {
 	s.chartStore = cs
+}
+
+// WithBacktestRunner wires the backtest runner to the server.
+func (s *Server) WithBacktestRunner(br BacktestRunner) {
+	s.backtestRunner = br
 }
 
 // Handler returns the fully configured http.Handler for the server.
@@ -118,6 +131,9 @@ func (s *Server) Handler() http.Handler {
 	// Chart dashboard data
 	mux.HandleFunc("GET /api/ohlcv/{symbol}/{timeframe}", s.getChartOHLCV)
 	mux.HandleFunc("GET /api/signals", s.getChartSignals)
+
+	// Backtest engine
+	mux.HandleFunc("POST /api/backtest", s.runBacktest)
 
 	// Static frontend (SPA)
 	if s.static != nil {
@@ -341,6 +357,37 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 			Score:     sig.Score,
 			Message:   sig.Message,
 		}
+	}
+	jsonOK(w, result)
+}
+
+// runBacktest handles POST /api/backtest.
+// Request body: {"symbol":"BTCUSDT","timeframe":"1H","rule":""}
+// Returns a BacktestResult with trade outcomes and performance statistics.
+func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
+	if s.backtestRunner == nil {
+		http.Error(w, "backtest runner not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Symbol    string `json:"symbol"`
+		Timeframe string `json:"timeframe"`
+		Rule      string `json:"rule"` // optional filter
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Symbol == "" || req.Timeframe == "" {
+		http.Error(w, "symbol and timeframe are required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.backtestRunner.RunBacktest(req.Symbol, req.Timeframe, req.Rule)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	jsonOK(w, result)
 }

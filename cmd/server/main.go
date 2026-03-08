@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/Ju571nK/Chatter/internal/api"
+	"github.com/Ju571nK/Chatter/internal/backtest"
 	"github.com/Ju571nK/Chatter/internal/collector"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
@@ -22,6 +23,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/internal/storage"
 )
 
@@ -80,29 +82,36 @@ func main() {
 	}
 
 	// ── 룰 엔진 구성 ─────────────────────────────────────────────────
+	// Collect all rules into a slice so they can be shared with the backtest engine.
+	allRules := []rule.AnalysisRule{
+		// General TA
+		&general_ta.RSIOverboughtOversoldRule{},
+		&general_ta.RSIDivergenceRule{},
+		&general_ta.EMACrossRule{},
+		&general_ta.SupportResistanceBreakoutRule{},
+		&general_ta.FibonacciConfluenceRule{},
+		&general_ta.VolumeSpikeRule{},
+		// ICT
+		&ict.ICTOrderBlockRule{},
+		&ict.ICTFairValueGapRule{},
+		&ict.ICTLiquiditySweepRule{},
+		&ict.ICTBreakerBlockRule{},
+		ict.NewICTKillZoneRule(),
+		// Wyckoff
+		&wyckoff.WyckoffAccumulationRule{},
+		&wyckoff.WyckoffDistributionRule{},
+		&wyckoff.WyckoffSpringRule{},
+		&wyckoff.WyckoffUpthrustRule{},
+		&wyckoff.WyckoffVolumeAnomalyRule{},
+		// SMC
+		&smc.SMCBOSRule{},
+		&smc.SMCChoCHRule{},
+	}
+
 	eng := engine.New(toEngineConfig(cfg.Rules))
-	// General TA
-	eng.Register(&general_ta.RSIOverboughtOversoldRule{})
-	eng.Register(&general_ta.RSIDivergenceRule{})
-	eng.Register(&general_ta.EMACrossRule{})
-	eng.Register(&general_ta.SupportResistanceBreakoutRule{})
-	eng.Register(&general_ta.FibonacciConfluenceRule{})
-	eng.Register(&general_ta.VolumeSpikeRule{})
-	// ICT
-	eng.Register(&ict.ICTOrderBlockRule{})
-	eng.Register(&ict.ICTFairValueGapRule{})
-	eng.Register(&ict.ICTLiquiditySweepRule{})
-	eng.Register(&ict.ICTBreakerBlockRule{})
-	eng.Register(ict.NewICTKillZoneRule())
-	// Wyckoff
-	eng.Register(&wyckoff.WyckoffAccumulationRule{})
-	eng.Register(&wyckoff.WyckoffDistributionRule{})
-	eng.Register(&wyckoff.WyckoffSpringRule{})
-	eng.Register(&wyckoff.WyckoffUpthrustRule{})
-	eng.Register(&wyckoff.WyckoffVolumeAnomalyRule{})
-	// SMC
-	eng.Register(&smc.SMCBOSRule{})
-	eng.Register(&smc.SMCChoCHRule{})
+	for _, r := range allRules {
+		eng.Register(r)
+	}
 
 	// ── 알림 시스템 ───────────────────────────────────────────────────
 	notifCfg := notifier.Config{
@@ -155,9 +164,14 @@ func main() {
 			Msg("분석 파이프라인 실행 중")
 	}
 
+	// ── 백테스팅 엔진 구성 ────────────────────────────────────────────
+	btEngine := backtest.New(allRules, toEngineConfig(cfg.Rules), backtest.DefaultConfig())
+	btRunner := backtest.NewRunner(db, btEngine)
+
 	// ── HTTP API + 설정 UI 서버 ───────────────────────────────────────
 	apiSrv := api.New("config", "web/dist")
 	apiSrv.WithChartStore(db)
+	apiSrv.WithBacktestRunner(btRunner)
 	httpAddr := ":" + cfg.ServerPort
 	go func() {
 		log.Info().Str("addr", httpAddr).Msg("HTTP API 서버 시작")

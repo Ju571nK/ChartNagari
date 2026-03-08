@@ -36,6 +36,25 @@
 
 ---
 
+## [1.1.0] - 2026-03-08
+
+### Added
+- `internal/backtest/engine.go`: 슬라이딩 윈도우 룰 재실행 엔진 (ATR 기반 TP/SL 시뮬레이션)
+- `internal/backtest/stats.go`: ComputeStats — 승률, 평균손익비, 수익팩터, MDD, 샤프비율, 누적수익률, 최대연속손실
+- `internal/backtest/runner.go`: OHLCVLoader 인터페이스 + Runner (스토리지 + 엔진 통합)
+- `internal/backtest/engine_test.go`: 10개 테스트 PASS (Empty, InsufficientBars, LongTP, ShortTP, LongSL, Timeout, Filter, Stats, StatsEmpty, MaxDrawdown)
+- `internal/storage/ohlcv.go`: GetOHLCVAll — 전체 바 오름차순 조회 (백테스트 전용)
+- `internal/api/server.go`: BacktestRunner 인터페이스 + WithBacktestRunner + `POST /api/backtest` 핸들러
+- `web/src/App.tsx`: BacktestTab 컴포넌트 (설정 폼, 통계 카드 6개, 거래 목록 테이블)
+- `web/src/App.css`: 백테스트 탭 스타일 (.backtest-controls, .run-btn, .backtest-stats, .backtest-table)
+
+### Changed
+- `cmd/server/main.go`: allRules 슬라이스 도입 (룰 엔진 + 백테스트 엔진 공유), BacktestEngine/Runner 연결
+- PRD.md: Phase 2-4 → `[DONE]`
+- docs/STATUS.md: 팀 상태 갱신
+
+---
+
 ## [1.0.0] - 2026-03-08
 
 ### Added

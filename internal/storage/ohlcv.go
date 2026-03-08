@@ -99,6 +99,23 @@ func (db *DB) GetOHLCVSince(symbol, timeframe string, since time.Time) ([]models
 	return scanOHLCVRows(rows)
 }
 
+// GetOHLCVAll retrieves every OHLCV bar for symbol+timeframe in ascending order.
+// Used by the backtest engine to replay the full price history.
+func (db *DB) GetOHLCVAll(symbol, timeframe string) ([]models.OHLCV, error) {
+	rows, err := db.conn.Query(`
+		SELECT symbol, timeframe, open_time, open, high, low, close, volume
+		FROM ohlcv
+		WHERE symbol = ? AND timeframe = ?
+		ORDER BY open_time ASC`,
+		symbol, timeframe,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanOHLCVRows(rows)
+}
+
 func scanOHLCVRows(rows *sql.Rows) ([]models.OHLCV, error) {
 	var bars []models.OHLCV
 	for rows.Next() {

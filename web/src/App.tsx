@@ -11,7 +11,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest'
 
 interface OHLCVBar {
   time: number
@@ -351,6 +351,229 @@ function ChartTab() {
   )
 }
 
+// ── Backtest Tab ──────────────────────────────────────────────────────────────
+
+interface BacktestStats {
+  win_rate: number
+  avg_rr: number
+  profit_factor: number
+  max_drawdown: number
+  sharpe: number
+  total_return_pct: number
+  max_consec_losses: number
+}
+
+interface TradeOutcome {
+  entry_time: number
+  entry_price: number
+  direction: string
+  rule: string
+  score: number
+  tp: number
+  sl: number
+  exit_price: number
+  exit_bars: number
+  win: boolean
+  pnl_pct: number
+}
+
+interface BacktestResult {
+  symbol: string
+  timeframe: string
+  bars: number
+  trades: number
+  stats: BacktestStats
+  outcomes: TradeOutcome[]
+}
+
+function fmt2(n: number) { return n.toFixed(2) }
+function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
+
+function BacktestTab() {
+  const [symbols, setSymbols] = useState<string[]>([])
+  const [rules, setRules] = useState<string[]>([])
+  const [symbol, setSymbol] = useState('')
+  const [tf, setTf] = useState<TF>('1H')
+  const [ruleFilter, setRuleFilter] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<BacktestResult | null>(null)
+
+  useEffect(() => {
+    apiFetch<SymbolItem[]>('/symbols').then((items) => {
+      const enabled = items.filter((i) => i.enabled).map((i) => i.symbol)
+      setSymbols(enabled)
+      if (enabled.length > 0) setSymbol(enabled[0])
+    }).catch(() => {/* silently ignore */})
+
+    apiFetch<RuleItem[]>('/rules').then((items) => {
+      setRules(items.filter((r) => r.enabled).map((r) => r.name))
+    }).catch(() => {/* silently ignore */})
+  }, [])
+
+  const run = useCallback(async () => {
+    if (!symbol) return
+    setLoading(true)
+    setError('')
+    setResult(null)
+    try {
+      const r = await apiFetch<BacktestResult>('/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, timeframe: tf, rule: ruleFilter }),
+      })
+      setResult(r)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '알 수 없는 오류')
+    } finally {
+      setLoading(false)
+    }
+  }, [symbol, tf, ruleFilter])
+
+  return (
+    <>
+      <p className="section-title">백테스트 설정</p>
+      <div className="backtest-controls">
+        <select
+          className="chart-select"
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value)}
+          disabled={loading}
+        >
+          {symbols.length === 0 && <option value="">종목 없음</option>}
+          {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        <div className="tf-group">
+          {TFS.map((t) => (
+            <button
+              key={t}
+              className={`tf-btn${tf === t ? ' active' : ''}`}
+              onClick={() => setTf(t)}
+              disabled={loading}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <select
+          className="chart-select"
+          value={ruleFilter}
+          onChange={(e) => setRuleFilter(e.target.value)}
+          disabled={loading}
+        >
+          <option value="">전체 룰</option>
+          {rules.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+
+        <button className="run-btn" onClick={run} disabled={loading || !symbol}>
+          {loading ? '계산 중...' : '실행'}
+        </button>
+      </div>
+
+      {error && <p className="error-msg">오류: {error}</p>}
+
+      {result && !loading && (
+        <>
+          <p className="section-title">
+            결과 — {result.symbol} {result.timeframe} ({result.bars} 바, {result.trades} 거래)
+          </p>
+
+          <div className="backtest-stats">
+            <div className="stat-card">
+              <div className="stat-value" style={{ fontSize: '1.4rem' }}>
+                {(result.stats.win_rate * 100).toFixed(1)}%
+              </div>
+              <div className="stat-label">승률</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{ fontSize: '1.4rem' }}>
+                {fmt2(result.stats.avg_rr)}
+              </div>
+              <div className="stat-label">평균 손익비</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{ fontSize: '1.4rem' }}>
+                {fmt2(result.stats.profit_factor)}
+              </div>
+              <div className="stat-label">수익 팩터</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{ fontSize: '1.4rem', color: 'var(--muted)' }}>
+                {(result.stats.max_drawdown * 100).toFixed(1)}%
+              </div>
+              <div className="stat-label">최대낙폭</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{ fontSize: '1.4rem' }}>
+                {fmt2(result.stats.sharpe)}
+              </div>
+              <div className="stat-label">샤프비율</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value"
+                style={{
+                  fontSize: '1.4rem',
+                  color: result.stats.total_return_pct >= 0 ? 'var(--mint)' : 'var(--muted)',
+                }}
+              >
+                {fmtPct(result.stats.total_return_pct)}
+              </div>
+              <div className="stat-label">누적 수익률</div>
+            </div>
+          </div>
+
+          {result.outcomes && result.outcomes.length > 0 && (
+            <>
+              <p className="section-title" style={{ marginTop: 24 }}>거래 목록</p>
+              <div className="backtest-table-wrap">
+                <table className="backtest-table">
+                  <thead>
+                    <tr>
+                      <th>진입 시간</th>
+                      <th>방향</th>
+                      <th>룰</th>
+                      <th>진입가</th>
+                      <th>청산가</th>
+                      <th>바</th>
+                      <th>수익률</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.outcomes.map((o, i) => (
+                      <tr key={i} className={o.win ? 'outcome-win' : 'outcome-loss'}>
+                        <td>{new Date(o.entry_time).toLocaleDateString()}</td>
+                        <td className={o.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
+                          {o.direction}
+                        </td>
+                        <td style={{ color: 'var(--muted)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {o.rule}
+                        </td>
+                        <td>{o.entry_price.toFixed(2)}</td>
+                        <td>{o.exit_price.toFixed(2)}</td>
+                        <td>{o.exit_bars}</td>
+                        <td className={o.win ? 'pnl-win' : 'pnl-loss'}>
+                          {fmtPct(o.pnl_pct)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {result.trades === 0 && (
+            <p className="loading">데이터 없음 — 수집된 OHLCV 바가 충분하지 않거나 신호가 발생하지 않았습니다.</p>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -374,6 +597,9 @@ export function App() {
           <button className={`tab-btn${tab === 'chart' ? ' active' : ''}`} onClick={() => setTab('chart')}>
             차트
           </button>
+          <button className={`tab-btn${tab === 'backtest' ? ' active' : ''}`} onClick={() => setTab('backtest')}>
+            백테스트
+          </button>
         </nav>
       </header>
       <main>
@@ -381,6 +607,7 @@ export function App() {
         {tab === 'rules' && <RulesTab />}
         {tab === 'status' && <StatusTab />}
         {tab === 'chart' && <ChartTab />}
+        {tab === 'backtest' && <BacktestTab />}
       </main>
     </div>
   )

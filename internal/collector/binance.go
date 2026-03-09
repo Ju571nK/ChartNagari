@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -16,7 +18,9 @@ import (
 
 const (
 	binanceWSBase    = "wss://stream.binance.com:9443/stream"
+	binanceRESTBase  = "https://api.binance.com/api/v3/klines"
 	binanceReconnect = 5 * time.Second
+	binanceHistLimit = 500 // 시작 시 미리 가져올 과거 봉 수
 )
 
 // BinanceCollector subscribes to Binance kline WebSocket streams
@@ -37,13 +41,17 @@ func NewBinanceCollector(db *storage.DB, symbols, timeframes []string) *BinanceC
 }
 
 // Start begins collecting in a goroutine. Blocks until ctx is cancelled.
-// Automatically reconnects on disconnect.
+// On startup it pre-fetches binanceHistLimit historical bars per symbol×TF via REST,
+// then switches to the WebSocket stream for live candles.
 func (c *BinanceCollector) Start(ctx context.Context) {
 	streamURL := c.buildStreamURL()
 	log.Info().
 		Str("url", streamURL).
 		Strs("symbols", c.symbols).
 		Msg("[Binance] 수집기 시작")
+
+	// ── 과거 데이터 선행 수집 (REST) ─────────────────────────────────
+	c.fetchHistory()
 
 	for {
 		select {
@@ -228,4 +236,100 @@ func parseFloat(s string) float64 {
 	var v float64
 	fmt.Sscanf(s, "%f", &v)
 	return v
+}
+
+// fetchHistory pre-loads historical OHLCV bars from the Binance REST klines API.
+// Called once on Start() so the chart and analysis engine have enough data immediately.
+func (c *BinanceCollector) fetchHistory() {
+	client := &http.Client{Timeout: 15 * time.Second}
+	for _, sym := range c.symbols {
+		for _, tf := range c.timeframes {
+			interval, ok := BinanceTFMap[tf]
+			if !ok {
+				continue
+			}
+			bars, err := fetchBinanceKlines(client, sym, interval, binanceHistLimit)
+			if err != nil {
+				log.Warn().Err(err).Str("symbol", sym).Str("tf", tf).
+					Msg("[Binance] 과거 데이터 수집 실패 — WebSocket으로 계속 진행")
+				continue
+			}
+			if err := c.db.SaveOHLCVBatch(bars, "binance"); err != nil {
+				log.Warn().Err(err).Msg("[Binance] 과거 데이터 저장 실패")
+				continue
+			}
+			log.Debug().Str("symbol", sym).Str("tf", tf).Int("bars", len(bars)).
+				Msg("[Binance] 과거 데이터 저장 완료")
+		}
+	}
+}
+
+// fetchBinanceKlines calls GET /api/v3/klines and returns parsed OHLCV bars.
+func fetchBinanceKlines(client *http.Client, symbol, interval string, limit int) ([]models.OHLCV, error) {
+	url := fmt.Sprintf("%s?symbol=%s&interval=%s&limit=%d",
+		binanceRESTBase, strings.ToUpper(symbol), interval, limit)
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("REST 요청 실패: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b))
+	}
+
+	// Binance klines: array of arrays
+	// [openTime, open, high, low, close, volume, closeTime, ...]
+	var raw [][]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("JSON 파싱 실패: %w", err)
+	}
+
+	tf := binanceIntervalToTF(interval)
+	sym := strings.ToUpper(symbol)
+	bars := make([]models.OHLCV, 0, len(raw))
+
+	for _, row := range raw {
+		if len(row) < 6 {
+			continue
+		}
+		var openTimeMs int64
+		if err := json.Unmarshal(row[0], &openTimeMs); err != nil {
+			continue
+		}
+		open := parseRawFloat(row[1])
+		high := parseRawFloat(row[2])
+		low := parseRawFloat(row[3])
+		close_ := parseRawFloat(row[4])
+		vol := parseRawFloat(row[5])
+		if close_ == 0 {
+			continue // 미완성 캔들 스킵
+		}
+		bars = append(bars, models.OHLCV{
+			Symbol:    sym,
+			Timeframe: tf,
+			OpenTime:  time.UnixMilli(openTimeMs).UTC(),
+			Open:      open,
+			High:      high,
+			Low:       low,
+			Close:     close_,
+			Volume:    vol,
+		})
+	}
+	return bars, nil
+}
+
+func parseRawFloat(raw json.RawMessage) float64 {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		// might be a number
+		var f float64
+		json.Unmarshal(raw, &f)
+		return f
+	}
+	var f float64
+	fmt.Sscanf(s, "%f", &f)
+	return f
 }

@@ -31,6 +31,13 @@ type SignalSaver interface {
 	SaveSignal(sig models.Signal) error
 }
 
+// PaperTrader tracks virtual paper positions driven by live signals.
+// *paper.Trader satisfies this interface.
+type PaperTrader interface {
+	OnSignals(signals []models.Signal)
+	CheckPositions(sym string, allBars map[string][]models.OHLCV)
+}
+
 // Config controls pipeline timing and data parameters.
 type Config struct {
 	Interval time.Duration // how often to run analysis (default: 1 minute)
@@ -49,15 +56,16 @@ func DefaultConfig() Config {
 // applies AI interpretation for high-scoring signals, and dispatches notifications.
 // It is safe to call Run once per instance.
 type Pipeline struct {
-	cfg        Config
-	db         OHLCVReader
-	sigSaver   SignalSaver // optional; set via SetSignalSaver
-	eng        *engine.RuleEngine
-	interp     *interpreter.Interpreter
-	notif      *notifier.Notifier
-	symbols    []string
-	timeframes []string
-	log        zerolog.Logger
+	cfg         Config
+	db          OHLCVReader
+	sigSaver    SignalSaver  // optional; set via SetSignalSaver
+	paperTrader PaperTrader  // optional; set via SetPaperTrader
+	eng         *engine.RuleEngine
+	interp      *interpreter.Interpreter
+	notif       *notifier.Notifier
+	symbols     []string
+	timeframes  []string
+	log         zerolog.Logger
 }
 
 // New creates a Pipeline wired to the provided components.
@@ -87,6 +95,11 @@ func New(
 // Call before Run; safe to call only once.
 func (p *Pipeline) SetSignalSaver(ss SignalSaver) {
 	p.sigSaver = ss
+}
+
+// SetPaperTrader wires an optional paper trading simulator.
+func (p *Pipeline) SetPaperTrader(pt PaperTrader) {
+	p.paperTrader = pt
 }
 
 // Run starts the periodic analysis loop. It blocks until ctx is cancelled.
@@ -146,6 +159,17 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 	signals := p.eng.Run(analysisCtx)
 
+	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
+	for i := range signals {
+		enrichSignalLevels(&signals[i], allBars, indicators)
+	}
+
+	// Paper trading: open new positions and check existing TP/SL.
+	if p.paperTrader != nil {
+		p.paperTrader.OnSignals(signals)
+		p.paperTrader.CheckPositions(sym, allBars)
+	}
+
 	// Persist signals for chart dashboard markers.
 	if p.sigSaver != nil {
 		for _, sig := range signals {
@@ -176,4 +200,34 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 
 	// Notify: filters by score threshold and cooldown.
 	p.notif.Notify(ctx, enriched)
+}
+
+// enrichSignalLevels fills sig.EntryPrice, sig.TP, and sig.SL using ATR(14).
+//
+//	TP = entry ± ATR × 2.0
+//	SL = entry ∓ ATR × 1.0
+//
+// allBars is expected in DESC order (index 0 = most recent bar).
+// A signal with Direction == "NEUTRAL" or an unavailable ATR is left unchanged.
+func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, indicators map[string]float64) {
+	if sig.Direction == "NEUTRAL" {
+		return
+	}
+	bars, ok := allBars[sig.Timeframe]
+	if !ok || len(bars) == 0 {
+		return
+	}
+	atr := indicators[sig.Timeframe+":ATR_14"]
+	if atr <= 0 {
+		return
+	}
+	entry := bars[0].Close
+	sig.EntryPrice = entry
+	if sig.Direction == "LONG" {
+		sig.TP = entry + atr*2.0
+		sig.SL = entry - atr*1.0
+	} else {
+		sig.TP = entry - atr*2.0
+		sig.SL = entry + atr*1.0
+	}
 }

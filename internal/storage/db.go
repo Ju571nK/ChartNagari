@@ -95,6 +95,26 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_signals_lookup
 		ON signals(symbol, created_at DESC);
+
+	-- 페이퍼 트레이딩 포지션 테이블
+	CREATE TABLE IF NOT EXISTS paper_positions (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		symbol      TEXT    NOT NULL,
+		timeframe   TEXT    NOT NULL,
+		rule        TEXT    NOT NULL,
+		direction   TEXT    NOT NULL,
+		entry_price REAL    NOT NULL,
+		tp          REAL    NOT NULL,
+		sl          REAL    NOT NULL,
+		entry_time  INTEGER NOT NULL,
+		exit_price  REAL    NOT NULL DEFAULT 0,
+		exit_time   INTEGER NOT NULL DEFAULT 0,
+		status      TEXT    NOT NULL DEFAULT 'OPEN',
+		pnl_pct     REAL    NOT NULL DEFAULT 0
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_paper_positions_lookup
+		ON paper_positions(symbol, status, entry_time DESC);
 	`
 	_, err := db.conn.Exec(schema)
 	return err

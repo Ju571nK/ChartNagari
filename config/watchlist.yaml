@@ -9,10 +9,10 @@ symbols:
     stocks:
         - symbol: PLTR
           exchange: nasdaq
-          enabled: false
+          enabled: true
         - symbol: TSLA
           exchange: nasdaq
-          enabled: false
+          enabled: true
 timeframes:
     - 1W
     - 1D

@@ -160,7 +160,9 @@ Telegram으로 자동 신호를 발송하는 **로컬 실행 플랫폼**.
 - `POST /api/backtest` 엔드포인트 (symbol, timeframe, rule 필터)
 - 프론트엔드 백테스트 탭 (설정 폼 + 통계 카드 + 거래 목록 테이블)
 
-#### 2-5. Bloomberg/유료 데이터 피드 `[TODO]`
+#### 2-5. Bloomberg/유료 데이터 피드 `[BLOCKED]`
+- Owner 결정: Bloomberg 등 유료 API 계약 불가 → 해당 항목 폐기
+- 대안 검토 필요 (예: Polygon.io, Alpaca, Tiingo 무료 티어)
 
 ### Phase 3: Cloud `[TODO]`
 - 클라우드 배포

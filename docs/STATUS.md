@@ -36,6 +36,11 @@
 | 2026-03-08 | Phase 2-2: SMC 방법론 (BOS, CHoCH) 플러그인 2종 (14개 테스트 PASS) | Developer |
 | 2026-03-08 | Phase 2-3: 차트 대시보드 (TradingView + 신호 영속성 + API 엔드포인트) | Developer |
 | 2026-03-08 | Phase 2-4: 백테스팅 엔진 (engine/stats/runner + POST /api/backtest + 프론트 탭, 10개 테스트 PASS) | Developer |
+| 2026-03-08 | TraderAdvisor 합류 + AGENTS.md v0.3 갱신 | Orchestrator/Recorder |
+| 2026-03-08 | 알림(Telegram/Discord)에 진입가/TP/SL 추가 (3개 테스트 추가, 전체 PASS) | Developer |
+| 2026-03-08 | 무료 데이터 소스 리서치 — Tiingo 1순위 권고 (VERIFIED) | Researcher |
+| 2026-03-08 | Tiingo 수집기 구현 (internal/collector/tiingo.go + config + main.go 연결) | Developer |
+| 2026-03-08 | 페이퍼 트레이딩 엔진 구현 (paper/trader + storage/paper + API 3개 + 프론트 탭, 10개 테스트 PASS) | Developer |
 
 ---
 
@@ -53,8 +58,9 @@
 
 ## 다음 할 일 (우선순위 순)
 
-1. Phase 2-5: Bloomberg/유료 데이터 피드 (외부 API 계약 필요 — Owner 결정 필요)
-2. Phase 3: 클라우드 배포
+1. **Owner 액션**: `.env`에 `TIINGO_API_KEY={발급받은 키}` 추가 → 서버 재시작 시 자동 활성화
+2. TraderAdvisor 🟡 추가 권고 (알림 히스토리 뷰, 백테스트 TP/SL 최적화)
+3. Phase 3: 클라우드 배포
 
 ---
 

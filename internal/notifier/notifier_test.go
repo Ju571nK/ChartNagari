@@ -231,6 +231,30 @@ func TestFormatTelegram_ContainsFields(t *testing.T) {
 	}
 }
 
+// Test 14b: formatTelegram includes entry/TP/SL when EntryPrice > 0.
+func TestFormatTelegram_WithLevels(t *testing.T) {
+	sig := makeSig("BTCUSDT", "rsi", "LONG", 10.0)
+	sig.EntryPrice = 65000.0
+	sig.TP = 67000.0
+	sig.SL = 64000.0
+	msg := formatTelegram(sig)
+
+	for _, want := range []string{"65000", "67000", "64000", "진입"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("formatTelegram with levels: expected %q in message, got:\n%s", want, msg)
+		}
+	}
+}
+
+// Test 14c: formatTelegram omits level line when EntryPrice == 0.
+func TestFormatTelegram_NoLevelsWhenZero(t *testing.T) {
+	sig := makeSig("BTCUSDT", "rsi", "LONG", 10.0)
+	msg := formatTelegram(sig)
+	if strings.Contains(msg, "진입") {
+		t.Errorf("formatTelegram: should not show 진입 line when EntryPrice=0, got:\n%s", msg)
+	}
+}
+
 // Test 15: TelegramSender returns error when token is empty.
 func TestTelegramSender_EmptyToken_Error(t *testing.T) {
 	s := NewTelegramSender("", "12345")

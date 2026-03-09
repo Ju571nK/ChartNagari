@@ -11,6 +11,7 @@ import (
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/backtest"
+	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/pkg/models"
 	"gopkg.in/yaml.v3"
 )
@@ -74,17 +75,25 @@ type BacktestRunner interface {
 	RunBacktest(symbol, timeframe, ruleFilter string) (*backtest.BacktestResult, error)
 }
 
+// PaperStore provides paper trading data for the API.
+// *storage.DB satisfies this interface.
+type PaperStore interface {
+	GetAllOpenPositions() ([]paper.PaperPosition, error)
+	GetClosedPositions(limit int) ([]paper.PaperPosition, error)
+}
+
 // ── Server ────────────────────────────────────────────────────────────────────
 
 // Server is the HTTP API server for the settings UI.
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
-	configDir       string
-	static          http.Handler    // nil when webDist is absent or not built yet
-	chartStore      ChartStore      // optional; set via WithChartStore
-	backtestRunner  BacktestRunner  // optional; set via WithBacktestRunner
-	mu              sync.RWMutex
+	configDir      string
+	static         http.Handler   // nil when webDist is absent or not built yet
+	chartStore     ChartStore     // optional; set via WithChartStore
+	backtestRunner BacktestRunner // optional; set via WithBacktestRunner
+	paperStore     PaperStore     // optional; set via WithPaperStore
+	mu             sync.RWMutex
 }
 
 // New creates a Server.
@@ -111,6 +120,10 @@ func (s *Server) WithBacktestRunner(br BacktestRunner) {
 	s.backtestRunner = br
 }
 
+func (s *Server) WithPaperStore(ps PaperStore) {
+	s.paperStore = ps
+}
+
 // Handler returns the fully configured http.Handler for the server.
 // All /api/* routes are registered; other paths fall through to the static
 // file server when available.
@@ -134,6 +147,11 @@ func (s *Server) Handler() http.Handler {
 
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
+
+	// Paper trading
+	mux.HandleFunc("GET /api/paper/positions", s.getPaperPositions)
+	mux.HandleFunc("GET /api/paper/history", s.getPaperHistory)
+	mux.HandleFunc("GET /api/paper/summary", s.getPaperSummary)
 
 	// Static frontend (SPA)
 	if s.static != nil {
@@ -390,6 +408,62 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, result)
+}
+
+func (s *Server) getPaperPositions(w http.ResponseWriter, _ *http.Request) {
+	if s.paperStore == nil {
+		jsonOK(w, []paper.PaperPosition{})
+		return
+	}
+	positions, err := s.paperStore.GetAllOpenPositions()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if positions == nil {
+		positions = []paper.PaperPosition{}
+	}
+	jsonOK(w, positions)
+}
+
+func (s *Server) getPaperHistory(w http.ResponseWriter, r *http.Request) {
+	if s.paperStore == nil {
+		jsonOK(w, []paper.PaperPosition{})
+		return
+	}
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	positions, err := s.paperStore.GetClosedPositions(limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if positions == nil {
+		positions = []paper.PaperPosition{}
+	}
+	jsonOK(w, positions)
+}
+
+func (s *Server) getPaperSummary(w http.ResponseWriter, r *http.Request) {
+	if s.paperStore == nil {
+		jsonOK(w, paper.Summary(nil, 0))
+		return
+	}
+	open, err := s.paperStore.GetAllOpenPositions()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	closed, err := s.paperStore.GetClosedPositions(1000)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, paper.Summary(closed, len(open)))
 }
 
 // ── YAML file helpers ─────────────────────────────────────────────────────────

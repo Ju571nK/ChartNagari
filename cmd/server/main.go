@@ -22,6 +22,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
 	"github.com/Ju571nK/Chatter/internal/notifier"
+	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/internal/storage"
@@ -74,9 +75,17 @@ func main() {
 
 	stockSymbols := cfg.EnabledStockSymbols()
 	if len(stockSymbols) > 0 {
-		yahoo := collector.NewYahooCollector(db, stockSymbols, timeframes, cfg.Yahoo.PollInterval)
-		go yahoo.Start(ctx)
-		log.Info().Strs("symbols", stockSymbols).Msg("Yahoo Finance 수집기 실행 중")
+		if cfg.Tiingo.APIKey != "" {
+			// Tiingo가 설정된 경우 Yahoo 대신 사용
+			tiingo := collector.NewTiingoCollector(cfg.Tiingo.APIKey, db, stockSymbols, timeframes, cfg.Tiingo.PollInterval)
+			go tiingo.Start(ctx)
+			log.Info().Strs("symbols", stockSymbols).Msg("Tiingo 수집기 실행 중")
+		} else {
+			// Tiingo API Key 미설정 시 Yahoo Fallback
+			yahoo := collector.NewYahooCollector(db, stockSymbols, timeframes, cfg.Yahoo.PollInterval)
+			go yahoo.Start(ctx)
+			log.Info().Strs("symbols", stockSymbols).Msg("Yahoo Finance 수집기 실행 중 (Tiingo 미설정 — fallback)")
+		}
 	} else {
 		log.Info().Msg("활성화된 주식 종목 없음 — watchlist.yaml에서 enabled: true 설정 필요")
 	}
@@ -143,6 +152,9 @@ func main() {
 		log.Info().Msg("Claude AI 해석 비활성화 (ANTHROPIC_API_KEY 미설정)")
 	}
 
+	// ── 페이퍼 트레이딩 엔진 ──────────────────────────────────────────────
+	paperTrader := paper.New(db, log.Logger)
+
 	// ── 분석 파이프라인 시작 ──────────────────────────────────────────
 	allSymbols := append(cryptoSymbols, stockSymbols...)
 	if len(allSymbols) > 0 {
@@ -157,6 +169,7 @@ func main() {
 			log.Logger,
 		)
 		pipe.SetSignalSaver(db)
+		pipe.SetPaperTrader(paperTrader)
 		go pipe.Run(ctx)
 		log.Info().
 			Strs("symbols", allSymbols).
@@ -172,6 +185,7 @@ func main() {
 	apiSrv := api.New("config", "web/dist")
 	apiSrv.WithChartStore(db)
 	apiSrv.WithBacktestRunner(btRunner)
+	apiSrv.WithPaperStore(db)
 	httpAddr := ":" + cfg.ServerPort
 	go func() {
 		log.Info().Str("addr", httpAddr).Msg("HTTP API 서버 시작")

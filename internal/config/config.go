@@ -20,6 +20,7 @@ type Config struct {
 
 	Binance   BinanceConfig
 	Yahoo     YahooConfig
+	Tiingo    TiingoConfig
 	Telegram  TelegramConfig
 	Discord   DiscordConfig
 	Alert     AlertConfig
@@ -35,6 +36,11 @@ type BinanceConfig struct {
 }
 
 type YahooConfig struct {
+	PollInterval time.Duration
+}
+
+type TiingoConfig struct {
+	APIKey       string
 	PollInterval time.Duration
 }
 
@@ -107,6 +113,10 @@ func Load(envFile, configDir string) (*Config, error) {
 		},
 		Yahoo: YahooConfig{
 			PollInterval: parseDuration(getEnv("YAHOO_POLL_INTERVAL", "60"), time.Second),
+		},
+		Tiingo: TiingoConfig{
+			APIKey:       getEnv("TIINGO_API_KEY", ""),
+			PollInterval: parseDuration(getEnv("TIINGO_POLL_INTERVAL", "900"), time.Second),
 		},
 		Telegram: TelegramConfig{
 			BotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),

@@ -36,6 +36,60 @@
 
 ---
 
+## [1.5.0] - 2026-03-08
+
+### Added
+- `internal/paper/trader.go`: 실시간 페이퍼 트레이딩 엔진 (PaperTrader, PaperPosition, PaperSummary)
+- `internal/paper/trader_test.go`: 10개 테스트 PASS (오픈/중복방지/제로진입/TP/SL/구바 무시/룰필터/요약/Long-Short레벨/멀티심볼)
+- `internal/storage/paper.go`: DB CRUD (SavePaperPosition, GetOpenPositions, GetAllOpenPositions, ClosePaperPosition, GetClosedPositions)
+- `internal/storage/db.go`: `paper_positions` 테이블 + 인덱스 스키마 추가
+
+### Changed
+- `internal/pipeline/pipeline.go`: PaperTrader 인터페이스 + SetPaperTrader + analyzeSymbol에 OnSignals/CheckPositions 연결
+- `internal/api/server.go`: PaperStore 인터페이스 + GET /api/paper/positions, /history, /summary 엔드포인트
+- `cmd/server/main.go`: paper.New() 초기화 + pipe.SetPaperTrader + apiSrv.WithPaperStore
+- `web/src/App.tsx`: PaperTab 컴포넌트 (요약 카드 6개 + 오픈 포지션 테이블 + 청산 히스토리 테이블)
+
+---
+
+## [1.4.0] - 2026-03-08
+
+### Added
+- `internal/collector/tiingo.go`: Tiingo REST 수집기 (1D/1W = daily endpoint, 1H/4H = IEX intraday endpoint)
+- `internal/config/config.go`: TiingoConfig 추가 (TIINGO_API_KEY, TIINGO_POLL_INTERVAL)
+- `.env.example`: TIINGO_API_KEY, TIINGO_POLL_INTERVAL 항목 추가
+
+### Changed
+- `cmd/server/main.go`: TIINGO_API_KEY 설정 시 Tiingo 수집기 우선 사용, 미설정 시 Yahoo fallback
+- PRD.md: Phase 2-5 방향 → "Yahoo → Tiingo 대체"로 업데이트
+
+---
+
+## [1.3.0] - 2026-03-08
+
+### Added
+- `pkg/models/signal.go`: EntryPrice, TP, SL 필드 추가 (ATR 기반 거래 레벨)
+- `internal/pipeline/pipeline.go`: enrichSignalLevels() — 신호 발생 시 진입가/TP/SL 자동 계산
+- `internal/notifier/format.go`: fmtPrice() 헬퍼 + formatTelegram에 💰 진입/TP/SL 라인 추가
+- `internal/notifier/discord.go`: Discord embed fields에 진입가/TP/SL 항목 추가
+- `internal/notifier/notifier_test.go`: 포맷 테스트 3개 추가 (WithLevels, NoLevelsWhenZero, ContainsFields)
+- `docs/research/20260308_free_data_sources.md`: 무료 데이터 소스 VERIFIED 리서치 (Tiingo 1순위 권고)
+
+### Research
+- 무료 데이터 소스 조사 완료: Tiingo(1순위) > Polygon.io(주식 전용) > Alpha Vantage(낮은 한도) → VERIFIED
+
+---
+
+## [1.2.0] - 2026-03-08
+
+### Changed
+- AGENTS.md v0.3: TraderAdvisor 에이전트 추가 (실전 트레이더 자문 역할)
+- PRD.md: Phase 2-5 Bloomberg → `[BLOCKED]` (유료 API 계약 불가)
+- Orchestrator 트리거: VERIFIED 기법 → TraderAdvisor 실전 코멘트 연결
+- Orchestrator 트리거: 새 UI 기능 → TraderAdvisor 유용성 검토 추가
+
+---
+
 ## [1.1.0] - 2026-03-08
 
 ### Added

@@ -11,7 +11,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper'
 
 interface OHLCVBar {
   time: number
@@ -574,6 +574,167 @@ function BacktestTab() {
   )
 }
 
+// ── Paper Trading Tab ─────────────────────────────────────────────────────────
+
+interface PaperPosition {
+  id: number
+  symbol: string
+  timeframe: string
+  rule: string
+  direction: string
+  entry_price: number
+  tp: number
+  sl: number
+  entry_time: string
+  exit_price: number
+  exit_time: string | null
+  status: string
+  pnl_pct: number
+}
+
+interface PaperSummary {
+  open_positions: number
+  closed_trades: number
+  wins: number
+  losses: number
+  win_rate: number
+  total_pnl_pct: number
+  avg_win_pct: number
+  avg_loss_pct: number
+}
+
+function PaperTab() {
+  const [summary, setSummary] = useState<PaperSummary | null>(null)
+  const [positions, setPositions] = useState<PaperPosition[]>([])
+  const [history, setHistory] = useState<PaperPosition[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      apiFetch<PaperSummary>('/paper/summary'),
+      apiFetch<PaperPosition[]>('/paper/positions'),
+      apiFetch<PaperPosition[]>('/paper/history?limit=50'),
+    ])
+      .then(([s, p, h]) => {
+        setSummary(s)
+        setPositions(p ?? [])
+        setHistory(h ?? [])
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { reload() }, [reload])
+
+  if (loading) return <p className="loading">로딩 중...</p>
+
+  return (
+    <>
+      <p className="section-title">페이퍼 트레이딩 — 실시간 가상 포트폴리오</p>
+
+      {summary && (
+        <div className="backtest-stats">
+          <div className="stat-card">
+            <div className="stat-value" style={{ fontSize: '1.4rem' }}>{summary.open_positions}</div>
+            <div className="stat-label">오픈 포지션</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value" style={{ fontSize: '1.4rem' }}>{summary.closed_trades}</div>
+            <div className="stat-label">총 거래</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value" style={{ fontSize: '1.4rem' }}>{(summary.win_rate * 100).toFixed(1)}%</div>
+            <div className="stat-label">승률</div>
+          </div>
+          <div className="stat-card">
+            <div
+              className="stat-value"
+              style={{ fontSize: '1.4rem', color: summary.total_pnl_pct >= 0 ? 'var(--mint)' : 'var(--muted)' }}
+            >
+              {summary.total_pnl_pct >= 0 ? '+' : ''}{summary.total_pnl_pct.toFixed(2)}%
+            </div>
+            <div className="stat-label">누적 손익</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value" style={{ fontSize: '1.4rem', color: 'var(--mint)' }}>
+              +{summary.avg_win_pct.toFixed(2)}%
+            </div>
+            <div className="stat-label">평균 수익</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value" style={{ fontSize: '1.4rem', color: 'var(--muted)' }}>
+              {summary.avg_loss_pct.toFixed(2)}%
+            </div>
+            <div className="stat-label">평균 손실</div>
+          </div>
+        </div>
+      )}
+
+      {positions.length > 0 && (
+        <>
+          <p className="section-title" style={{ marginTop: 24 }}>오픈 포지션 ({positions.length})</p>
+          <div className="backtest-table-wrap">
+            <table className="backtest-table">
+              <thead>
+                <tr><th>종목</th><th>방향</th><th>룰</th><th>진입가</th><th>TP</th><th>SL</th><th>진입 시간</th></tr>
+              </thead>
+              <tbody>
+                {positions.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.symbol}</td>
+                    <td className={p.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{p.direction}</td>
+                    <td style={{ color: 'var(--muted)' }}>{p.rule}</td>
+                    <td>{p.entry_price.toFixed(2)}</td>
+                    <td className="pnl-win">{p.tp.toFixed(2)}</td>
+                    <td className="pnl-loss">{p.sl.toFixed(2)}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: '0.72rem' }}>
+                      {new Date(p.entry_time).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {positions.length === 0 && (
+        <p className="loading" style={{ marginTop: 16 }}>오픈 포지션 없음 — 신호 발생 시 자동으로 포지션이 생성됩니다.</p>
+      )}
+
+      {history.length > 0 && (
+        <>
+          <p className="section-title" style={{ marginTop: 24 }}>청산 히스토리</p>
+          <div className="backtest-table-wrap">
+            <table className="backtest-table">
+              <thead>
+                <tr><th>종목</th><th>방향</th><th>진입가</th><th>청산가</th><th>결과</th><th>손익</th></tr>
+              </thead>
+              <tbody>
+                {history.map((p) => (
+                  <tr key={p.id} className={p.pnl_pct > 0 ? 'outcome-win' : 'outcome-loss'}>
+                    <td>{p.symbol}</td>
+                    <td className={p.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{p.direction}</td>
+                    <td>{p.entry_price.toFixed(2)}</td>
+                    <td>{p.exit_price.toFixed(2)}</td>
+                    <td style={{ fontSize: '0.72rem', color: p.status === 'CLOSED_TP' ? 'var(--mint)' : 'var(--muted)' }}>
+                      {p.status === 'CLOSED_TP' ? 'TP ✓' : 'SL ✗'}
+                    </td>
+                    <td className={p.pnl_pct > 0 ? 'pnl-win' : 'pnl-loss'}>
+                      {p.pnl_pct >= 0 ? '+' : ''}{p.pnl_pct.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -600,6 +761,9 @@ export function App() {
           <button className={`tab-btn${tab === 'backtest' ? ' active' : ''}`} onClick={() => setTab('backtest')}>
             백테스트
           </button>
+          <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>
+            페이퍼
+          </button>
         </nav>
       </header>
       <main>
@@ -608,6 +772,7 @@ export function App() {
         {tab === 'status' && <StatusTab />}
         {tab === 'chart' && <ChartTab />}
         {tab === 'backtest' && <BacktestTab />}
+        {tab === 'paper' && <PaperTab />}
       </main>
     </div>
   )

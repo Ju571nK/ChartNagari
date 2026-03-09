@@ -48,6 +48,14 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 			"text": sig.CreatedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
 		},
 	}
+	// Add trade level fields when ATR data is available.
+	if sig.EntryPrice > 0 {
+		embed["fields"] = []map[string]interface{}{
+			{"name": "💰 진입가", "value": fmtPrice(sig.EntryPrice), "inline": true},
+			{"name": "🎯 TP", "value": fmtPrice(sig.TP), "inline": true},
+			{"name": "🛡 SL", "value": fmtPrice(sig.SL), "inline": true},
+		}
+	}
 
 	payload := map[string]interface{}{
 		"embeds": []map[string]interface{}{embed},

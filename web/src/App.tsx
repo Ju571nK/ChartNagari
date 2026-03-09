@@ -3,6 +3,7 @@ import {
   createChart,
   createSeriesMarkers,
   CandlestickSeries,
+  HistogramSeries,
   CrosshairMode,
   type IChartApi,
   type ISeriesApi,
@@ -47,7 +48,9 @@ interface StatusData {
   phase: string
   symbols: number
   rules: number
-  tests: number
+  uptime_sec: number
+  last_signal_unix: number
+  data_sources: string[]
 }
 
 // ── API client ────────────────────────────────────────────────────────────────
@@ -95,6 +98,29 @@ function abbreviateRule(rule: string): string {
   return RULE_ABBR[rule] ?? rule.slice(0, 6).toUpperCase()
 }
 
+// ── rule descriptions ─────────────────────────────────────────────────────────
+
+const RULE_DESC: Record<string, string> = {
+  rsi_overbought_oversold:     'RSI 과매수/과매도 구간 신호',
+  rsi_divergence:              'RSI 다이버전스 — 추세 전환 조기 감지',
+  ema_cross:                   'EMA 크로스 — 단기/장기 방향 전환',
+  support_resistance_breakout: '지지·저항 돌파 — 레벨 브레이크아웃',
+  fibonacci_confluence:        '피보나치 수렴 구간 — 반전 가능 지점',
+  volume_spike:                '거래량 급증 — 세력 개입 감지',
+  ict_order_block:             'Order Block — 기관 매수/매도 구간',
+  ict_fair_value_gap:          'Fair Value Gap — 미체결 가격 공백',
+  ict_liquidity_sweep:         'Liquidity Sweep — 스톱 헌팅 후 반전',
+  ict_breaker_block:           'Breaker Block — 무효화된 OB 반전 구간',
+  ict_kill_zone:               'Kill Zone — 런던/뉴욕 세션 주요 시간대',
+  wyckoff_accumulation:        'Wyckoff 축적 — 세력 매집 국면',
+  wyckoff_distribution:        'Wyckoff 분배 — 세력 매도 국면',
+  wyckoff_spring:              'Spring — 저점 이탈 후 급반등',
+  wyckoff_upthrust:            'Upthrust — 고점 돌파 후 급락',
+  wyckoff_volume_anomaly:      '비정상 거래량 — 이상 세력 개입 신호',
+  smc_bos:                     'BOS — Break of Structure (추세 지속)',
+  smc_choch:                   'CHoCH — Change of Character (추세 전환)',
+}
+
 // ── sub-components ────────────────────────────────────────────────────────────
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -110,13 +136,19 @@ function SymbolsTab() {
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [newSymbol, setNewSymbol] = useState('')
+  const [newType, setNewType] = useState<'crypto' | 'stock'>('stock')
+  const [newExchange, setNewExchange] = useState('')
+  const [adding, setAdding] = useState(false)
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     apiFetch<SymbolItem[]>('/symbols')
       .then(setSymbols)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { reload() }, [reload])
 
   const toggle = useCallback(async (sym: SymbolItem, enabled: boolean) => {
     try {
@@ -126,6 +158,35 @@ function SymbolsTab() {
       setError(e instanceof Error ? e.message : '알 수 없는 오류')
     }
   }, [])
+
+  const remove = useCallback(async (sym: SymbolItem) => {
+    if (!confirm(`${sym.symbol}을 삭제할까요?`)) return
+    try {
+      await apiFetch<null>(`/symbols/${encodeURIComponent(sym.symbol)}`, { method: 'DELETE' })
+      setSymbols((prev) => prev.filter((s) => s.symbol !== sym.symbol))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '삭제 실패')
+    }
+  }, [])
+
+  const add = useCallback(async () => {
+    if (!newSymbol.trim()) return
+    setAdding(true)
+    try {
+      await apiFetch<null>('/symbols', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: newSymbol.trim().toUpperCase(), type: newType, exchange: newExchange.trim() }),
+      })
+      setNewSymbol('')
+      setNewExchange('')
+      reload()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '추가 실패')
+    } finally {
+      setAdding(false)
+    }
+  }, [newSymbol, newType, newExchange, reload])
 
   if (loading) return <p className="loading">로딩 중...</p>
   if (error) return <p className="error-msg">오류: {error}</p>
@@ -142,10 +203,46 @@ function SymbolsTab() {
             </div>
             <div className="item-meta">{sym.exchange}</div>
           </div>
-          <Toggle checked={sym.enabled} onChange={(v) => toggle(sym, v)} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Toggle checked={sym.enabled} onChange={(v) => toggle(sym, v)} />
+            <button className="remove-btn" onClick={() => remove(sym)} title="삭제">✕</button>
+          </div>
         </div>
       ))}
       {symbols.length === 0 && <p className="loading">등록된 종목 없음</p>}
+
+      {/* 종목 추가 폼 */}
+      <p className="section-title" style={{ marginTop: 24 }}>종목 추가</p>
+      <div className="add-symbol-form">
+        <select
+          className="chart-select"
+          value={newType}
+          onChange={(e) => setNewType(e.target.value as 'crypto' | 'stock')}
+        >
+          <option value="stock">주식</option>
+          <option value="crypto">코인</option>
+        </select>
+        <input
+          className="symbol-input"
+          placeholder="심볼 (예: NVDA)"
+          value={newSymbol}
+          onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <input
+          className="symbol-input"
+          placeholder="거래소 (예: nasdaq)"
+          value={newExchange}
+          onChange={(e) => setNewExchange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <button className="run-btn" onClick={add} disabled={adding || !newSymbol.trim()}>
+          {adding ? '...' : '추가'}
+        </button>
+      </div>
+      <p className="item-meta" style={{ marginTop: 8 }}>
+        ⚠️ 추가 후 서버 재시작 시 데이터 수집이 시작됩니다
+      </p>
     </>
   )
 }
@@ -191,6 +288,9 @@ function RulesTab() {
                   <span className={`badge badge-${rule.methodology}`}>{rule.methodology}</span>
                   {rule.name}
                 </div>
+                {RULE_DESC[rule.name] && (
+                  <div className="item-meta">{RULE_DESC[rule.name]}</div>
+                )}
               </div>
               <Toggle checked={rule.enabled} onChange={(v) => toggle(rule, v)} />
             </div>
@@ -202,10 +302,29 @@ function RulesTab() {
   )
 }
 
+function fmtUptime(sec: number | undefined): string {
+  if (!sec || isNaN(sec)) return '계산 중...'
+  if (sec < 60) return `${sec}초`
+  if (sec < 3600) return `${Math.floor(sec / 60)}분`
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return `${h}시간 ${m}분`
+}
+
+function fmtRelTime(unix: number): string {
+  if (!unix) return '신호 없음'
+  const diff = Math.floor(Date.now() / 1000 - unix)
+  if (diff < 60) return `${diff}초 전`
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+  return `${Math.floor(diff / 86400)}일 전`
+}
+
 function StatusTab() {
   const [status, setStatus] = useState<StatusData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     apiFetch<StatusData>('/status')
@@ -214,32 +333,57 @@ function StatusTab() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Refresh uptime and last-signal display every 30s.
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  void tick // used to trigger re-render
+
   if (loading) return <p className="loading">로딩 중...</p>
   if (error) return <p className="error-msg">오류: {error}</p>
   if (!status) return null
 
   return (
     <>
-      <p className="section-title">시스템 상태</p>
-      <p className="phase-info">{status.phase}</p>
+      {/* 파이프라인 활성 배너 */}
+      <div className="status-banner">
+        <span className="status-dot" />
+        <span>파이프라인 실행 중</span>
+        <span className="status-uptime">가동 시간 {fmtUptime(status.uptime_sec)}</span>
+      </div>
+
+      {/* 데이터 소스 */}
+      <p className="section-title">데이터 소스</p>
+      <div className="source-list">
+        {(status.data_sources ?? []).map((src) => (
+          <div key={src} className="source-item">
+            <span className="source-dot">✅</span>
+            <span>{src}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 분석 현황 */}
+      <p className="section-title">분석 현황</p>
       <div className="status-grid">
         <div className="stat-card">
           <div className="stat-value">{status.symbols}</div>
-          <div className="stat-label">등록 종목</div>
+          <div className="stat-label">모니터링 종목</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{status.rules}</div>
-          <div className="stat-label">분석 룰</div>
+          <div className="stat-label">활성 룰</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{status.tests}</div>
-          <div className="stat-label">통과 테스트</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-pass">✓ PASS</div>
-          <div className="stat-label">전체 테스트</div>
+        <div className="stat-card" style={{ gridColumn: 'span 2' }}>
+          <div className="stat-value" style={{ fontSize: '1.2rem' }}>
+            {fmtRelTime(status.last_signal_unix)}
+          </div>
+          <div className="stat-label">마지막 신호 감지</div>
         </div>
       </div>
+
+      <p className="phase-info" style={{ marginTop: 16 }}>{status.phase}</p>
     </>
   )
 }
@@ -258,6 +402,7 @@ function ChartTab() {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const volRef = useRef<ISeriesApi<'Histogram'> | null>(null)
 
   // Load enabled symbols for the selector
   useEffect(() => {
@@ -282,7 +427,7 @@ function ChartTab() {
       },
       crosshair: { mode: CrosshairMode.Normal },
       width: containerRef.current.clientWidth,
-      height: 420,
+      height: 480,
       timeScale: { borderColor: 'rgba(91,146,121,0.25)' },
       rightPriceScale: { borderColor: 'rgba(91,146,121,0.25)' },
     })
@@ -294,8 +439,21 @@ function ChartTab() {
       wickUpColor: '#8FCB9B',
       wickDownColor: 'rgba(143,128,115,0.7)',
     })
+    // Candlestick uses top 78% of chart, leaving bottom 22% for volume.
+    series.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.22 } })
+
+    const vol = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'vol',
+    })
+    chart.priceScale('vol').applyOptions({
+      scaleMargins: { top: 0.82, bottom: 0 },
+      visible: false,
+    })
+
     chartRef.current = chart
     seriesRef.current = series
+    volRef.current = vol
 
     const onResize = () => {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
@@ -306,6 +464,7 @@ function ChartTab() {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      volRef.current = null
     }
   }, [])
 
@@ -324,6 +483,15 @@ function ChartTab() {
             high: b.high,
             low: b.low,
             close: b.close,
+          })),
+        )
+        volRef.current?.setData(
+          bars.map((b) => ({
+            time: b.time as UTCTimestamp,
+            value: b.volume,
+            color: b.close >= b.open
+              ? 'rgba(143,203,155,0.35)'
+              : 'rgba(143,128,115,0.35)',
           })),
         )
         return apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`)

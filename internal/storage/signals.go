@@ -26,6 +26,14 @@ func (db *DB) SaveSignal(sig models.Signal) error {
 	return nil
 }
 
+// GetLatestSignalTime returns the Unix-second timestamp of the most recent signal,
+// or 0 if no signals have been saved yet.
+func (db *DB) GetLatestSignalTime() (int64, error) {
+	var ts int64
+	err := db.conn.QueryRow(`SELECT COALESCE(MAX(created_at), 0) FROM signals`).Scan(&ts)
+	return ts, err
+}
+
 // GetSignals retrieves the N most recent signals for a given symbol.
 func (db *DB) GetSignals(symbol string, limit int) ([]models.Signal, error) {
 	rows, err := db.conn.Query(`

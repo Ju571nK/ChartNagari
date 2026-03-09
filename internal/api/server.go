@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"sync"
 
+	"strings"
+	"time"
+
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/backtest"
 	"github.com/Ju571nK/Chatter/internal/paper"
@@ -36,10 +39,12 @@ type RuleItem struct {
 
 // StatusItem is the JSON representation of the system status.
 type StatusItem struct {
-	Phase   string `json:"phase"`
-	Symbols int    `json:"symbols"`
-	Rules   int    `json:"rules"`
-	Tests   int    `json:"tests"`
+	Phase          string   `json:"phase"`
+	Symbols        int      `json:"symbols"`
+	Rules          int      `json:"rules"`
+	UptimeSec      int64    `json:"uptime_sec"`
+	LastSignalUnix int64    `json:"last_signal_unix"` // 0 = no signal yet
+	DataSources    []string `json:"data_sources"`
 }
 
 // OHLCVBar is the chart-compatible OHLCV response.
@@ -93,6 +98,8 @@ type Server struct {
 	chartStore     ChartStore     // optional; set via WithChartStore
 	backtestRunner BacktestRunner // optional; set via WithBacktestRunner
 	paperStore     PaperStore     // optional; set via WithPaperStore
+	startTime      time.Time      // server start timestamp for uptime
+	dataSources    []string       // active data sources (e.g. ["Binance","Tiingo"])
 	mu             sync.RWMutex
 }
 
@@ -101,7 +108,7 @@ type Server struct {
 //   - webDist:   path to the compiled React frontend (web/dist); empty or
 //     non-existent path → static serving is disabled.
 func New(configDir, webDist string) *Server {
-	s := &Server{configDir: configDir}
+	s := &Server{configDir: configDir, startTime: time.Now()}
 	if webDist != "" {
 		if _, err := os.Stat(webDist); err == nil {
 			s.static = http.FileServer(http.Dir(webDist))
@@ -120,6 +127,11 @@ func (s *Server) WithBacktestRunner(br BacktestRunner) {
 	s.backtestRunner = br
 }
 
+// WithDataSources records which data sources are active for the status display.
+func (s *Server) WithDataSources(sources []string) {
+	s.dataSources = sources
+}
+
 func (s *Server) WithPaperStore(ps PaperStore) {
 	s.paperStore = ps
 }
@@ -135,7 +147,9 @@ func (s *Server) Handler() http.Handler {
 
 	// Watchlist symbols
 	mux.HandleFunc("GET /api/symbols", s.getSymbols)
+	mux.HandleFunc("POST /api/symbols", s.addSymbol)
 	mux.HandleFunc("PUT /api/symbols/{symbol}", s.updateSymbol)
+	mux.HandleFunc("DELETE /api/symbols/{symbol}", s.removeSymbol)
 
 	// Analysis rules
 	mux.HandleFunc("GET /api/rules", s.getRules)
@@ -169,11 +183,26 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 
 	total := len(wl.Symbols.Crypto) + len(wl.Symbols.Stocks)
 
+	// Last signal time via optional type assertion (avoids interface change).
+	var lastSignal int64
+	if sts, ok := s.chartStore.(interface{ GetLatestSignalTime() (int64, error) }); ok {
+		if ts, err := sts.GetLatestSignalTime(); err == nil {
+			lastSignal = ts
+		}
+	}
+
+	sources := s.dataSources
+	if len(sources) == 0 {
+		sources = []string{}
+	}
+
 	jsonOK(w, StatusItem{
-		Phase:   "Phase 1: Core MVP",
-		Symbols: total,
-		Rules:   len(rc.Rules),
-		Tests:   100,
+		Phase:          "Phase 2: Enhancement",
+		Symbols:        total,
+		Rules:          len(rc.Rules),
+		UptimeSec:      int64(time.Since(s.startTime).Seconds()),
+		LastSignalUnix: lastSignal,
+		DataSources:    sources,
 	})
 }
 
@@ -464,6 +493,97 @@ func (s *Server) getPaperSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, paper.Summary(closed, len(open)))
+}
+
+// addSymbol handles POST /api/symbols — adds a new symbol to watchlist.yaml.
+// Body: {"symbol":"AAPL","type":"stock","exchange":"nasdaq"}
+// Note: collectors restart is required for live data collection to begin.
+func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Symbol   string `json:"symbol"`
+		Type     string `json:"type"`     // "crypto" | "stock"
+		Exchange string `json:"exchange"` // optional
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if body.Symbol == "" || (body.Type != "crypto" && body.Type != "stock") {
+		http.Error(w, "symbol required; type must be 'crypto' or 'stock'", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	wl, err := s.readWatchlistLocked()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	entry := appconfig.SymbolEntry{
+		Symbol:   strings.ToUpper(body.Symbol),
+		Exchange: body.Exchange,
+		Enabled:  true,
+	}
+	switch body.Type {
+	case "crypto":
+		wl.Symbols.Crypto = append(wl.Symbols.Crypto, entry)
+	case "stock":
+		wl.Symbols.Stocks = append(wl.Symbols.Stocks, entry)
+	}
+
+	if err := s.writeWatchlistLocked(wl); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+// removeSymbol handles DELETE /api/symbols/{symbol} — removes a symbol from watchlist.yaml.
+func (s *Server) removeSymbol(w http.ResponseWriter, r *http.Request) {
+	target := strings.ToUpper(r.PathValue("symbol"))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	wl, err := s.readWatchlistLocked()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	found := false
+	filtered := wl.Symbols.Crypto[:0]
+	for _, e := range wl.Symbols.Crypto {
+		if strings.ToUpper(e.Symbol) == target {
+			found = true
+		} else {
+			filtered = append(filtered, e)
+		}
+	}
+	wl.Symbols.Crypto = filtered
+
+	filtered = wl.Symbols.Stocks[:0]
+	for _, e := range wl.Symbols.Stocks {
+		if strings.ToUpper(e.Symbol) == target {
+			found = true
+		} else {
+			filtered = append(filtered, e)
+		}
+	}
+	wl.Symbols.Stocks = filtered
+
+	if !found {
+		http.Error(w, "symbol not found", http.StatusNotFound)
+		return
+	}
+	if err := s.writeWatchlistLocked(wl); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── YAML file helpers ─────────────────────────────────────────────────────────

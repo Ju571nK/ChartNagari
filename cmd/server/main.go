@@ -188,6 +188,15 @@ func main() {
 	apiSrv.WithChartStore(db)
 	apiSrv.WithBacktestRunner(btRunner)
 	apiSrv.WithPaperStore(db)
+
+	// 활성 데이터 소스 목록 전달 (상태탭 표시용)
+	activeSources := []string{"Binance (BTC/ETH)"}
+	if cfg.Tiingo.APIKey != "" {
+		activeSources = append(activeSources, "Tiingo ("+strings.Join(stockSymbols, "/")+")")
+	} else if len(stockSymbols) > 0 {
+		activeSources = append(activeSources, "Yahoo Finance ("+strings.Join(stockSymbols, "/")+")")
+	}
+	apiSrv.WithDataSources(activeSources)
 	httpAddr := ":" + cfg.ServerPort
 	go func() {
 		log.Info().Str("addr", httpAddr).Msg("HTTP API 서버 시작")

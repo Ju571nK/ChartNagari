@@ -302,6 +302,106 @@ input:checked + .slider::before {
   overflow: hidden;
 }
 
+/* ── symbol management ───────────────────────────────────────────────────── */
+.remove-btn {
+  background: transparent;
+  border: 1px solid rgba(143, 128, 115, 0.3);
+  color: var(--muted);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.remove-btn:hover {
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.add-symbol-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.symbol-input {
+  background: rgba(91, 146, 121, 0.06);
+  border: 1px solid rgba(91, 146, 121, 0.25);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  min-width: 100px;
+}
+
+.symbol-input:focus {
+  outline: none;
+  border-color: var(--green);
+}
+
+.symbol-input::placeholder {
+  color: var(--muted);
+}
+
+/* ── status tab ──────────────────────────────────────────────────────────── */
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(91, 146, 121, 0.08);
+  border: 1px solid rgba(91, 146, 121, 0.25);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: var(--mint);
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 6px rgba(143, 203, 155, 0.7);
+  flex-shrink: 0;
+}
+
+.status-uptime {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(91, 146, 121, 0.04);
+  border: 1px solid rgba(91, 146, 121, 0.12);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.source-dot {
+  font-size: 0.75rem;
+}
+
 /* ── backtest tab ────────────────────────────────────────────────────────── */
 .backtest-controls {
   display: flex;

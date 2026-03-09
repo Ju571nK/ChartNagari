@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -193,6 +195,26 @@ func main() {
 			log.Error().Err(err).Msg("HTTP API 서버 종료")
 		}
 	}()
+
+	// ── 서버 시작 알림 ────────────────────────────────────────────────
+	dataSource := "Yahoo Finance (fallback)"
+	if cfg.Tiingo.APIKey != "" {
+		dataSource = "Tiingo"
+	}
+	startupMsg := fmt.Sprintf(
+		"🚀 <b>Chart Analyzer 시작</b>\n\n"+
+			"📊 종목: <code>%s</code>\n"+
+			"📋 활성 룰: %d개\n"+
+			"🔌 데이터: %s\n"+
+			"🌐 API: :%s\n"+
+			"⏰ %s KST",
+		strings.Join(allSymbols, ", "),
+		len(allRules),
+		dataSource,
+		cfg.ServerPort,
+		time.Now().In(time.FixedZone("KST", 9*3600)).Format("2006-01-02 15:04:05"),
+	)
+	go notif.Announce(context.Background(), startupMsg)
 
 	// ── Graceful shutdown 대기 ────────────────────────────────────────
 	<-ctx.Done()

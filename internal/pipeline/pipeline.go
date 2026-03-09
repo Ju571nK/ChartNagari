@@ -212,7 +212,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		Str("symbol", sym).
 		Int("signals", len(signals)).
 		Float64("top_score", signals[0].Score).
-		Msg("신호 감지 — AI 해석 시작")
+		Msg("신호 감지")
 
 	// AI enrichment: Claude interprets high-scoring signal groups.
 	group := interpreter.SignalGroup{

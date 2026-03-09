@@ -17,6 +17,12 @@ type Sender interface {
 	Name() string
 }
 
+// TextSender is an optional extension to Sender for sending raw text messages.
+// Backends that implement this receive Announce() calls (e.g. startup notices).
+type TextSender interface {
+	SendText(ctx context.Context, text string) error
+}
+
 // Config holds Notifier tuning parameters.
 type Config struct {
 	// ScoreThreshold is the minimum signal score required to trigger a notification.
@@ -58,6 +64,18 @@ func New(cfg Config, log zerolog.Logger) *Notifier {
 // Register adds a sender backend. Call before the first Notify.
 func (n *Notifier) Register(s Sender) {
 	n.senders = append(n.senders, s)
+}
+
+// Announce sends a raw HTML text message to all senders that implement TextSender.
+// Bypasses score threshold and cooldown — intended for system-level notices only.
+func (n *Notifier) Announce(ctx context.Context, text string) {
+	for _, s := range n.senders {
+		if ts, ok := s.(TextSender); ok {
+			if err := ts.SendText(ctx, text); err != nil {
+				n.log.Error().Err(err).Str("sender", s.Name()).Msg("시스템 알림 발송 실패")
+			}
+		}
+	}
 }
 
 // Notify processes a batch of signals:

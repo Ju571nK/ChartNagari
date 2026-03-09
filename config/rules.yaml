@@ -145,9 +145,9 @@ rules:
 scoring:
   mtf_bonus: 3.0            # 3개 TF 이상 동일 방향 시 보너스
   thresholds:
-    weak: 5.0               # 약한 신호 (참고용)
-    medium: 8.0             # 중간 신호
-    strong: 12.0            # 강한 신호 → 즉시 Telegram 발송
+    weak: 3.0               # 약한 신호 (차트 마커 저장)
+    medium: 4.0             # 중간 신호
+    strong: 5.0             # 강한 신호 → 즉시 Telegram 발송 (단일 룰 최대값 기준)
 
 # ── MTF 가중치 ───────────────────────────────────────────────────────
 timeframe_weights:

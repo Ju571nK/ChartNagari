@@ -67,6 +67,34 @@ async function putJSON(path: string, body: unknown): Promise<void> {
   })
 }
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+// abbreviateRule converts a full rule name to a short chart label.
+const RULE_ABBR: Record<string, string> = {
+  rsi_overbought_oversold:       'RSI',
+  rsi_divergence:                'DIV',
+  ema_cross:                     'EMA',
+  support_resistance_breakout:   'S/R',
+  fibonacci_confluence:          'FIB',
+  volume_spike:                  'VOL',
+  ict_order_block:               'OB',
+  ict_fair_value_gap:            'FVG',
+  ict_liquidity_sweep:           'LQD',
+  ict_breaker_block:             'BB',
+  ict_kill_zone:                 'KZ',
+  wyckoff_accumulation:          'ACC',
+  wyckoff_distribution:          'DIST',
+  wyckoff_spring:                'SPR',
+  wyckoff_upthrust:              'UP',
+  wyckoff_volume_anomaly:        'VANOM',
+  smc_bos:                       'BOS',
+  smc_choch:                     'CHoCH',
+}
+
+function abbreviateRule(rule: string): string {
+  return RULE_ABBR[rule] ?? rule.slice(0, 6).toUpperCase()
+}
+
 // ── sub-components ────────────────────────────────────────────────────────────
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -309,7 +337,7 @@ function ChartTab() {
             position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
             color: s.direction === 'LONG' ? '#8FCB9B' : 'rgba(143,128,115,0.9)',
             shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
-            text: s.rule,
+            text: abbreviateRule(s.rule),
           }))
         createSeriesMarkers(seriesRef.current, markers)
       })

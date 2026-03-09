@@ -8,6 +8,7 @@ package pipeline
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -40,15 +41,19 @@ type PaperTrader interface {
 
 // Config controls pipeline timing and data parameters.
 type Config struct {
-	Interval time.Duration // how often to run analysis (default: 1 minute)
-	Lookback int           // bars to load per TF (default: 200)
+	Interval       time.Duration // how often to run analysis (default: 1 minute)
+	Lookback       int           // bars to load per TF (default: 200)
+	SignalMinScore float64       // minimum score to persist a signal to DB (default: 5.0)
+	SignalCooldown time.Duration // minimum gap between saves for same symbol+rule (default: 4h)
 }
 
 // DefaultConfig returns sensible production defaults.
 func DefaultConfig() Config {
 	return Config{
-		Interval: time.Minute,
-		Lookback: 200,
+		Interval:       time.Minute,
+		Lookback:       200,
+		SignalMinScore: 5.0,
+		SignalCooldown: 4 * time.Hour,
 	}
 }
 
@@ -66,6 +71,9 @@ type Pipeline struct {
 	symbols     []string
 	timeframes  []string
 	log         zerolog.Logger
+
+	sigCooldownMu sync.Mutex
+	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
 }
 
 // New creates a Pipeline wired to the provided components.
@@ -80,14 +88,15 @@ func New(
 	log zerolog.Logger,
 ) *Pipeline {
 	return &Pipeline{
-		cfg:        cfg,
-		db:         db,
-		eng:        eng,
-		interp:     interp,
-		notif:      notif,
-		symbols:    symbols,
-		timeframes: timeframes,
-		log:        log,
+		cfg:          cfg,
+		db:           db,
+		eng:          eng,
+		interp:       interp,
+		notif:        notif,
+		symbols:      symbols,
+		timeframes:   timeframes,
+		log:          log,
+		sigLastSaved: make(map[string]time.Time),
 	}
 }
 
@@ -171,8 +180,23 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 
 	// Persist signals for chart dashboard markers.
+	// Only save signals above MinScore and not within the cooldown window.
 	if p.sigSaver != nil {
 		for _, sig := range signals {
+			if sig.Score < p.cfg.SignalMinScore {
+				continue
+			}
+			key := sig.Symbol + ":" + sig.Rule
+			p.sigCooldownMu.Lock()
+			last := p.sigLastSaved[key]
+			canSave := time.Since(last) >= p.cfg.SignalCooldown
+			if canSave {
+				p.sigLastSaved[key] = time.Now()
+			}
+			p.sigCooldownMu.Unlock()
+			if !canSave {
+				continue
+			}
 			if err := p.sigSaver.SaveSignal(sig); err != nil {
 				p.log.Warn().Err(err).Str("symbol", sym).Msg("신호 저장 실패")
 			}

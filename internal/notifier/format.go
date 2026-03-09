@@ -7,10 +7,29 @@ import (
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
-// fmtPrice formats a price value without scientific notation.
-// Uses the minimal decimal representation: 65000 → "65000", 1.234 → "1.234".
+// fmtPrice formats a price value with context-appropriate decimal places.
+// Precision scales with price magnitude to avoid float64 noise:
+//
+//	>= 100  → 2 dp  (e.g. 157.16)
+//	>= 10   → 3 dp  (e.g. 12.345)
+//	>= 1    → 4 dp  (e.g. 1.2345)
+//	>= 0.01 → 6 dp  (e.g. 0.012345)
+//	< 0.01  → 8 dp  (e.g. 0.00012345)
 func fmtPrice(p float64) string {
-	return strconv.FormatFloat(p, 'f', -1, 64)
+	var prec int
+	switch {
+	case p >= 100:
+		prec = 2
+	case p >= 10:
+		prec = 3
+	case p >= 1:
+		prec = 4
+	case p >= 0.01:
+		prec = 6
+	default:
+		prec = 8
+	}
+	return strconv.FormatFloat(p, 'f', prec, 64)
 }
 
 // directionIcon returns an emoji representing the signal direction.

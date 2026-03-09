@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (CGO_ENABLED=0 호환)
 )
@@ -83,14 +84,15 @@ func (db *DB) migrate() error {
 
 	-- 신호 영속성 테이블 (Phase 2-3 차트 대시보드용)
 	CREATE TABLE IF NOT EXISTS signals (
-		id         INTEGER PRIMARY KEY AUTOINCREMENT,
-		symbol     TEXT    NOT NULL,
-		timeframe  TEXT    NOT NULL,
-		rule       TEXT    NOT NULL,
-		direction  TEXT    NOT NULL,
-		score      REAL    NOT NULL,
-		message    TEXT    NOT NULL DEFAULT '',
-		created_at INTEGER NOT NULL  -- Unix 초
+		id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+		symbol             TEXT    NOT NULL,
+		timeframe          TEXT    NOT NULL,
+		rule               TEXT    NOT NULL,
+		direction          TEXT    NOT NULL,
+		score              REAL    NOT NULL,
+		message            TEXT    NOT NULL DEFAULT '',
+		ai_interpretation  TEXT    NOT NULL DEFAULT '',
+		created_at         INTEGER NOT NULL  -- Unix 초
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_signals_lookup
@@ -116,6 +118,18 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_paper_positions_lookup
 		ON paper_positions(symbol, status, entry_time DESC);
 	`
-	_, err := db.conn.Exec(schema)
-	return err
+	if _, err := db.conn.Exec(schema); err != nil {
+		return err
+	}
+
+	// 기존 DB 마이그레이션: ai_interpretation 컬럼 추가
+	if _, err := db.conn.Exec(
+		`ALTER TABLE signals ADD COLUMN ai_interpretation TEXT NOT NULL DEFAULT ''`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("신호 테이블 마이그레이션 실패: %w", err)
+		}
+	}
+
+	return nil
 }

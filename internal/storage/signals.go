@@ -10,14 +10,15 @@ import (
 // SaveSignal persists a generated signal to the database.
 func (db *DB) SaveSignal(sig models.Signal) error {
 	_, err := db.conn.Exec(`
-		INSERT INTO signals (symbol, timeframe, rule, direction, score, message, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO signals (symbol, timeframe, rule, direction, score, message, ai_interpretation, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		sig.Symbol,
 		sig.Timeframe,
 		sig.Rule,
 		sig.Direction,
 		sig.Score,
 		sig.Message,
+		sig.AIInterpretation,
 		sig.CreatedAt.Unix(),
 	)
 	if err != nil {
@@ -37,7 +38,7 @@ func (db *DB) GetLatestSignalTime() (int64, error) {
 // GetSignals retrieves the N most recent signals for a given symbol.
 func (db *DB) GetSignals(symbol string, limit int) ([]models.Signal, error) {
 	rows, err := db.conn.Query(`
-		SELECT symbol, timeframe, rule, direction, score, message, created_at
+		SELECT symbol, timeframe, rule, direction, score, message, ai_interpretation, created_at
 		FROM signals
 		WHERE symbol = ?
 		ORDER BY created_at DESC
@@ -54,7 +55,7 @@ func (db *DB) GetSignals(symbol string, limit int) ([]models.Signal, error) {
 		var s models.Signal
 		var createdAtUnix int64
 		if err := rows.Scan(
-			&s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &createdAtUnix,
+			&s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &createdAtUnix,
 		); err != nil {
 			return nil, err
 		}

@@ -60,11 +60,12 @@ type OHLCVBar struct {
 
 // SignalBar is the chart signal marker response.
 type SignalBar struct {
-	Time      int64   `json:"time"`
-	Direction string  `json:"direction"`
-	Rule      string  `json:"rule"`
-	Score     float64 `json:"score"`
-	Message   string  `json:"message"`
+	Time             int64   `json:"time"`
+	Direction        string  `json:"direction"`
+	Rule             string  `json:"rule"`
+	Score            float64 `json:"score"`
+	Message          string  `json:"message"`
+	AIInterpretation string  `json:"ai_interpretation"`
 }
 
 // ChartStore provides OHLCV and signal data for the chart dashboard.
@@ -398,11 +399,12 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 	result := make([]SignalBar, len(sigs))
 	for i, sig := range sigs {
 		result[i] = SignalBar{
-			Time:      sig.CreatedAt.Unix(),
-			Direction: sig.Direction,
-			Rule:      sig.Rule,
-			Score:     sig.Score,
-			Message:   sig.Message,
+			Time:             sig.CreatedAt.Unix(),
+			Direction:        sig.Direction,
+			Rule:             sig.Rule,
+			Score:            sig.Score,
+			Message:          sig.Message,
+			AIInterpretation: sig.AIInterpretation,
 		}
 	}
 	jsonOK(w, result)

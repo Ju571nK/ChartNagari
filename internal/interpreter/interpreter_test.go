@@ -219,3 +219,51 @@ func contains(s, substr string) bool {
 		return false
 	}())
 }
+
+// ── TP/SL/R:R in prompt ──────────────────────────────────────────────────────
+
+func TestBuildPrompt_ContainsEntryLevels(t *testing.T) {
+	sig := models.Signal{
+		Symbol:     "BTCUSDT",
+		Timeframe:  "4H",
+		Rule:       "ict_order_block",
+		Direction:  "LONG",
+		Score:      8.0,
+		Message:    "OB 진입 신호",
+		EntryPrice: 65000.0,
+		TP:         67000.0,
+		SL:         64000.0,
+		CreatedAt:  time.Now(),
+	}
+	g := SignalGroup{
+		Symbol:  "BTCUSDT",
+		Signals: []models.Signal{sig},
+	}
+
+	p := buildPrompt(g)
+
+	for _, want := range []string{"65000", "67000", "64000", "R:R"} {
+		if !contains(p, want) {
+			t.Errorf("prompt must contain %q", want)
+		}
+	}
+}
+
+// ── MTF confluence header ─────────────────────────────────────────────────────
+
+func TestBuildPrompt_MTFConfluence(t *testing.T) {
+	sigs := []models.Signal{
+		{Symbol: "ETHUSDT", Timeframe: "1H", Rule: "ema_cross", Direction: "LONG", Score: 6.0, CreatedAt: time.Now()},
+		{Symbol: "ETHUSDT", Timeframe: "4H", Rule: "ict_order_block", Direction: "LONG", Score: 8.0, CreatedAt: time.Now()},
+		{Symbol: "ETHUSDT", Timeframe: "1D", Rule: "rsi_overbought_oversold", Direction: "SHORT", Score: 5.0, CreatedAt: time.Now()},
+	}
+	g := SignalGroup{Symbol: "ETHUSDT", Signals: sigs}
+
+	p := buildPrompt(g)
+
+	for _, want := range []string{"MTF 합류", "LONG 2개", "SHORT 1개", "롱 우세"} {
+		if !contains(p, want) {
+			t.Errorf("prompt must contain %q", want)
+		}
+	}
+}

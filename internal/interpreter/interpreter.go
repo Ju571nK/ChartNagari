@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -16,8 +17,12 @@ import (
 
 const (
 	model     = anthropic.ModelClaudeOpus4_6
-	maxTokens = int64(600)
+	maxTokens = int64(800)
 )
+
+const systemPrompt = "당신은 ICT(Inner Circle Trader)와 Wyckoff 방법론을 전문으로 하는 " +
+	"숙련된 트레이더 겸 리스크 매니저입니다. 분석은 한국어로 작성하며, " +
+	"구체적인 가격 레벨과 리스크:보상 비율을 포함합니다."
 
 // SignalGroup bundles all signals detected for a single symbol in one analysis cycle,
 // together with the flat indicator map used to build the AI prompt.
@@ -74,16 +79,26 @@ func (i *Interpreter) enrichGroup(ctx context.Context, g SignalGroup) []models.S
 
 	prompt := buildPrompt(g)
 
-	msg, err := i.client.Messages.New(ctx, anthropic.MessageNewParams{
+	params := anthropic.MessageNewParams{
 		Model:     model,
 		MaxTokens: maxTokens,
+		System: []anthropic.TextBlockParam{
+			{Text: systemPrompt},
+		},
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
 		},
-	})
+	}
+
+	msg, err := i.client.Messages.New(ctx, params)
 	if err != nil {
-		// Graceful degradation: return signals without AI text on API error.
-		return g.Signals
+		// 1회 재시도: 2초 대기 후 재호출
+		time.Sleep(2 * time.Second)
+		msg, err = i.client.Messages.New(ctx, params)
+		if err != nil {
+			// Graceful degradation: return signals without AI text on API error.
+			return g.Signals
+		}
 	}
 
 	interpretation := extractText(msg)
@@ -103,10 +118,44 @@ func (i *Interpreter) enrichGroup(ctx context.Context, g SignalGroup) []models.S
 func buildPrompt(g SignalGroup) string {
 	var sb strings.Builder
 
+	// MTF confluence summary
+	longs, shorts := 0, 0
+	for _, s := range g.Signals {
+		switch s.Direction {
+		case "LONG":
+			longs++
+		case "SHORT":
+			shorts++
+		}
+	}
+	dominant := "혼재"
+	if longs > shorts {
+		dominant = "롱 우세"
+	} else if shorts > longs {
+		dominant = "숏 우세"
+	}
+	sb.WriteString(fmt.Sprintf("## MTF 합류 분석: %s (LONG %d개 / SHORT %d개)\n\n", dominant, longs, shorts))
+
 	sb.WriteString(fmt.Sprintf("%s 차트에서 다음 신호가 감지되었습니다:\n\n", g.Symbol))
 	for _, s := range g.Signals {
 		sb.WriteString(fmt.Sprintf("- [%s] %s → %s (스코어: %.2f)\n  %s\n",
 			s.Timeframe, s.Rule, s.Direction, s.Score, s.Message))
+		if s.EntryPrice > 0 && s.TP > 0 && s.SL > 0 {
+			var rr float64
+			if s.Direction == "LONG" {
+				risk := s.EntryPrice - s.SL
+				if risk > 0 {
+					rr = (s.TP - s.EntryPrice) / risk
+				}
+			} else {
+				risk := s.SL - s.EntryPrice
+				if risk > 0 {
+					rr = (s.EntryPrice - s.TP) / risk
+				}
+			}
+			sb.WriteString(fmt.Sprintf("  진입: %.4f | TP: %.4f | SL: %.4f | R:R=1:%.2f\n",
+				s.EntryPrice, s.TP, s.SL, rr))
+		}
 	}
 
 	// Include the most relevant key indicators in the prompt.
@@ -130,8 +179,11 @@ func buildPrompt(g SignalGroup) string {
 		}
 	}
 
-	sb.WriteString("\n위 상황을 ICT 및 기술적분석 관점에서 해석하고, " +
-		"진입 근거와 주의사항을 한국어로 200자 내외로 간결하게 설명해줘.")
+	sb.WriteString("\n다음 4가지 항목으로 한국어 분석을 작성해줘:\n" +
+		"1. 시장구조: 현재 추세와 구조적 특징\n" +
+		"2. 진입근거: ICT/Wyckoff 관점의 핵심 진입 이유\n" +
+		"3. 위험요인: 시나리오가 무효화되는 조건\n" +
+		"4. 결론: LONG/SHORT/관망 중 하나와 간략한 이유")
 	return sb.String()
 }
 

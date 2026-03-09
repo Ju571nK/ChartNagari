@@ -29,6 +29,7 @@ interface SignalBar {
   rule: string
   score: number
   message: string
+  ai_interpretation: string
 }
 
 interface SymbolItem {
@@ -399,6 +400,7 @@ function ChartTab() {
   const [tf, setTf] = useState<TF>('1H')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [signals, setSignals] = useState<SignalBar[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -497,6 +499,7 @@ function ChartTab() {
         return apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`)
       })
       .then((sigs) => {
+        setSignals(sigs)
         if (!seriesRef.current) return
         const markers = sigs
           .filter((s) => s.direction !== 'NEUTRAL')
@@ -543,6 +546,27 @@ function ChartTab() {
       {loading && <p className="loading">차트 로딩 중...</p>}
       {error && <p className="error-msg">데이터 없음 — {error}</p>}
       <div ref={containerRef} className="chart-area" />
+      {signals.some((s) => s.ai_interpretation) && (
+        <>
+          <p className="section-title" style={{ marginTop: 20 }}>AI 해석</p>
+          <div className="ai-panel">
+            {signals
+              .filter((s) => s.ai_interpretation)
+              .map((s, i) => (
+                <div key={i} className="ai-signal-item">
+                  <div className="ai-signal-header">
+                    <span className={s.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
+                      {s.direction}
+                    </span>
+                    <span className="ai-rule-badge">{abbreviateRule(s.rule)}</span>
+                    <span className="ai-time">{new Date(s.time * 1000).toLocaleString()}</span>
+                  </div>
+                  <p className="ai-text">{s.ai_interpretation}</p>
+                </div>
+              ))}
+          </div>
+        </>
+      )}
     </>
   )
 }

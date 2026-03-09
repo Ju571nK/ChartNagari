@@ -497,6 +497,52 @@ input:checked + .slider::before {
 .dir-long  { color: var(--mint);  font-weight: 600; }
 .dir-short { color: var(--muted); font-weight: 600; }
 
+/* ── AI interpretation panel ─────────────────────────────────────────────── */
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.ai-signal-item {
+  background: rgba(91, 146, 121, 0.04);
+  border: 1px solid rgba(91, 146, 121, 0.18);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.ai-signal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ai-rule-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  background: rgba(91, 146, 121, 0.15);
+  color: var(--green);
+  border-radius: 3px;
+}
+
+.ai-time {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.ai-text {
+  font-size: 0.8rem;
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 /* ── utility ─────────────────────────────────────────────────────────────── */
 .loading {
   color: var(--muted);

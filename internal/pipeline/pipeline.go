@@ -179,10 +179,29 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		p.paperTrader.CheckPositions(sym, allBars)
 	}
 
-	// Persist signals for chart dashboard markers.
+	if len(signals) == 0 {
+		p.log.Debug().Str("symbol", sym).Msg("신호 없음")
+		return
+	}
+
+	p.log.Info().
+		Str("symbol", sym).
+		Int("signals", len(signals)).
+		Float64("top_score", signals[0].Score).
+		Msg("신호 감지")
+
+	// AI enrichment: Claude interprets high-scoring signal groups.
+	group := interpreter.SignalGroup{
+		Symbol:     sym,
+		Signals:    signals,
+		Indicators: indicators,
+	}
+	enriched := p.interp.Enrich(ctx, []interpreter.SignalGroup{group})
+
+	// Persist signals for chart dashboard markers (after AI enrichment).
 	// Only save signals above MinScore and not within the cooldown window.
 	if p.sigSaver != nil {
-		for _, sig := range signals {
+		for _, sig := range enriched {
 			if sig.Score < p.cfg.SignalMinScore {
 				continue
 			}
@@ -202,25 +221,6 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 			}
 		}
 	}
-
-	if len(signals) == 0 {
-		p.log.Debug().Str("symbol", sym).Msg("신호 없음")
-		return
-	}
-
-	p.log.Info().
-		Str("symbol", sym).
-		Int("signals", len(signals)).
-		Float64("top_score", signals[0].Score).
-		Msg("신호 감지")
-
-	// AI enrichment: Claude interprets high-scoring signal groups.
-	group := interpreter.SignalGroup{
-		Symbol:     sym,
-		Signals:    signals,
-		Indicators: indicators,
-	}
-	enriched := p.interp.Enrich(ctx, []interpreter.SignalGroup{group})
 
 	// Notify: filters by score threshold and cooldown.
 	p.notif.Notify(ctx, enriched)

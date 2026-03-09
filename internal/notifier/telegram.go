@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -57,7 +58,8 @@ func (s *TelegramSender) SendText(ctx context.Context, text string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("telegram: 비정상 응답 HTTP %d", resp.StatusCode)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("telegram: HTTP %d — %s", resp.StatusCode, string(detail))
 	}
 	return nil
 }
@@ -94,7 +96,8 @@ func (s *TelegramSender) Send(ctx context.Context, sig models.Signal) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("telegram: 비정상 응답 HTTP %d", resp.StatusCode)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("telegram: HTTP %d — %s", resp.StatusCode, string(detail))
 	}
 	return nil
 }

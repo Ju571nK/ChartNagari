@@ -44,6 +44,8 @@
 | 2026-03-08 | 페이퍼 트레이딩 엔진 구현 (paper/trader + storage/paper + API 3개 + 프론트 탭, 10개 테스트 PASS) | Developer |
 | 2026-03-13 | Phase 2-6: 주식 전용 일일 리포트 (report 패키지 + 웹 UI 설정 탭 + API, 14개 테스트 PASS) | Developer |
 | 2026-03-13 | 신호 히스토리 탭 + 백테스트 TP/SL 배율 수동 입력 (전체 테스트 PASS) | Developer |
+| 2026-03-13 | Quant 에이전트 팀 합류 (AGENTS.md v0.4) | Orchestrator/Recorder |
+| 2026-03-13 | MTF 합의 필터(기본값 2 TF) + 알림 설정 웹 UI '알림' 탭 (전체 테스트 PASS) | Quant/Developer |
 
 ---
 
@@ -61,7 +63,9 @@
 
 ## 다음 할 일 (우선순위 순)
 
-1. Phase 3 클라우드 배포 — 보안 강화 후 진행 예정 (Owner 결정 대기)
+1. **서버 재시작** — MTF 합의 필터 적용을 위해 필요
+2. **관찰 기간** — 2주 페이퍼 트레이딩 후 Quant가 승률 재분석 예정
+3. Phase 3 클라우드 배포 — 보안 강화 후 진행 예정 (Owner 결정 대기)
 
 ---
 

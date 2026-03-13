@@ -102,13 +102,14 @@ type ReportScheduler interface {
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
 	configDir      string
-	static         http.Handler      // nil when webDist is absent or not built yet
-	chartStore     ChartStore        // optional; set via WithChartStore
-	backtestRunner BacktestRunner    // optional; set via WithBacktestRunner
-	paperStore     PaperStore        // optional; set via WithPaperStore
-	reportSched    ReportScheduler   // optional; set via WithReportScheduler
-	startTime      time.Time         // server start timestamp for uptime
-	dataSources    []string          // active data sources (e.g. ["Binance","Tiingo"])
+	static         http.Handler                   // nil when webDist is absent or not built yet
+	chartStore     ChartStore                     // optional; set via WithChartStore
+	backtestRunner BacktestRunner                 // optional; set via WithBacktestRunner
+	paperStore     PaperStore                     // optional; set via WithPaperStore
+	reportSched    ReportScheduler                // optional; set via WithReportScheduler
+	alertHolder    *appconfig.AlertConfigHolder   // optional; set via WithAlertConfigHolder
+	startTime      time.Time                      // server start timestamp for uptime
+	dataSources    []string                       // active data sources (e.g. ["Binance","Tiingo"])
 	mu             sync.RWMutex
 }
 
@@ -150,6 +151,11 @@ func (s *Server) WithReportScheduler(rs ReportScheduler) {
 	s.reportSched = rs
 }
 
+// WithAlertConfigHolder wires an optional live-updated alert configuration holder.
+func (s *Server) WithAlertConfigHolder(h *appconfig.AlertConfigHolder) {
+	s.alertHolder = h
+}
+
 // Handler returns the fully configured http.Handler for the server.
 // All /api/* routes are registered; other paths fall through to the static
 // file server when available.
@@ -185,6 +191,10 @@ func (s *Server) Handler() http.Handler {
 	// Daily report config
 	mux.HandleFunc("GET /api/report/config", s.getReportConfig)
 	mux.HandleFunc("PUT /api/report/config", s.updateReportConfig)
+
+	// Alert config
+	mux.HandleFunc("GET /api/alert/config", s.getAlertConfig)
+	mux.HandleFunc("PUT /api/alert/config", s.updateAlertConfig)
 
 	// Static frontend (SPA)
 	if s.static != nil {
@@ -719,6 +729,61 @@ func (s *Server) writeReportConfigLocked(cfg appconfig.DailyReportConfig) error 
 		return fmt.Errorf("report 직렬화 실패: %w", err)
 	}
 	return os.WriteFile(s.reportCfgFile(), data, 0o644)
+}
+
+// alertCfgFile returns the path to alert.yaml.
+func (s *Server) alertCfgFile() string { return s.configDir + "/alert.yaml" }
+
+// readAlertConfigLocked reads alert.yaml. Caller must hold s.mu (read or write).
+func (s *Server) readAlertConfigLocked() (appconfig.AlertConfig, error) {
+	var cfg appconfig.AlertConfig
+	f, err := os.Open(s.alertCfgFile())
+	if err != nil {
+		return cfg, err
+	}
+	defer f.Close()
+	return cfg, yaml.NewDecoder(f).Decode(&cfg)
+}
+
+// writeAlertConfigLocked writes alert.yaml. Caller must hold s.mu (write).
+func (s *Server) writeAlertConfigLocked(cfg appconfig.AlertConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.alertCfgFile(), data, 0o644)
+}
+
+// getAlertConfig handles GET /api/alert/config.
+func (s *Server) getAlertConfig(w http.ResponseWriter, _ *http.Request) {
+	if s.alertHolder == nil {
+		jsonOK(w, appconfig.AlertConfig{ScoreThreshold: 12.0, CooldownHours: 4, MTFConsensusMin: 2})
+		return
+	}
+	jsonOK(w, s.alertHolder.Get())
+}
+
+// updateAlertConfig handles PUT /api/alert/config.
+func (s *Server) updateAlertConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg appconfig.AlertConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if cfg.ScoreThreshold <= 0 || cfg.CooldownHours <= 0 || cfg.MTFConsensusMin < 1 {
+		http.Error(w, "invalid values", http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.writeAlertConfigLocked(cfg); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if s.alertHolder != nil {
+		s.alertHolder.Set(cfg)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── YAML file helpers ─────────────────────────────────────────────────────────

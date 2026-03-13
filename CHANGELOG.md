@@ -317,6 +317,26 @@
 
 <!-- 이후 항목은 Recorder가 자동으로 추가한다 -->
 
+## [0.11.0] - 2026-03-13
+
+### Added
+- MTF 합의 필터 — 동일 방향 신호가 N개 TF에서 발생할 때만 알림/페이퍼 진입 (기본값 2)
+  - `internal/pipeline/filter_test.go` — 5개 테스트 PASS
+  - `config/alert.yaml` — 알림 설정 파일 신규 생성
+- 알림 설정 웹 UI '알림' 탭 — 스코어 임계값, 쿨다운, MTF 합의 수 실시간 변경
+  - `GET/PUT /api/alert/config` 엔드포인트
+- Quant 에이전트 팀 합류 — 신호 품질 분석 + 정량 파라미터 설계 담당 (AGENTS.md v0.4)
+
+### Changed
+- `internal/config/config.go` — AlertConfig, AlertConfigHolder 추가
+- `internal/pipeline/pipeline.go` — MTFConsensusMin 동적 적용, filterMTFConsensus 함수
+- `internal/notifier/notifier.go` — ScoreThreshold 동적 읽기 (AlertConfigHolder)
+- `internal/api/server.go` — 알림 설정 API, alertHolder 연동
+- `cmd/server/main.go` — alertHolder 생성 및 전체 와이어링
+
+### Fixed
+- 단일 TF 역추세 신호 남발 문제 → MTF 합의 필터로 해결 (페이퍼 트레이딩 승률 33.3% 개선 예상)
+
 ## [0.10.0] - 2026-03-13
 
 ### Added

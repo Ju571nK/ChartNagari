@@ -12,7 +12,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert'
 
 interface OHLCVBar {
   time: number
@@ -1092,6 +1092,107 @@ function ReportTab() {
   )
 }
 
+// ── Alert Tab ─────────────────────────────────────────────────────────────────
+
+interface AlertConfig {
+  score_threshold: number
+  cooldown_hours: number
+  mtf_consensus_min: number
+}
+
+function AlertTab() {
+  const [config, setConfig] = useState<AlertConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    apiFetch<AlertConfig>('/alert/config')
+      .then(setConfig)
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  const save = useCallback(async () => {
+    if (!config) return
+    setSaving(true)
+    setError('')
+    try {
+      await putJSON('/alert/config', config)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '저장 실패')
+    } finally {
+      setSaving(false)
+    }
+  }, [config])
+
+  if (!config && !error) return <p className="loading">로딩 중...</p>
+  if (error && !config) return <p className="error-msg">오류: {error}</p>
+  if (!config) return null
+
+  return (
+    <>
+      <p className="section-title">알림 설정</p>
+
+      <div className="report-field">
+        <span className="field-label">신호 스코어 임계값</span>
+        <input
+          className="report-input"
+          type="number"
+          step={0.5}
+          min={5}
+          value={config.score_threshold}
+          onChange={(e) => setConfig({ ...config, score_threshold: parseFloat(e.target.value) || 0 })}
+        />
+      </div>
+      <p className="item-meta" style={{ marginBottom: 12 }}>
+        이 점수 이상 신호만 Telegram으로 발송됩니다 (현재 기본값: 12.0)
+      </p>
+
+      <div className="report-field">
+        <span className="field-label">중복 방지 쿨다운 (시간)</span>
+        <input
+          className="report-input"
+          type="number"
+          step={1}
+          min={1}
+          value={config.cooldown_hours}
+          onChange={(e) => setConfig({ ...config, cooldown_hours: parseInt(e.target.value) || 1 })}
+        />
+      </div>
+      <p className="item-meta" style={{ marginBottom: 12 }}>
+        같은 종목+룰 알림 최소 간격
+      </p>
+
+      <div className="report-field">
+        <span className="field-label">MTF 합의 필터</span>
+        <select
+          className="report-input"
+          value={config.mtf_consensus_min}
+          onChange={(e) => setConfig({ ...config, mtf_consensus_min: parseInt(e.target.value) })}
+        >
+          <option value={1}>비활성 (단일 TF 신호도 알림)</option>
+          <option value={2}>2개 이상 TF 합의 (권장)</option>
+          <option value={3}>3개 이상 TF 합의</option>
+          <option value={4}>4개 TF 전체 합의</option>
+        </select>
+      </div>
+      <p className="item-meta" style={{ marginBottom: 12 }}>
+        여러 타임프레임에서 동시에 같은 방향 신호가 나올 때만 알림 발송 → 역추세 포지션 감소
+      </p>
+
+      <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="run-btn" onClick={save} disabled={saving}>
+          {saving ? '저장 중...' : '저장'}
+        </button>
+        {saved && <span className="save-success">✓ 저장됨</span>}
+        {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
+      </div>
+    </>
+  )
+}
+
 // ── History Tab ───────────────────────────────────────────────────────────────
 
 function HistoryTab() {
@@ -1219,6 +1320,9 @@ export function App() {
           <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>
             히스토리
           </button>
+          <button className={`tab-btn${tab === 'alert' ? ' active' : ''}`} onClick={() => setTab('alert')}>
+            알림
+          </button>
         </nav>
       </header>
       <main>
@@ -1230,6 +1334,7 @@ export function App() {
         {tab === 'paper' && <PaperTab />}
         {tab === 'report' && <ReportTab />}
         {tab === 'history' && <HistoryTab />}
+        {tab === 'alert' && <AlertTab />}
       </main>
     </div>
   )

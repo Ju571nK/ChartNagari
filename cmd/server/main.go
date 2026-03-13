@@ -125,6 +125,9 @@ func main() {
 		eng.Register(r)
 	}
 
+	// ── AlertConfig 홀더 ──────────────────────────────────────────────
+	alertHolder := appconfig.NewAlertConfigHolder(cfg.Alert)
+
 	// ── 알림 시스템 ───────────────────────────────────────────────────
 	notifCfg := notifier.Config{
 		ScoreThreshold: cfg.Rules.Scoring.Thresholds["strong"],
@@ -137,6 +140,7 @@ func main() {
 		notifCfg.CooldownDur = 4 * time.Hour
 	}
 	notif := notifier.New(notifCfg, log.Logger)
+	notif.SetAlertConfigHolder(alertHolder)
 
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
 		notif.Register(notifier.NewTelegramSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID))
@@ -173,6 +177,7 @@ func main() {
 		)
 		pipe.SetSignalSaver(db)
 		pipe.SetPaperTrader(paperTrader)
+		pipe.SetAlertConfigHolder(alertHolder)
 		go pipe.Run(ctx)
 		log.Info().
 			Strs("symbols", allSymbols).
@@ -199,6 +204,7 @@ func main() {
 	apiSrv.WithBacktestRunner(btRunner)
 	apiSrv.WithPaperStore(db)
 	apiSrv.WithReportScheduler(sched)
+	apiSrv.WithAlertConfigHolder(alertHolder)
 
 	// 활성 데이터 소스 목록 전달 (상태탭 표시용)
 	activeSources := []string{"Binance (BTC/ETH)"}

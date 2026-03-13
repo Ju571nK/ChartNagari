@@ -68,6 +68,11 @@ func (n *Notifier) Register(s Sender) {
 	n.senders = append(n.senders, s)
 }
 
+// SetAlertConfigHolder wires an optional live-updated alert configuration holder.
+func (n *Notifier) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
+	n.alertHolder = h
+}
+
 // Announce sends a raw HTML text message to all senders that implement TextSender.
 // Bypasses score threshold and cooldown — intended for system-level notices only.
 func (n *Notifier) Announce(ctx context.Context, text string) {
@@ -86,13 +91,18 @@ func (n *Notifier) Announce(ctx context.Context, text string) {
 //  3. Dispatches accepted signals to every registered sender in order.
 //     Errors from individual senders are logged but do not abort remaining senders.
 func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
+	threshold := n.cfg.ScoreThreshold
+	if n.alertHolder != nil {
+		threshold = n.alertHolder.Get().ScoreThreshold
+	}
+
 	for _, sig := range signals {
-		if sig.Score < n.cfg.ScoreThreshold {
+		if sig.Score < threshold {
 			n.log.Debug().
 				Str("symbol", sig.Symbol).
 				Str("rule", sig.Rule).
 				Float64("score", sig.Score).
-				Float64("threshold", n.cfg.ScoreThreshold).
+				Float64("threshold", threshold).
 				Msg("신호 스코어 미달 — 스킵")
 			continue
 		}

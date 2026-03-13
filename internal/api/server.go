@@ -3,13 +3,15 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
-
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
@@ -304,7 +306,7 @@ func (s *Server) updateSymbol(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.writeWatchlistLocked(wl); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -364,7 +366,7 @@ func (s *Server) updateRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.writeRulesLocked(rc); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -648,7 +650,7 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.writeWatchlistLocked(wl); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -693,7 +695,7 @@ func (s *Server) removeSymbol(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.writeWatchlistLocked(wl); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -723,7 +725,7 @@ func (s *Server) updateReportConfig(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	if err := s.writeReportConfigLocked(cfg); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -816,7 +818,7 @@ func (s *Server) updateAlertConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.writeAlertConfigLocked(cfg); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 	if s.alertHolder != nil {
@@ -882,6 +884,23 @@ func (s *Server) writeRulesLocked(rc appconfig.RulesConfig) error {
 }
 
 // ── utilities ─────────────────────────────────────────────────────────────────
+
+// configWriteErrorMessage returns a user-facing message for config file write failures
+// (e.g. read-only volume in Docker). Call when writeWatchlistLocked, writeRulesLocked,
+// writeReportConfigLocked, or writeAlertConfigLocked returns an error.
+func configWriteErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	if os.IsPermission(err) || errors.Is(err, fs.ErrPermission) {
+		return "config 디렉터리에 쓸 수 없습니다 (권한 없음). Docker에서 config 볼륨이 읽기 전용(:ro)이 아닌지 확인하세요."
+	}
+	var errno *syscall.Errno
+	if errors.As(err, &errno) && *errno == syscall.EROFS {
+		return "config 디렉터리가 읽기 전용입니다. Docker config 볼륨에서 :ro 를 제거하세요."
+	}
+	return err.Error()
+}
 
 func jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")

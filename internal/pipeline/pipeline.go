@@ -248,6 +248,28 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	p.notif.Notify(ctx, enriched)
 }
 
+// filterMTFConsensus returns only signals whose direction has signals
+// from at least minTFs distinct timeframes. NEUTRAL signals are always kept.
+func filterMTFConsensus(signals []models.Signal, minTFs int) []models.Signal {
+	dirTFs := make(map[string]map[string]struct{})
+	for _, sig := range signals {
+		if sig.Direction == "NEUTRAL" {
+			continue
+		}
+		if dirTFs[sig.Direction] == nil {
+			dirTFs[sig.Direction] = make(map[string]struct{})
+		}
+		dirTFs[sig.Direction][sig.Timeframe] = struct{}{}
+	}
+	out := signals[:0]
+	for _, sig := range signals {
+		if sig.Direction == "NEUTRAL" || len(dirTFs[sig.Direction]) >= minTFs {
+			out = append(out, sig)
+		}
+	}
+	return out
+}
+
 // enrichSignalLevels fills sig.EntryPrice, sig.TP, and sig.SL using ATR(14).
 //
 //	TP = entry ± ATR × 2.0

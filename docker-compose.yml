@@ -12,6 +12,8 @@ services:
       - ./data:/app/data
       # 설정 파일 핫 리로드 (개발용)
       - ./config:/app/config:ro
+      # 프론트엔드 (restart.sh에서 npm run build 후 마운트)
+      - ./web/dist:/app/web/dist:ro
     env_file:
       - .env
     environment:

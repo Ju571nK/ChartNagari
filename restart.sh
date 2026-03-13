@@ -16,4 +16,10 @@ cd "$ROOT"
 docker compose up -d --build
 
 echo "▶ 로그 출력 (Ctrl+C로 종료)..."
+echo ""
+echo "실행 확인:"
+echo "  - 브라우저:  http://localhost:8080"
+echo "  - API 상태: curl http://localhost:8080/api/status"
+echo "  - 헬스체크: curl http://localhost:8080/health"
+echo ""
 docker compose logs -f

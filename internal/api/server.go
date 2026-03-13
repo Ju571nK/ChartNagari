@@ -163,6 +163,12 @@ func (s *Server) WithAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	// Liveness/health for Docker and load balancers
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	// Status
 	mux.HandleFunc("GET /api/status", s.getStatus)
 

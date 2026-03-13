@@ -69,6 +69,10 @@ type AlertConfig struct {
 	ScoreThreshold  float64 `yaml:"score_threshold"`
 	CooldownHours   int     `yaml:"cooldown_hours"`
 	MTFConsensusMin int     `yaml:"mtf_consensus_min"`
+	CryptoTPMult    float64 `yaml:"crypto_tp_mult"`
+	CryptoSLMult    float64 `yaml:"crypto_sl_mult"`
+	StockTPMult     float64 `yaml:"stock_tp_mult"`
+	StockSLMult     float64 `yaml:"stock_sl_mult"`
 }
 
 // AlertConfigHolder is a mutex-protected holder for live-updated AlertConfig.
@@ -165,6 +169,10 @@ func Load(envFile, configDir string) (*Config, error) {
 			ScoreThreshold:  12.0,
 			CooldownHours:   parseInt(getEnv("ALERT_COOLDOWN_HOURS", "4")),
 			MTFConsensusMin: 2,
+			CryptoTPMult:    1.5,
+			CryptoSLMult:    0.75,
+			StockTPMult:     2.0,
+			StockSLMult:     1.0,
 		},
 		Anthropic: AnthropicConfig{
 			APIKey:   getEnv("ANTHROPIC_API_KEY", ""),

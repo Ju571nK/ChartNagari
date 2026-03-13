@@ -81,6 +81,7 @@ type ChartStore interface {
 // *backtest.Runner satisfies this interface.
 type BacktestRunner interface {
 	RunBacktest(symbol, timeframe, ruleFilter string, tpMult, slMult float64) (*backtest.BacktestResult, error)
+	RunPerRule(symbol, timeframe string, tpMult, slMult float64) ([]backtest.RuleStats, error)
 }
 
 // PaperStore provides paper trading data for the API.
@@ -182,6 +183,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
+	mux.HandleFunc("GET /api/backtest/rules", s.runPerRuleBacktest)
 
 	// Paper trading
 	mux.HandleFunc("GET /api/paper/positions", s.getPaperPositions)
@@ -511,6 +513,37 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, result)
+}
+
+// runPerRuleBacktest handles GET /api/backtest/rules.
+// Query params: symbol (required), timeframe (required), tp_mult (optional), sl_mult (optional).
+func (s *Server) runPerRuleBacktest(w http.ResponseWriter, r *http.Request) {
+	if s.backtestRunner == nil {
+		http.Error(w, "backtest runner not configured", http.StatusServiceUnavailable)
+		return
+	}
+	symbol := r.URL.Query().Get("symbol")
+	timeframe := r.URL.Query().Get("timeframe")
+	if symbol == "" || timeframe == "" {
+		http.Error(w, "symbol and timeframe are required", http.StatusBadRequest)
+		return
+	}
+	var tpMult, slMult float64
+	if v := r.URL.Query().Get("tp_mult"); v != "" {
+		tpMult, _ = strconv.ParseFloat(v, 64)
+	}
+	if v := r.URL.Query().Get("sl_mult"); v != "" {
+		slMult, _ = strconv.ParseFloat(v, 64)
+	}
+	stats, err := s.backtestRunner.RunPerRule(symbol, timeframe, tpMult, slMult)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if stats == nil {
+		stats = []backtest.RuleStats{}
+	}
+	jsonOK(w, stats)
 }
 
 func (s *Server) getPaperPositions(w http.ResponseWriter, _ *http.Request) {

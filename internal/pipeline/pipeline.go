@@ -75,6 +75,7 @@ type Pipeline struct {
 	symbols     []string
 	timeframes  []string
 	log         zerolog.Logger
+	cryptoSyms  map[string]bool
 
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
@@ -118,6 +119,19 @@ func (p *Pipeline) SetPaperTrader(pt PaperTrader) {
 // SetAlertConfigHolder wires an optional live-updated alert configuration holder.
 func (p *Pipeline) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 	p.alertHolder = h
+}
+
+// SetCryptoSymbols records which symbols are crypto (vs stock) for TP/SL multiplier selection.
+func (p *Pipeline) SetCryptoSymbols(syms []string) {
+	p.cryptoSyms = make(map[string]bool, len(syms))
+	for _, s := range syms {
+		p.cryptoSyms[s] = true
+	}
+}
+
+// isCrypto returns true if sym is a known crypto symbol.
+func (p *Pipeline) isCrypto(sym string) bool {
+	return p.cryptoSyms != nil && p.cryptoSyms[sym]
 }
 
 // Run starts the periodic analysis loop. It blocks until ctx is cancelled.
@@ -178,8 +192,24 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	signals := p.eng.Run(analysisCtx)
 
 	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
+	// TP/SL 배율 결정 (코인/주식 분리)
+	tpMult, slMult := 2.0, 1.0
+	if p.alertHolder != nil {
+		ac := p.alertHolder.Get()
+		if p.isCrypto(sym) {
+			tpMult, slMult = ac.CryptoTPMult, ac.CryptoSLMult
+		} else {
+			tpMult, slMult = ac.StockTPMult, ac.StockSLMult
+		}
+	}
+	if tpMult == 0 {
+		tpMult = 2.0
+	}
+	if slMult == 0 {
+		slMult = 1.0
+	}
 	for i := range signals {
-		enrichSignalLevels(&signals[i], allBars, indicators)
+		enrichSignalLevels(&signals[i], allBars, indicators, tpMult, slMult)
 	}
 
 	// MTF 합의 필터: 동적 설정 우선, 없으면 정적 Config 사용
@@ -272,12 +302,12 @@ func filterMTFConsensus(signals []models.Signal, minTFs int) []models.Signal {
 
 // enrichSignalLevels fills sig.EntryPrice, sig.TP, and sig.SL using ATR(14).
 //
-//	TP = entry ± ATR × 2.0
-//	SL = entry ∓ ATR × 1.0
+//	TP = entry ± ATR × tpMult
+//	SL = entry ∓ ATR × slMult
 //
 // allBars is expected in DESC order (index 0 = most recent bar).
 // A signal with Direction == "NEUTRAL" or an unavailable ATR is left unchanged.
-func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, indicators map[string]float64) {
+func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, indicators map[string]float64, tpMult, slMult float64) {
 	if sig.Direction == "NEUTRAL" {
 		return
 	}
@@ -292,10 +322,10 @@ func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, i
 	entry := bars[0].Close
 	sig.EntryPrice = entry
 	if sig.Direction == "LONG" {
-		sig.TP = entry + atr*2.0
-		sig.SL = entry - atr*1.0
+		sig.TP = entry + atr*tpMult
+		sig.SL = entry - atr*slMult
 	} else {
-		sig.TP = entry - atr*2.0
-		sig.SL = entry + atr*1.0
+		sig.TP = entry - atr*tpMult
+		sig.SL = entry + atr*slMult
 	}
 }

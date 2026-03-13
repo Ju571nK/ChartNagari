@@ -76,6 +76,15 @@ func NewWithConfig(rules []rule.AnalysisRule, engCfg engine.RuleConfig, cfg Conf
 	return e
 }
 
+// RuleNames returns the names of all rules loaded in this engine.
+func (e *Engine) RuleNames() []string {
+	names := make([]string, len(e.rules))
+	for i, r := range e.rules {
+		names[i] = r.Name()
+	}
+	return names
+}
+
 // Clone returns a new Engine with the same rules and rule config but a different simulation Config.
 func (e *Engine) Clone(cfg Config) *Engine {
 	clone := &Engine{cfg: cfg, engCfg: e.engCfg}

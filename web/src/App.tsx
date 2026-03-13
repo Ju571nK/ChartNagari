@@ -608,6 +608,16 @@ interface BacktestResult {
   outcomes: TradeOutcome[]
 }
 
+interface RuleStats {
+  rule: string
+  trades: number
+  win_rate: number
+  avg_rr: number
+  profit_factor: number
+  max_drawdown: number
+  total_return_pct: number
+}
+
 function fmt2(n: number) { return n.toFixed(2) }
 function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
@@ -622,6 +632,8 @@ function BacktestTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<BacktestResult | null>(null)
+  const [ruleStats, setRuleStats] = useState<RuleStats[] | null>(null)
+  const [rulesLoading, setRulesLoading] = useState(false)
 
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
@@ -653,6 +665,22 @@ function BacktestTab() {
       setLoading(false)
     }
   }, [symbol, tf, ruleFilter, tpMult, slMult])
+
+  const runPerRule = useCallback(async () => {
+    if (!symbol) return
+    setRulesLoading(true)
+    setRuleStats(null)
+    try {
+      const stats = await apiFetch<RuleStats[]>(
+        `/backtest/rules?symbol=${encodeURIComponent(symbol)}&timeframe=${tf}&tp_mult=${tpMult}&sl_mult=${slMult}`
+      )
+      setRuleStats(stats)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '알 수 없는 오류')
+    } finally {
+      setRulesLoading(false)
+    }
+  }, [symbol, tf, tpMult, slMult])
 
   return (
     <>
@@ -722,6 +750,14 @@ function BacktestTab() {
 
         <button className="run-btn" onClick={run} disabled={loading || !symbol}>
           {loading ? '계산 중...' : '실행'}
+        </button>
+        <button
+          className="run-btn"
+          onClick={runPerRule}
+          disabled={rulesLoading || !symbol}
+          style={{ background: 'rgba(91,146,121,0.12)', color: 'var(--green)', border: '1px solid rgba(91,146,121,0.4)' }}
+        >
+          {rulesLoading ? '분석 중...' : '룰별 분석'}
         </button>
       </div>
 
@@ -820,6 +856,50 @@ function BacktestTab() {
 
           {result.trades === 0 && (
             <p className="loading">데이터 없음 — 수집된 OHLCV 바가 충분하지 않거나 신호가 발생하지 않았습니다.</p>
+          )}
+        </>
+      )}
+
+      {ruleStats !== null && (
+        <>
+          <p className="section-title" style={{ marginTop: 24 }}>
+            룰별 성과 분석 — {symbol} {tf} | TP×{tpMult} SL×{slMult}
+          </p>
+          {ruleStats.length === 0 ? (
+            <p className="loading">거래 데이터 없음 — OHLCV 수집 기간을 늘려주세요.</p>
+          ) : (
+            <>
+              <div className="backtest-table-wrap">
+                <table className="backtest-table">
+                  <thead>
+                    <tr>
+                      <th>룰</th><th>거래 수</th><th>승률</th><th>평균 RR</th><th>수익 팩터</th><th>누적 수익</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ruleStats.map((s) => (
+                      <tr key={s.rule}>
+                        <td style={{ color: 'var(--muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {s.rule}
+                        </td>
+                        <td>{s.trades}</td>
+                        <td style={{ color: s.win_rate >= 0.45 ? 'var(--mint)' : 'var(--muted)', fontWeight: 600 }}>
+                          {(s.win_rate * 100).toFixed(1)}%
+                        </td>
+                        <td>{s.avg_rr.toFixed(2)}</td>
+                        <td>{s.profit_factor.toFixed(2)}</td>
+                        <td className={s.total_return_pct >= 0 ? 'pnl-win' : 'pnl-loss'}>
+                          {s.total_return_pct >= 0 ? '+' : ''}{s.total_return_pct.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="item-meta" style={{ marginTop: 8 }}>
+                🟢 승률 ≥ 45% 달성 &nbsp;|&nbsp; 🔴 미달 — 해당 룰 OFF 또는 스코어 임계값 상향 고려
+              </p>
+            </>
           )}
         </>
       )}
@@ -1098,6 +1178,10 @@ interface AlertConfig {
   score_threshold: number
   cooldown_hours: number
   mtf_consensus_min: number
+  crypto_tp_mult: number
+  crypto_sl_mult: number
+  stock_tp_mult: number
+  stock_sl_mult: number
 }
 
 function AlertTab() {
@@ -1181,6 +1265,57 @@ function AlertTab() {
       <p className="item-meta" style={{ marginBottom: 12 }}>
         여러 타임프레임에서 동시에 같은 방향 신호가 나올 때만 알림 발송 → 역추세 포지션 감소
       </p>
+
+      <p className="section-title" style={{ marginTop: 20 }}>TP/SL 배율 설정</p>
+      <p className="item-meta">TP = 진입가 ± ATR × 배율. 낮을수록 빠른 청산, 높을수록 큰 목표가</p>
+
+      <div className="report-field">
+        <span className="field-label">코인 TP 배율</span>
+        <input
+          className="report-input"
+          type="number"
+          step="0.25"
+          min="0.25"
+          value={config.crypto_tp_mult}
+          onChange={(e) => setConfig({ ...config, crypto_tp_mult: parseFloat(e.target.value) || 0 })}
+        />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">코인 SL 배율</span>
+        <input
+          className="report-input"
+          type="number"
+          step="0.25"
+          min="0.25"
+          value={config.crypto_sl_mult}
+          onChange={(e) => setConfig({ ...config, crypto_sl_mult: parseFloat(e.target.value) || 0 })}
+        />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">주식 TP 배율</span>
+        <input
+          className="report-input"
+          type="number"
+          step="0.25"
+          min="0.25"
+          value={config.stock_tp_mult}
+          onChange={(e) => setConfig({ ...config, stock_tp_mult: parseFloat(e.target.value) || 0 })}
+        />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">주식 SL 배율</span>
+        <input
+          className="report-input"
+          type="number"
+          step="0.25"
+          min="0.25"
+          value={config.stock_sl_mult}
+          onChange={(e) => setConfig({ ...config, stock_sl_mult: parseFloat(e.target.value) || 0 })}
+        />
+      </div>
 
       <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="run-btn" onClick={save} disabled={saving}>

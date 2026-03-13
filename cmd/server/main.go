@@ -178,6 +178,7 @@ func main() {
 		pipe.SetSignalSaver(db)
 		pipe.SetPaperTrader(paperTrader)
 		pipe.SetAlertConfigHolder(alertHolder)
+		pipe.SetCryptoSymbols(cryptoSymbols)
 		go pipe.Run(ctx)
 		log.Info().
 			Strs("symbols", allSymbols).

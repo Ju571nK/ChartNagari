@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -46,10 +47,11 @@ func DefaultConfig() Config {
 // Notifier filters scored signals and dispatches them to all registered senders.
 // It is safe for concurrent use.
 type Notifier struct {
-	cfg      Config
-	cooldown *Cooldown
-	senders  []Sender
-	log      zerolog.Logger
+	cfg         Config
+	cooldown    *Cooldown
+	senders     []Sender
+	log         zerolog.Logger
+	alertHolder *appconfig.AlertConfigHolder
 }
 
 // New creates a Notifier from the given config and logger.

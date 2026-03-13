@@ -20,13 +20,25 @@ func NewRunner(store OHLCVLoader, eng *Engine) *Runner {
 	return &Runner{store: store, engine: eng}
 }
 
-// RunBacktest loads historical bars from storage and runs the backtest engine.
-// ruleFilter: empty string = all rules; otherwise only that rule's trades.
-func (r *Runner) RunBacktest(symbol, timeframe, ruleFilter string) (*BacktestResult, error) {
+// RunBacktest loads historical bars and runs the backtest engine.
+// tpMult > 0 overrides the engine's default TPATRMultiplier.
+// slMult > 0 overrides the engine's default SLATRMultiplier.
+func (r *Runner) RunBacktest(symbol, timeframe, ruleFilter string, tpMult, slMult float64) (*BacktestResult, error) {
 	bars, err := r.store.GetOHLCVAll(symbol, timeframe)
 	if err != nil {
 		return nil, err
 	}
-	res := r.engine.Run(symbol, timeframe, ruleFilter, bars)
+	eng := r.engine
+	if tpMult > 0 || slMult > 0 {
+		cfg := r.engine.cfg
+		if tpMult > 0 {
+			cfg.TPATRMultiplier = tpMult
+		}
+		if slMult > 0 {
+			cfg.SLATRMultiplier = slMult
+		}
+		eng = r.engine.Clone(cfg)
+	}
+	res := eng.Run(symbol, timeframe, ruleFilter, bars)
 	return &res, nil
 }

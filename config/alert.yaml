@@ -1,0 +1,3 @@
+score_threshold: 12.0
+cooldown_hours: 4
+mtf_consensus_min: 2

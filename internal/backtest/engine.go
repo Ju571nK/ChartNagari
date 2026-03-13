@@ -67,6 +67,23 @@ func New(rules []rule.AnalysisRule, engCfg engine.RuleConfig, cfg Config) *Engin
 	return &Engine{rules: rules, engCfg: engCfg, cfg: cfg}
 }
 
+// NewWithConfig creates an Engine with explicit configuration.
+// Used by Runner to apply per-request TP/SL overrides.
+func NewWithConfig(rules []rule.AnalysisRule, engCfg engine.RuleConfig, cfg Config) *Engine {
+	e := &Engine{cfg: cfg, engCfg: engCfg}
+	e.rules = make([]rule.AnalysisRule, len(rules))
+	copy(e.rules, rules)
+	return e
+}
+
+// Clone returns a new Engine with the same rules and rule config but a different simulation Config.
+func (e *Engine) Clone(cfg Config) *Engine {
+	clone := &Engine{cfg: cfg, engCfg: e.engCfg}
+	clone.rules = make([]rule.AnalysisRule, len(e.rules))
+	copy(clone.rules, e.rules)
+	return clone
+}
+
 // Run replays all rules over bars (must be in ascending time order).
 //
 // For each bar from WarmupBars onward:

@@ -60,6 +60,7 @@ type OHLCVBar struct {
 
 // SignalBar is the chart signal marker response.
 type SignalBar struct {
+	Symbol           string  `json:"symbol"`
 	Time             int64   `json:"time"`
 	Direction        string  `json:"direction"`
 	Rule             string  `json:"rule"`
@@ -73,12 +74,13 @@ type SignalBar struct {
 type ChartStore interface {
 	GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, error)
 	GetSignals(symbol string, limit int) ([]models.Signal, error)
+	GetSignalsFiltered(symbol, direction string, limit int) ([]models.Signal, error)
 }
 
 // BacktestRunner executes a backtest and returns the result.
 // *backtest.Runner satisfies this interface.
 type BacktestRunner interface {
-	RunBacktest(symbol, timeframe, ruleFilter string) (*backtest.BacktestResult, error)
+	RunBacktest(symbol, timeframe, ruleFilter string, tpMult, slMult float64) (*backtest.BacktestResult, error)
 }
 
 // PaperStore provides paper trading data for the API.
@@ -88,6 +90,11 @@ type PaperStore interface {
 	GetClosedPositions(limit int) ([]paper.PaperPosition, error)
 }
 
+// ReportScheduler is implemented by *report.Scheduler.
+type ReportScheduler interface {
+	Reset(cfg appconfig.DailyReportConfig)
+}
+
 // ── Server ────────────────────────────────────────────────────────────────────
 
 // Server is the HTTP API server for the settings UI.
@@ -95,12 +102,13 @@ type PaperStore interface {
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
 	configDir      string
-	static         http.Handler   // nil when webDist is absent or not built yet
-	chartStore     ChartStore     // optional; set via WithChartStore
-	backtestRunner BacktestRunner // optional; set via WithBacktestRunner
-	paperStore     PaperStore     // optional; set via WithPaperStore
-	startTime      time.Time      // server start timestamp for uptime
-	dataSources    []string       // active data sources (e.g. ["Binance","Tiingo"])
+	static         http.Handler      // nil when webDist is absent or not built yet
+	chartStore     ChartStore        // optional; set via WithChartStore
+	backtestRunner BacktestRunner    // optional; set via WithBacktestRunner
+	paperStore     PaperStore        // optional; set via WithPaperStore
+	reportSched    ReportScheduler   // optional; set via WithReportScheduler
+	startTime      time.Time         // server start timestamp for uptime
+	dataSources    []string          // active data sources (e.g. ["Binance","Tiingo"])
 	mu             sync.RWMutex
 }
 
@@ -137,6 +145,11 @@ func (s *Server) WithPaperStore(ps PaperStore) {
 	s.paperStore = ps
 }
 
+// WithReportScheduler wires the daily report scheduler to the server.
+func (s *Server) WithReportScheduler(rs ReportScheduler) {
+	s.reportSched = rs
+}
+
 // Handler returns the fully configured http.Handler for the server.
 // All /api/* routes are registered; other paths fall through to the static
 // file server when available.
@@ -159,6 +172,7 @@ func (s *Server) Handler() http.Handler {
 	// Chart dashboard data
 	mux.HandleFunc("GET /api/ohlcv/{symbol}/{timeframe}", s.getChartOHLCV)
 	mux.HandleFunc("GET /api/signals", s.getChartSignals)
+	mux.HandleFunc("GET /api/history", s.getHistory)
 
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
@@ -167,6 +181,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/paper/positions", s.getPaperPositions)
 	mux.HandleFunc("GET /api/paper/history", s.getPaperHistory)
 	mux.HandleFunc("GET /api/paper/summary", s.getPaperSummary)
+
+	// Daily report config
+	mux.HandleFunc("GET /api/report/config", s.getReportConfig)
+	mux.HandleFunc("PUT /api/report/config", s.updateReportConfig)
 
 	// Static frontend (SPA)
 	if s.static != nil {
@@ -399,6 +417,48 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 	result := make([]SignalBar, len(sigs))
 	for i, sig := range sigs {
 		result[i] = SignalBar{
+			Symbol:           sig.Symbol,
+			Time:             sig.CreatedAt.Unix(),
+			Direction:        sig.Direction,
+			Rule:             sig.Rule,
+			Score:            sig.Score,
+			Message:          sig.Message,
+			AIInterpretation: sig.AIInterpretation,
+		}
+	}
+	jsonOK(w, result)
+}
+
+// getHistory handles GET /api/history.
+// Query params: symbol (default ALL), direction (default ALL), limit (default 100, max 200).
+func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {
+	if s.chartStore == nil {
+		jsonOK(w, []SignalBar{})
+		return
+	}
+	symbol := r.URL.Query().Get("symbol")
+	if symbol == "" {
+		symbol = "ALL"
+	}
+	direction := r.URL.Query().Get("direction")
+	if direction == "" {
+		direction = "ALL"
+	}
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	sigs, err := s.chartStore.GetSignalsFiltered(symbol, direction, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	result := make([]SignalBar, len(sigs))
+	for i, sig := range sigs {
+		result[i] = SignalBar{
+			Symbol:           sig.Symbol,
 			Time:             sig.CreatedAt.Unix(),
 			Direction:        sig.Direction,
 			Rule:             sig.Rule,
@@ -420,9 +480,11 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Symbol    string `json:"symbol"`
-		Timeframe string `json:"timeframe"`
-		Rule      string `json:"rule"` // optional filter
+		Symbol    string  `json:"symbol"`
+		Timeframe string  `json:"timeframe"`
+		Rule      string  `json:"rule"`     // optional filter
+		TPMult    float64 `json:"tp_mult"`  // 0 = use default
+		SLMult    float64 `json:"sl_mult"`  // 0 = use default
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -433,7 +495,7 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.backtestRunner.RunBacktest(req.Symbol, req.Timeframe, req.Rule)
+	result, err := s.backtestRunner.RunBacktest(req.Symbol, req.Timeframe, req.Rule, req.TPMult, req.SLMult)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -586,6 +648,77 @@ func (s *Server) removeSymbol(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// getReportConfig handles GET /api/report/config.
+func (s *Server) getReportConfig(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cfg, err := s.readReportConfigLocked()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, cfg)
+}
+
+// updateReportConfig handles PUT /api/report/config.
+func (s *Server) updateReportConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg appconfig.DailyReportConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.writeReportConfigLocked(cfg); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if s.reportSched != nil {
+		s.reportSched.Reset(cfg)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// reportCfgFile returns the path to report.yaml.
+func (s *Server) reportCfgFile() string {
+	return s.configDir + "/report.yaml"
+}
+
+// readReportConfigLocked reads report.yaml. Caller must hold s.mu (read or write).
+func (s *Server) readReportConfigLocked() (appconfig.DailyReportConfig, error) {
+	cfg := appconfig.DailyReportConfig{
+		Enabled:    true,
+		Time:       "09:00",
+		Timezone:   "Asia/Seoul",
+		AIMinScore: 8.0,
+	}
+	f, err := os.Open(s.reportCfgFile())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
+		return cfg, fmt.Errorf("report.yaml 읽기 실패: %w", err)
+	}
+	defer f.Close()
+	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+		return cfg, fmt.Errorf("report.yaml 파싱 실패: %w", err)
+	}
+	return cfg, nil
+}
+
+// writeReportConfigLocked writes report.yaml. Caller must hold s.mu (write).
+func (s *Server) writeReportConfigLocked(cfg appconfig.DailyReportConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("report 직렬화 실패: %w", err)
+	}
+	return os.WriteFile(s.reportCfgFile(), data, 0o644)
 }
 
 // ── YAML file helpers ─────────────────────────────────────────────────────────

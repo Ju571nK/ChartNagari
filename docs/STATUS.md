@@ -1,7 +1,7 @@
 # docs/STATUS.md — 팀 현재 상태
 
 > Orchestrator가 관리. 매 작업 완료 시 갱신.
-> 최종 갱신: 2026-03-08
+> 최종 갱신: 2026-03-13
 
 ---
 
@@ -40,13 +40,16 @@
 | 2026-03-08 | 알림(Telegram/Discord)에 진입가/TP/SL 추가 (3개 테스트 추가, 전체 PASS) | Developer |
 | 2026-03-08 | 무료 데이터 소스 리서치 — Tiingo 1순위 권고 (VERIFIED) | Researcher |
 | 2026-03-08 | Tiingo 수집기 구현 (internal/collector/tiingo.go + config + main.go 연결) | Developer |
+| 2026-03-13 | TIINGO_API_KEY .env 등록 완료 | Owner |
 | 2026-03-08 | 페이퍼 트레이딩 엔진 구현 (paper/trader + storage/paper + API 3개 + 프론트 탭, 10개 테스트 PASS) | Developer |
+| 2026-03-13 | Phase 2-6: 주식 전용 일일 리포트 (report 패키지 + 웹 UI 설정 탭 + API, 14개 테스트 PASS) | Developer |
+| 2026-03-13 | 신호 히스토리 탭 + 백테스트 TP/SL 배율 수동 입력 (전체 테스트 PASS) | Developer |
 
 ---
 
 ## 진행 중
 
-**Phase 2: Enhancement — 2-4 완료, 2-5(Bloomberg/유료 데이터) 대기 중**
+**Phase 2: Enhancement — 전 항목 완료 (2-5 BLOCKED 제외). Phase 3 클라우드 배포 대기 중**
 
 ---
 
@@ -58,9 +61,7 @@
 
 ## 다음 할 일 (우선순위 순)
 
-1. **Owner 액션**: `.env`에 `TIINGO_API_KEY={발급받은 키}` 추가 → 서버 재시작 시 자동 활성화
-2. TraderAdvisor 🟡 추가 권고 (알림 히스토리 뷰, 백테스트 TP/SL 최적화)
-3. Phase 3: 클라우드 배포
+1. Phase 3 클라우드 배포 — 보안 강화 후 진행 예정 (Owner 결정 대기)
 
 ---
 

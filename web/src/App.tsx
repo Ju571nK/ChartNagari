@@ -12,7 +12,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history'
 
 interface OHLCVBar {
   time: number
@@ -24,6 +24,8 @@ interface OHLCVBar {
 }
 
 interface SignalBar {
+  symbol: string
+  timeframe: string
   time: number
   direction: string
   rule: string
@@ -615,6 +617,8 @@ function BacktestTab() {
   const [symbol, setSymbol] = useState('')
   const [tf, setTf] = useState<TF>('1H')
   const [ruleFilter, setRuleFilter] = useState('')
+  const [tpMult, setTpMult] = useState(2.0)
+  const [slMult, setSlMult] = useState(1.0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<BacktestResult | null>(null)
@@ -640,7 +644,7 @@ function BacktestTab() {
       const r = await apiFetch<BacktestResult>('/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, timeframe: tf, rule: ruleFilter }),
+        body: JSON.stringify({ symbol, timeframe: tf, rule: ruleFilter, tp_mult: tpMult, sl_mult: slMult }),
       })
       setResult(r)
     } catch (e: unknown) {
@@ -648,7 +652,7 @@ function BacktestTab() {
     } finally {
       setLoading(false)
     }
-  }, [symbol, tf, ruleFilter])
+  }, [symbol, tf, ruleFilter, tpMult, slMult])
 
   return (
     <>
@@ -687,6 +691,35 @@ function BacktestTab() {
           {rules.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="item-meta">TP×</span>
+          <input
+            className="symbol-input"
+            type="number"
+            step="0.5"
+            min="0.5"
+            max="10"
+            value={tpMult}
+            onChange={(e) => setTpMult(Number(e.target.value))}
+            disabled={loading}
+            style={{ width: 72 }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="item-meta">SL×</span>
+          <input
+            className="symbol-input"
+            type="number"
+            step="0.5"
+            min="0.5"
+            max="10"
+            value={slMult}
+            onChange={(e) => setSlMult(Number(e.target.value))}
+            disabled={loading}
+            style={{ width: 72 }}
+          />
+        </div>
+
         <button className="run-btn" onClick={run} disabled={loading || !symbol}>
           {loading ? '계산 중...' : '실행'}
         </button>
@@ -697,7 +730,7 @@ function BacktestTab() {
       {result && !loading && (
         <>
           <p className="section-title">
-            결과 — {result.symbol} {result.timeframe} ({result.bars} 바, {result.trades} 거래)
+            결과 — {result.symbol} {result.timeframe} ({result.bars} 바, {result.trades} 거래) | TP×{tpMult} SL×{slMult}
           </p>
 
           <div className="backtest-stats">
@@ -955,6 +988,202 @@ function PaperTab() {
   )
 }
 
+// ── Report Tab ────────────────────────────────────────────────────────────────
+
+interface ReportConfig {
+  enabled: boolean
+  time: string
+  timezone: string
+  ai_min_score: number
+  only_if_signals: boolean
+  compact: boolean
+}
+
+function ReportTab() {
+  const [config, setConfig] = useState<ReportConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    apiFetch<ReportConfig>('/report/config')
+      .then(setConfig)
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  const save = useCallback(async () => {
+    if (!config) return
+    setSaving(true)
+    setError('')
+    try {
+      await putJSON('/report/config', config)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '저장 실패')
+    } finally {
+      setSaving(false)
+    }
+  }, [config])
+
+  if (!config && !error) return <p className="loading">로딩 중...</p>
+  if (error && !config) return <p className="error-msg">오류: {error}</p>
+  if (!config) return null
+
+  return (
+    <>
+      <p className="section-title">일일 리포트 설정</p>
+
+      <div className="report-field">
+        <span className="field-label">리포트 활성화</span>
+        <Toggle checked={config.enabled} onChange={(v) => setConfig({ ...config, enabled: v })} />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">발송 시간 (KST)</span>
+        <input
+          className="report-input"
+          placeholder="09:00"
+          value={config.time}
+          onChange={(e) => setConfig({ ...config, time: e.target.value })}
+        />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">시간대</span>
+        <input
+          className="report-input"
+          value={config.timezone}
+          readOnly
+          style={{ opacity: 0.6, cursor: 'default' }}
+        />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">AI 최소 스코어</span>
+        <input
+          className="report-input"
+          type="number"
+          step={0.5}
+          min={0}
+          value={config.ai_min_score}
+          onChange={(e) => setConfig({ ...config, ai_min_score: parseFloat(e.target.value) || 0 })}
+        />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">신호 없는 날 스킵</span>
+        <Toggle checked={config.only_if_signals} onChange={(v) => setConfig({ ...config, only_if_signals: v })} />
+      </div>
+
+      <div className="report-field">
+        <span className="field-label">축약 모드</span>
+        <Toggle checked={config.compact} onChange={(v) => setConfig({ ...config, compact: v })} />
+      </div>
+
+      <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="run-btn" onClick={save} disabled={saving}>
+          {saving ? '저장 중...' : '저장'}
+        </button>
+        {saved && <span className="save-success">✓ 저장됨</span>}
+        {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
+      </div>
+    </>
+  )
+}
+
+// ── History Tab ───────────────────────────────────────────────────────────────
+
+function HistoryTab() {
+  const [symbols, setSymbols] = useState<string[]>([])
+  const [symbol, setSymbol] = useState('ALL')
+  const [direction, setDirection] = useState('ALL')
+  const [limit, setLimit] = useState(100)
+  const [signals, setSignals] = useState<SignalBar[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    apiFetch<SymbolItem[]>('/symbols').then((items) => {
+      setSymbols(items.filter((i) => i.enabled).map((i) => i.symbol))
+    }).catch(() => {})
+  }, [])
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setError('')
+    apiFetch<SignalBar[]>(`/history?symbol=${encodeURIComponent(symbol)}&direction=${direction}&limit=${limit}`)
+      .then(setSignals)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [symbol, direction, limit])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <>
+      <div className="backtest-controls">
+        <select className="chart-select" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+          <option value="ALL">전체 종목</option>
+          {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className="chart-select" value={direction} onChange={(e) => setDirection(e.target.value)}>
+          <option value="ALL">전체 방향</option>
+          <option value="LONG">LONG</option>
+          <option value="SHORT">SHORT</option>
+        </select>
+        <select className="chart-select" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+          <option value={50}>50건</option>
+          <option value={100}>100건</option>
+          <option value={200}>200건</option>
+        </select>
+      </div>
+      {loading && <p className="loading">로딩 중...</p>}
+      {error && <p className="error-msg">오류: {error}</p>}
+      {!loading && signals.length === 0 && (
+        <p className="loading">신호 없음 — 수집 기간이 짧거나 필터 조건을 확인하세요.</p>
+      )}
+      {signals.length > 0 && (
+        <div className="backtest-table-wrap">
+          <table className="backtest-table">
+            <thead>
+              <tr>
+                <th>시간</th>
+                <th>종목</th>
+                <th>TF</th>
+                <th>방향</th>
+                <th>룰</th>
+                <th>스코어</th>
+                <th>AI 해석</th>
+              </tr>
+            </thead>
+            <tbody>
+              {signals.map((s, i) => (
+                <tr key={i}>
+                  <td style={{ color: 'var(--muted)', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                    {new Date(s.time * 1000).toLocaleString()}
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{s.symbol}</td>
+                  <td style={{ color: 'var(--muted)' }}>{s.timeframe}</td>
+                  <td className={s.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{s.direction}</td>
+                  <td style={{ color: 'var(--muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {abbreviateRule(s.rule)}
+                  </td>
+                  <td>{s.score.toFixed(1)}</td>
+                  <td style={{ color: 'var(--muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem' }}
+                      title={s.ai_interpretation}>
+                    {s.ai_interpretation ? s.ai_interpretation.slice(0, 80) + (s.ai_interpretation.length > 80 ? '…' : '') : '─'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -984,6 +1213,12 @@ export function App() {
           <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>
             페이퍼
           </button>
+          <button className={`tab-btn${tab === 'report' ? ' active' : ''}`} onClick={() => setTab('report')}>
+            리포트
+          </button>
+          <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>
+            히스토리
+          </button>
         </nav>
       </header>
       <main>
@@ -993,6 +1228,8 @@ export function App() {
         {tab === 'chart' && <ChartTab />}
         {tab === 'backtest' && <BacktestTab />}
         {tab === 'paper' && <PaperTab />}
+        {tab === 'report' && <ReportTab />}
+        {tab === 'history' && <HistoryTab />}
       </main>
     </div>
   )

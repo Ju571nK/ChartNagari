@@ -13,6 +13,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/indicator"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
@@ -41,19 +42,21 @@ type PaperTrader interface {
 
 // Config controls pipeline timing and data parameters.
 type Config struct {
-	Interval       time.Duration // how often to run analysis (default: 1 minute)
-	Lookback       int           // bars to load per TF (default: 200)
-	SignalMinScore float64       // minimum score to persist a signal to DB (default: 5.0)
-	SignalCooldown time.Duration // minimum gap between saves for same symbol+rule (default: 4h)
+	Interval        time.Duration // how often to run analysis (default: 1 minute)
+	Lookback        int           // bars to load per TF (default: 200)
+	SignalMinScore  float64       // minimum score to persist a signal to DB (default: 5.0)
+	SignalCooldown  time.Duration // minimum gap between saves for same symbol+rule (default: 4h)
+	MTFConsensusMin int           // ≥2 시 방향 합의 필터 활성. 1=비활성(기존 동작). 기본값 2
 }
 
 // DefaultConfig returns sensible production defaults.
 func DefaultConfig() Config {
 	return Config{
-		Interval:       time.Minute,
-		Lookback:       200,
-		SignalMinScore: 5.0,
-		SignalCooldown: 4 * time.Hour,
+		Interval:        time.Minute,
+		Lookback:        200,
+		SignalMinScore:  5.0,
+		SignalCooldown:  4 * time.Hour,
+		MTFConsensusMin: 2,
 	}
 }
 
@@ -63,8 +66,9 @@ func DefaultConfig() Config {
 type Pipeline struct {
 	cfg         Config
 	db          OHLCVReader
-	sigSaver    SignalSaver  // optional; set via SetSignalSaver
-	paperTrader PaperTrader  // optional; set via SetPaperTrader
+	sigSaver    SignalSaver                    // optional; set via SetSignalSaver
+	paperTrader PaperTrader                    // optional; set via SetPaperTrader
+	alertHolder *appconfig.AlertConfigHolder   // optional; set via SetAlertConfigHolder
 	eng         *engine.RuleEngine
 	interp      *interpreter.Interpreter
 	notif       *notifier.Notifier
@@ -109,6 +113,11 @@ func (p *Pipeline) SetSignalSaver(ss SignalSaver) {
 // SetPaperTrader wires an optional paper trading simulator.
 func (p *Pipeline) SetPaperTrader(pt PaperTrader) {
 	p.paperTrader = pt
+}
+
+// SetAlertConfigHolder wires an optional live-updated alert configuration holder.
+func (p *Pipeline) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
+	p.alertHolder = h
 }
 
 // Run starts the periodic analysis loop. It blocks until ctx is cancelled.
@@ -171,6 +180,19 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
 	for i := range signals {
 		enrichSignalLevels(&signals[i], allBars, indicators)
+	}
+
+	// MTF 합의 필터: 동적 설정 우선, 없으면 정적 Config 사용
+	mtfMin := p.cfg.MTFConsensusMin
+	if p.alertHolder != nil {
+		mtfMin = p.alertHolder.Get().MTFConsensusMin
+	}
+	if mtfMin > 1 {
+		signals = filterMTFConsensus(signals, mtfMin)
+		if len(signals) == 0 {
+			p.log.Debug().Str("symbol", sym).Int("mtf_min", mtfMin).Msg("MTF 합의 미달 — 신호 필터링")
+			return
+		}
 	}
 
 	// Paper trading: open new positions and check existing TP/SL.

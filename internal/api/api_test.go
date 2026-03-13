@@ -314,6 +314,10 @@ func (m *mockChartStore) GetSignals(_ string, _ int) ([]models.Signal, error) {
 	return m.sigs, m.err
 }
 
+func (m *mockChartStore) GetSignalsFiltered(_, _ string, _ int) ([]models.Signal, error) {
+	return m.sigs, m.err
+}
+
 func setupTestWithChart(t *testing.T, cs ChartStore) *Server {
 	t.Helper()
 	srv := setupTest(t)

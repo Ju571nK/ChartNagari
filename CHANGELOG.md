@@ -316,3 +316,42 @@
 ---
 
 <!-- 이후 항목은 Recorder가 자동으로 추가한다 -->
+
+## [0.10.0] - 2026-03-13
+
+### Added
+- 신호 히스토리 탭 — 종목·방향·건수 필터로 과거 신호 테이블 조회
+  - `GET /api/history?symbol=ALL&direction=ALL&limit=100` 엔드포인트
+  - `GetSignalsFiltered` 스토리지 메서드
+- 백테스트 TP/SL ATR 배율 수동 입력 (기본값 TP×2.0 / SL×1.0)
+  - POST /api/backtest에 `tp_mult`, `sl_mult` 파라미터 추가
+  - 결과 헤더에 적용된 배율 표시
+
+### Changed
+- `internal/backtest/engine.go` — `Clone`, `NewWithConfig` 추가
+- `internal/backtest/runner.go` — RunBacktest 시그니처 변경 (tpMult, slMult)
+- `internal/api/server.go` — SignalBar에 symbol 필드 추가, 인터페이스 갱신
+- `web/src/App.tsx` — HistoryTab 컴포넌트, 히스토리 탭, BacktestTab TP/SL 입력 추가
+
+## [0.9.0] - 2026-03-13
+
+### Added
+- 주식 전용 일일 리포트 기능 (Research: `docs/research/20260312_daily_stock_report_discussion.md`)
+  - `internal/report/daily.go` — 리포트 생성 로직 (신호 집계, 종가, Telegram 포맷)
+  - `internal/report/scheduler.go` — KST 기반 cron 스케줄러 (time.AfterFunc, Reset 지원)
+  - `internal/report/daily_test.go` — 14개 테스트 PASS
+  - `config/report.yaml` — 일일 리포트 설정 파일 (enabled, time, timezone, ai_min_score 등)
+  - `GET /api/report/config`, `PUT /api/report/config` — 웹 UI 연동 REST 엔드포인트
+  - 웹 UI '리포트' 탭 — 6개 설정 필드 + 저장 버튼 + 저장 성공 플래시
+
+### Changed
+- `internal/config/config.go` — `DailyReportConfig` 구조체 추가, report.yaml 로딩
+- `internal/storage/` — `GetSignalsByDate` 메서드 추가
+- `internal/api/server.go` — 리포트 설정 API + `WithReportScheduler` 연동
+- `cmd/server/main.go` — 리포트 스케줄러 고루틴 등록
+- `web/src/App.tsx` — ReportTab 컴포넌트, '리포트' 탭 추가
+- `web/src/App.css` — `.report-field`, `.report-input`, `.save-success` 클래스 추가
+
+### Docs
+- `docs/queue/APPROVED_daily_stock_report.md` — Owner 승인 스펙 (2026-03-13)
+- `docs/pending/PENDING_daily_stock_report.md` — 승인 완료로 삭제

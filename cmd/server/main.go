@@ -26,6 +26,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
+	"github.com/Ju571nK/Chatter/internal/report"
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/internal/storage"
 )
@@ -183,11 +184,21 @@ func main() {
 	btEngine := backtest.New(allRules, toEngineConfig(cfg.Rules), backtest.DefaultConfig())
 	btRunner := backtest.NewRunner(db, btEngine)
 
+	// ── 일일 리포트 스케줄러 ─────────────────────────────────────────────────────────────────
+	reporter := report.NewDailyReporter(db, notif, stockSymbols, log.Logger)
+	sched := report.NewScheduler(reporter, cfg.DailyReport, log.Logger)
+	go sched.Start(ctx)
+	log.Info().
+		Bool("enabled", cfg.DailyReport.Enabled).
+		Str("time", cfg.DailyReport.Time).
+		Msg("일일 리포트 스케줄러 등록")
+
 	// ── HTTP API + 설정 UI 서버 ───────────────────────────────────────
 	apiSrv := api.New("config", "web/dist")
 	apiSrv.WithChartStore(db)
 	apiSrv.WithBacktestRunner(btRunner)
 	apiSrv.WithPaperStore(db)
+	apiSrv.WithReportScheduler(sched)
 
 	// 활성 데이터 소스 목록 전달 (상태탭 표시용)
 	activeSources := []string{"Binance (BTC/ETH)"}

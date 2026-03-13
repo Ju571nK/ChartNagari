@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -26,8 +27,19 @@ type Config struct {
 	Alert     AlertConfig
 	Anthropic AnthropicConfig
 
-	Rules     RulesConfig
-	Watchlist WatchlistConfig
+	Rules       RulesConfig
+	Watchlist   WatchlistConfig
+	DailyReport DailyReportConfig
+}
+
+// DailyReportConfig mirrors config/report.yaml structure.
+type DailyReportConfig struct {
+	Enabled       bool    `yaml:"enabled"`
+	Time          string  `yaml:"time"`          // "HH:MM"
+	Timezone      string  `yaml:"timezone"`      // "Asia/Seoul"
+	AIMinScore    float64 `yaml:"ai_min_score"`
+	OnlyIfSignals bool    `yaml:"only_if_signals"`
+	Compact       bool    `yaml:"compact"`
 }
 
 type BinanceConfig struct {
@@ -54,7 +66,31 @@ type DiscordConfig struct {
 }
 
 type AlertConfig struct {
-	CooldownHours int
+	ScoreThreshold  float64 `yaml:"score_threshold"`
+	CooldownHours   int     `yaml:"cooldown_hours"`
+	MTFConsensusMin int     `yaml:"mtf_consensus_min"`
+}
+
+// AlertConfigHolder is a mutex-protected holder for live-updated AlertConfig.
+type AlertConfigHolder struct {
+	mu  sync.RWMutex
+	cfg AlertConfig
+}
+
+func NewAlertConfigHolder(cfg AlertConfig) *AlertConfigHolder {
+	return &AlertConfigHolder{cfg: cfg}
+}
+
+func (h *AlertConfigHolder) Get() AlertConfig {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.cfg
+}
+
+func (h *AlertConfigHolder) Set(cfg AlertConfig) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cfg = cfg
 }
 
 type AnthropicConfig struct {
@@ -126,7 +162,9 @@ func Load(envFile, configDir string) (*Config, error) {
 			WebhookURL: getEnv("DISCORD_WEBHOOK_URL", ""),
 		},
 		Alert: AlertConfig{
-			CooldownHours: parseInt(getEnv("ALERT_COOLDOWN_HOURS", "4")),
+			ScoreThreshold:  12.0,
+			CooldownHours:   parseInt(getEnv("ALERT_COOLDOWN_HOURS", "4")),
+			MTFConsensusMin: 2,
 		},
 		Anthropic: AnthropicConfig{
 			APIKey:   getEnv("ANTHROPIC_API_KEY", ""),
@@ -142,6 +180,25 @@ func Load(envFile, configDir string) (*Config, error) {
 	// watchlist.yaml 로드
 	if err := loadYAML(configDir+"/watchlist.yaml", &cfg.Watchlist); err != nil {
 		return nil, fmt.Errorf("watchlist.yaml 로드 실패: %w", err)
+	}
+
+	// report.yaml 로드 — 없으면 기본값 사용
+	cfg.DailyReport = DailyReportConfig{
+		Enabled:    true,
+		Time:       "09:00",
+		Timezone:   "Asia/Seoul",
+		AIMinScore: 8.0,
+	}
+	if err := loadYAML(configDir+"/report.yaml", &cfg.DailyReport); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("report.yaml 로드 실패: %w", err)
+	}
+
+	// alert.yaml 로드 — 없으면 기본값 유지
+	alertCfgPath := configDir + "/alert.yaml"
+	if _, err := os.Stat(alertCfgPath); err == nil {
+		if err := loadYAML(alertCfgPath, &cfg.Alert); err != nil {
+			return nil, fmt.Errorf("alert.yaml 로드 실패: %w", err)
+		}
 	}
 
 	return cfg, nil

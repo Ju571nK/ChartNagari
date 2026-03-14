@@ -52,7 +52,7 @@ func newTestPipeline(db OHLCVReader, symbols []string) *Pipeline {
 	eng := engine.New(engine.RuleConfig{Rules: map[string]engine.RuleEntry{}})
 	interp := interpreter.New("", 12.0) // disabled — no API key
 	notif := notifier.New(notifier.DefaultConfig(), zerolog.Nop())
-	return New(
+	p := New(
 		DefaultConfig(),
 		db,
 		eng,
@@ -62,6 +62,9 @@ func newTestPipeline(db OHLCVReader, symbols []string) *Pipeline {
 		[]string{"1H", "4H"},
 		zerolog.Nop(),
 	)
+	// Mark all symbols as crypto so tests run regardless of market hours.
+	p.SetCryptoSymbols(symbols)
+	return p
 }
 
 // ── tests ────────────────────────────────────────────────────────────────────
@@ -85,6 +88,8 @@ func TestRunOnce_QueriesAllTFs(t *testing.T) {
 	interp := interpreter.New("", 12.0)
 	notif := notifier.New(notifier.DefaultConfig(), zerolog.Nop())
 	p := New(DefaultConfig(), db, eng, interp, notif, symbols, tfs, zerolog.Nop())
+	// Mark all symbols as crypto so tests run regardless of market hours.
+	p.SetCryptoSymbols(symbols)
 
 	p.RunOnce(context.Background())
 

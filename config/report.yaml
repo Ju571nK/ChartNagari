@@ -1,6 +1,6 @@
 enabled: true
 time: "09:00"
-timezone: "Asia/Seoul"
-ai_min_score: 8.0
+timezone: Asia/Seoul
+ai_min_score: 8
 only_if_signals: false
 compact: false

@@ -26,6 +26,9 @@ COPY --from=builder /chart-analyzer .
 # 설정 파일 복사
 COPY config/ ./config/
 
+# 프론트엔드 정적 파일
+COPY --from=builder /app/web/dist ./web/dist/
+
 # 데이터 폴더 생성 (SQLite 저장 경로)
 RUN mkdir -p /app/data
 

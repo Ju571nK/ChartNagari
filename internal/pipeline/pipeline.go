@@ -17,6 +17,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/indicator"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
+	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
@@ -76,6 +77,7 @@ type Pipeline struct {
 	timeframes  []string
 	log         zerolog.Logger
 	cryptoSyms  map[string]bool
+	marketOpen   bool // tracks NYSE open/close state for transition logging
 
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
@@ -156,7 +158,20 @@ func (p *Pipeline) RunOnce(ctx context.Context) {
 }
 
 func (p *Pipeline) runOnce(ctx context.Context) {
+	isOpen := market.IsUSMarketOpen(time.Now())
+	if isOpen != p.marketOpen {
+		if isOpen {
+			p.log.Info().Msg("미국 장 개장 — 주식 분석 시작")
+		} else {
+			p.log.Info().Msg("미국 장 마감 — 주식 분석 중단")
+		}
+		p.marketOpen = isOpen
+	}
+
 	for _, sym := range p.symbols {
+		if !p.isCrypto(sym) && !isOpen {
+			continue
+		}
 		p.analyzeSymbol(ctx, sym)
 	}
 }

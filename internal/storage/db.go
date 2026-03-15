@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "modernc.org/sqlite" // pure-Go SQLite driver (CGO_ENABLED=0 호환)
+	_ "modernc.org/sqlite" // pure-Go SQLite driver (CGO_ENABLED=0 compatible)
 )
 
 // DB wraps the SQLite database connection.
@@ -18,24 +18,24 @@ type DB struct {
 
 // New opens (or creates) the SQLite database at dbPath and applies the schema.
 func New(dbPath string) (*DB, error) {
-	// 데이터 디렉토리가 없으면 생성
+	// Create data directory if absent
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return nil, fmt.Errorf("DB 디렉토리 생성 실패: %w", err)
+		return nil, fmt.Errorf("failed to create DB directory: %w", err)
 	}
 
 	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("SQLite 연결 실패: %w", err)
+		return nil, fmt.Errorf("SQLite connection failed: %w", err)
 	}
 
-	// WAL 모드: 동시 읽기/쓰기 성능 향상
+	// WAL mode: improved concurrent read/write performance
 	if _, err := conn.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		return nil, fmt.Errorf("WAL 모드 설정 실패: %w", err)
+		return nil, fmt.Errorf("failed to set WAL mode: %w", err)
 	}
 
 	db := &DB{conn: conn}
 	if err := db.migrate(); err != nil {
-		return nil, fmt.Errorf("스키마 마이그레이션 실패: %w", err)
+		return nil, fmt.Errorf("schema migration failed: %w", err)
 	}
 
 	return db, nil
@@ -58,7 +58,7 @@ func (db *DB) migrate() error {
 		id        INTEGER PRIMARY KEY AUTOINCREMENT,
 		symbol    TEXT    NOT NULL,
 		timeframe TEXT    NOT NULL,
-		open_time INTEGER NOT NULL,  -- Unix 밀리초
+		open_time INTEGER NOT NULL,  -- Unix milliseconds
 		open      REAL    NOT NULL,
 		high      REAL    NOT NULL,
 		low       REAL    NOT NULL,
@@ -71,18 +71,18 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_ohlcv_lookup
 		ON ohlcv(symbol, timeframe, open_time DESC);
 
-	-- 알림 쿨다운 추적 테이블 (Phase 1-7에서 사용)
+	-- Alert cooldown tracking table (used in Phase 1-7)
 	CREATE TABLE IF NOT EXISTS alert_history (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		symbol     TEXT    NOT NULL,
 		rule_name  TEXT    NOT NULL,
-		sent_at    INTEGER NOT NULL  -- Unix 초
+		sent_at    INTEGER NOT NULL  -- Unix seconds
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_alert_history_lookup
 		ON alert_history(symbol, rule_name, sent_at DESC);
 
-	-- 신호 영속성 테이블 (Phase 2-3 차트 대시보드용)
+	-- Signal persistence table (Phase 2-3 chart dashboard)
 	CREATE TABLE IF NOT EXISTS signals (
 		id                 INTEGER PRIMARY KEY AUTOINCREMENT,
 		symbol             TEXT    NOT NULL,
@@ -92,13 +92,13 @@ func (db *DB) migrate() error {
 		score              REAL    NOT NULL,
 		message            TEXT    NOT NULL DEFAULT '',
 		ai_interpretation  TEXT    NOT NULL DEFAULT '',
-		created_at         INTEGER NOT NULL  -- Unix 초
+		created_at         INTEGER NOT NULL  -- Unix seconds
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_signals_lookup
 		ON signals(symbol, created_at DESC);
 
-	-- 페이퍼 트레이딩 포지션 테이블
+	-- Paper trading positions table
 	CREATE TABLE IF NOT EXISTS paper_positions (
 		id          INTEGER PRIMARY KEY AUTOINCREMENT,
 		symbol      TEXT    NOT NULL,
@@ -117,17 +117,33 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_paper_positions_lookup
 		ON paper_positions(symbol, status, entry_time DESC);
+
+	-- AI analysis history table
+	CREATE TABLE IF NOT EXISTS analysis_history (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		symbol      TEXT    NOT NULL,
+		final       TEXT    NOT NULL,  -- 'BULL' | 'BEAR' | 'SIDEWAYS'
+		confidence  TEXT    NOT NULL,  -- 'HIGH' | 'MEDIUM' | 'LOW'
+		bull_pct    REAL    NOT NULL,
+		bear_pct    REAL    NOT NULL,
+		sideways_pct REAL   NOT NULL,
+		result_json TEXT    NOT NULL,  -- full ScenarioResult JSON
+		created_at  INTEGER NOT NULL   -- Unix seconds
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_analysis_history_lookup
+		ON analysis_history(symbol, created_at DESC);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err
 	}
 
-	// 기존 DB 마이그레이션: ai_interpretation 컬럼 추가
+	// Migrate existing DB: add ai_interpretation column
 	if _, err := db.conn.Exec(
 		`ALTER TABLE signals ADD COLUMN ai_interpretation TEXT NOT NULL DEFAULT ''`,
 	); err != nil {
 		if !strings.Contains(err.Error(), "duplicate column name") {
-			return fmt.Errorf("신호 테이블 마이그레이션 실패: %w", err)
+			return fmt.Errorf("signals table migration failed: %w", err)
 		}
 	}
 

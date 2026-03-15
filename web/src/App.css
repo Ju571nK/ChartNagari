@@ -33,6 +33,13 @@ body {
   margin-bottom: 32px;
   padding-bottom: 24px;
   border-bottom: 1px solid rgba(91, 146, 121, 0.2);
+  position: relative;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .header h1 {
@@ -53,19 +60,83 @@ body {
   margin-bottom: 20px;
 }
 
+/* ── hamburger ───────────────────────────────────────────────────────────── */
+.hamburger-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: all 0.15s;
+  margin-top: 2px;
+}
+
+.hamburger-btn:hover {
+  color: var(--text);
+  border-color: rgba(91, 146, 121, 0.25);
+  background: rgba(91, 146, 121, 0.08);
+}
+
+.hamburger-btn.config-active {
+  color: var(--mint);
+  border-color: rgba(143, 198, 155, 0.3);
+}
+
+.config-menu {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--bg);
+  border: 1px solid rgba(91, 146, 121, 0.25);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 100;
+  min-width: 148px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.config-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.15s;
+  letter-spacing: 0.01em;
+}
+
+.config-menu-item:hover {
+  color: var(--text);
+  background: rgba(91, 146, 121, 0.1);
+}
+
+.config-menu-item.active {
+  color: var(--mint);
+  background: rgba(91, 146, 121, 0.12);
+}
+
 /* ── tabs ────────────────────────────────────────────────────────────────── */
 .tabs {
   display: flex;
   gap: 3px;
   background: rgba(91, 146, 121, 0.06);
-  border: 1px solid rgba(91, 146, 121, 0.15);
+  border: 1px solid rgba(91, 146, 121, 0.18);
   padding: 4px;
   border-radius: 8px;
   width: fit-content;
 }
 
 .tab-btn {
-  padding: 6px 20px;
+  padding: 5px 16px;
   background: transparent;
   border: none;
   color: var(--muted);
@@ -74,6 +145,7 @@ body {
   font-size: 0.8rem;
   font-weight: 500;
   transition: all 0.15s;
+  letter-spacing: 0.01em;
 }
 
 .tab-btn:hover {
@@ -83,7 +155,7 @@ body {
 
 .tab-btn.active {
   background: var(--green);
-  color: var(--text);
+  color: var(--mint);
 }
 
 /* ── section title ───────────────────────────────────────────────────────── */

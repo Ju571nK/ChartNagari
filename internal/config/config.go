@@ -19,13 +19,19 @@ type Config struct {
 	LogLevel   string
 	DBPath     string
 
-	Binance   BinanceConfig
-	Yahoo     YahooConfig
-	Tiingo    TiingoConfig
-	Telegram  TelegramConfig
+	Binance      BinanceConfig
+	Yahoo        YahooConfig
+	Tiingo       TiingoConfig
+	AlphaVantage AlphaVantageConfig
+	Telegram     TelegramConfig
 	Discord   DiscordConfig
 	Alert     AlertConfig
 	Anthropic AnthropicConfig
+	OpenAI      OpenAIConfig
+	Groq        GroqConfig
+	Gemini      GeminiConfig
+	LLMProvider string // "anthropic" | "openai" | "groq" | "gemini"
+	Language    string // "en" | "ko" | "ja" (default "en")
 
 	Rules       RulesConfig
 	Watchlist   WatchlistConfig
@@ -54,6 +60,10 @@ type YahooConfig struct {
 type TiingoConfig struct {
 	APIKey       string
 	PollInterval time.Duration
+}
+
+type AlphaVantageConfig struct {
+	APIKey string
 }
 
 type TelegramConfig struct {
@@ -102,6 +112,18 @@ type AnthropicConfig struct {
 	MinScore float64 // minimum total signal score to trigger AI interpretation
 }
 
+type OpenAIConfig struct {
+	APIKey string
+}
+
+type GroqConfig struct {
+	APIKey string
+}
+
+type GeminiConfig struct {
+	APIKey string
+}
+
 // RulesConfig mirrors config/rules.yaml structure.
 type RulesConfig struct {
 	Rules             []RuleEntry           `yaml:"rules"`
@@ -139,7 +161,7 @@ type SymbolEntry struct {
 // Load reads .env and YAML config files from configDir.
 // configDir is typically "config/" relative to the binary location.
 func Load(envFile, configDir string) (*Config, error) {
-	// .env 파일 로드 (없어도 무시 — 환경변수로 대체 가능)
+	// Load .env file (ignored if absent — env vars take precedence)
 	_ = godotenv.Load(envFile)
 
 	cfg := &Config{
@@ -157,6 +179,9 @@ func Load(envFile, configDir string) (*Config, error) {
 		Tiingo: TiingoConfig{
 			APIKey:       getEnv("TIINGO_API_KEY", ""),
 			PollInterval: parseDuration(getEnv("TIINGO_POLL_INTERVAL", "900"), time.Second),
+		},
+		AlphaVantage: AlphaVantageConfig{
+			APIKey: getEnv("ALPHAVANTAGE_API_KEY", ""),
 		},
 		Telegram: TelegramConfig{
 			BotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
@@ -178,19 +203,30 @@ func Load(envFile, configDir string) (*Config, error) {
 			APIKey:   getEnv("ANTHROPIC_API_KEY", ""),
 			MinScore: parseFloat(getEnv("AI_MIN_SCORE", "12.0")),
 		},
+		OpenAI: OpenAIConfig{
+			APIKey: getEnv("OPENAI_API_KEY", ""),
+		},
+		Groq: GroqConfig{
+			APIKey: getEnv("GROQ_API_KEY", ""),
+		},
+		Gemini: GeminiConfig{
+			APIKey: getEnv("GEMINI_API_KEY", ""),
+		},
+		LLMProvider: getEnv("LLM_PROVIDER", ""),
+		Language:    getEnv("LLM_LANGUAGE", "en"),
 	}
 
-	// rules.yaml 로드
+	// Load rules.yaml
 	if err := loadYAML(configDir+"/rules.yaml", &cfg.Rules); err != nil {
-		return nil, fmt.Errorf("rules.yaml 로드 실패: %w", err)
+		return nil, fmt.Errorf("failed to load rules.yaml: %w", err)
 	}
 
-	// watchlist.yaml 로드
+	// Load watchlist.yaml
 	if err := loadYAML(configDir+"/watchlist.yaml", &cfg.Watchlist); err != nil {
-		return nil, fmt.Errorf("watchlist.yaml 로드 실패: %w", err)
+		return nil, fmt.Errorf("failed to load watchlist.yaml: %w", err)
 	}
 
-	// report.yaml 로드 — 없으면 기본값 사용
+	// Load report.yaml — use defaults if absent
 	cfg.DailyReport = DailyReportConfig{
 		Enabled:    true,
 		Time:       "09:00",
@@ -198,14 +234,14 @@ func Load(envFile, configDir string) (*Config, error) {
 		AIMinScore: 8.0,
 	}
 	if err := loadYAML(configDir+"/report.yaml", &cfg.DailyReport); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("report.yaml 로드 실패: %w", err)
+		return nil, fmt.Errorf("failed to load report.yaml: %w", err)
 	}
 
-	// alert.yaml 로드 — 없으면 기본값 유지
+	// Load alert.yaml — keep defaults if absent
 	alertCfgPath := configDir + "/alert.yaml"
 	if _, err := os.Stat(alertCfgPath); err == nil {
 		if err := loadYAML(alertCfgPath, &cfg.Alert); err != nil {
-			return nil, fmt.Errorf("alert.yaml 로드 실패: %w", err)
+			return nil, fmt.Errorf("failed to load alert.yaml: %w", err)
 		}
 	}
 

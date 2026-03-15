@@ -54,7 +54,7 @@ type symbolReport struct {
 // Generate builds and sends the daily report for the given date.
 func (r *DailyReporter) Generate(ctx context.Context, cfg appconfig.DailyReportConfig, date time.Time) error {
 	if len(r.stockSyms) == 0 {
-		r.log.Info().Msg("일일 리포트: 주식 종목 없음 — 스킵")
+		r.log.Info().Msg("daily report: no stock symbols — skipping")
 		return nil
 	}
 
@@ -66,7 +66,7 @@ func (r *DailyReporter) Generate(ctx context.Context, cfg appconfig.DailyReportC
 		// 신호 조회
 		sigs, err := r.store.GetSignalsByDate(sym, date)
 		if err != nil {
-			r.log.Warn().Err(err).Str("symbol", sym).Msg("신호 조회 실패")
+			r.log.Warn().Err(err).Str("symbol", sym).Msg("failed to fetch signals")
 		} else {
 			sr.signals = sigs
 		}
@@ -74,7 +74,7 @@ func (r *DailyReporter) Generate(ctx context.Context, cfg appconfig.DailyReportC
 		// OHLCV 조회 (최근 2개: 오늘 + 전날)
 		bars, err := r.store.GetOHLCV(sym, "1D", 2)
 		if err != nil || len(bars) == 0 {
-			r.log.Warn().Err(err).Str("symbol", sym).Msg("OHLCV 조회 실패 — graceful skip")
+			r.log.Warn().Err(err).Str("symbol", sym).Msg("OHLCV fetch failed — graceful skip")
 		} else {
 			sr.hasOHLCV = true
 			sr.closePrice = bars[0].Close // DESC 순서이므로 첫 번째가 가장 최근
@@ -98,7 +98,7 @@ func (r *DailyReporter) Generate(ctx context.Context, cfg appconfig.DailyReportC
 			}
 		}
 		if !hasAny {
-			r.log.Info().Msg("일일 리포트: 신호 없음 — only_if_signals=true로 스킵")
+			r.log.Info().Msg("daily report: no signals — skipping (only_if_signals=true)")
 			return nil
 		}
 	}
@@ -120,7 +120,7 @@ func (r *DailyReporter) Generate(ctx context.Context, cfg appconfig.DailyReportC
 		Str("date", date.Format("2006-01-02")).
 		Int("symbols", len(reports)).
 		Int("chunks", len(chunks)).
-		Msg("일일 리포트 발송 완료")
+		Msg("daily report sent")
 
 	return nil
 }
@@ -130,8 +130,8 @@ func buildNormalMessage(reports []symbolReport, date time.Time, cfg appconfig.Da
 	var sb strings.Builder
 
 	dateStr := date.Format("2006-01-02")
-	sb.WriteString(fmt.Sprintf("📅 *일일 리포트 — %s*\n", dateStr))
-	sb.WriteString("미국 주식 종가 기준 | KST " + cfg.Time + "\n\n")
+	sb.WriteString(fmt.Sprintf("📅 *Daily Report — %s*\n", dateStr))
+	sb.WriteString("US stock closing prices | " + cfg.Time + " local\n\n")
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━\n")
 
 	bullTotal := 0
@@ -147,12 +147,12 @@ func buildNormalMessage(reports []symbolReport, date time.Time, cfg appconfig.Da
 			// 가격 변동
 			priceStr := formatPriceChange(sr)
 			sb.WriteString(fmt.Sprintf("%s *%s* %s\n", dirEmoji, sr.symbol, priceStr))
-			sb.WriteString(fmt.Sprintf("  신호: 🟢 BULL ×%d / 🔴 BEAR ×%d\n", bullCount, bearCount))
+			sb.WriteString(fmt.Sprintf("  Signals: 🟢 BULL ×%d / 🔴 BEAR ×%d\n", bullCount, bearCount))
 
 			// 최강 신호
 			best := bestSignal(sr.signals)
 			if best != nil {
-				sb.WriteString(fmt.Sprintf("  최강: %s (Score %.1f)\n", best.Rule, best.Score))
+				sb.WriteString(fmt.Sprintf("  Best: %s (Score %.1f)\n", best.Rule, best.Score))
 			}
 			sb.WriteString("\n─────────────────────\n")
 
@@ -165,14 +165,14 @@ func buildNormalMessage(reports []symbolReport, date time.Time, cfg appconfig.Da
 			}
 		} else {
 			maxScore := maxSignalScore(sr.signals)
-			sb.WriteString(fmt.Sprintf("\n%s *%s*  무신호 (Score 최대 %.1f)\n", dirEmoji, sr.symbol, maxScore))
+			sb.WriteString(fmt.Sprintf("\n%s *%s*  no signal (max score %.1f)\n", dirEmoji, sr.symbol, maxScore))
 			neutralTotal++
 		}
 	}
 
 	sb.WriteString("\n━━━━━━━━━━━━━━━━━━━━\n")
-	sb.WriteString(fmt.Sprintf("📊 요약: BULL %d / NEUTRAL %d\n", bullTotal, neutralTotal))
-	sb.WriteString("⚙️ Chartter | 다음 리포트: 내일 " + cfg.Time)
+	sb.WriteString(fmt.Sprintf("📊 Summary: BULL %d / NEUTRAL %d\n", bullTotal, neutralTotal))
+	sb.WriteString("⚙️ Chartter | Next report: tomorrow " + cfg.Time)
 
 	_ = bearTotal
 	return sb.String()
@@ -183,7 +183,7 @@ func buildCompactMessage(reports []symbolReport, date time.Time) string {
 	var sb strings.Builder
 
 	dateStr := date.Format("2006-01-02")
-	sb.WriteString(fmt.Sprintf("📅 일일 리포트 — %s\n", dateStr))
+	sb.WriteString(fmt.Sprintf("📅 Daily Report — %s\n", dateStr))
 
 	for _, sr := range reports {
 		bullCount, bearCount := countDirections(sr.signals)
@@ -202,7 +202,7 @@ func buildCompactMessage(reports []symbolReport, date time.Time) string {
 
 		pctStr := fmt.Sprintf("%+.1f%%", pct)
 		if len(sr.signals) == 0 {
-			sb.WriteString(fmt.Sprintf("%s %s%s ⚪ 무신호\n", sr.symbol, priceArrow, pctStr))
+			sb.WriteString(fmt.Sprintf("%s %s%s ⚪ no signal\n", sr.symbol, priceArrow, pctStr))
 		} else {
 			sb.WriteString(fmt.Sprintf("%s %s%s 🟢×%d 🔴×%d\n", sr.symbol, priceArrow, pctStr, bullCount, bearCount))
 		}
@@ -272,7 +272,7 @@ func directionEmoji(bull, bear int) string {
 // formatPriceChange returns "+1.8% ($214.50)" or similar.
 func formatPriceChange(sr symbolReport) string {
 	if !sr.hasOHLCV {
-		return "(데이터 없음)"
+		return "(no data)"
 	}
 	pct := 0.0
 	if sr.prevClose > 0 {

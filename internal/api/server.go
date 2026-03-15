@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,8 +15,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/backtest"
+	"github.com/Ju571nK/Chatter/internal/storage"
+	"github.com/Ju571nK/Chatter/internal/history"
+	"github.com/Ju571nK/Chatter/internal/indicator"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pinescript"
 	"github.com/Ju571nK/Chatter/pkg/models"
@@ -91,6 +97,25 @@ type ChartStore interface {
 	GetSignalsFiltered(symbol, direction string, limit int) ([]models.Signal, error)
 }
 
+// FullStore extends ChartStore with full OHLCV history and analysis persistence.
+type FullStore interface {
+	ChartStore
+	GetOHLCVAll(symbol, timeframe string) ([]models.OHLCV, error)
+	SaveAnalysis(result analyst.ScenarioResult) (int64, error)
+	GetAnalysisHistory(symbol string, limit int) ([]storage.AnalysisRecord, error)
+	GetAnalysisByID(id int64) (*storage.AnalysisRecord, error)
+}
+
+// AnalystDirector runs multi-analyst AI analysis.
+type AnalystDirector interface {
+	Analyze(ctx context.Context, input analyst.AnalystInput) analyst.ScenarioResult
+}
+
+// Announcer sends plain-text messages to all configured notification backends.
+type Announcer interface {
+	Announce(ctx context.Context, text string)
+}
+
 // BacktestRunner executes a backtest and returns the result.
 // *backtest.Runner satisfies this interface.
 type BacktestRunner interface {
@@ -116,16 +141,19 @@ type ReportScheduler interface {
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
-	configDir      string
-	static         http.Handler                   // nil when webDist is absent or not built yet
-	chartStore     ChartStore                     // optional; set via WithChartStore
-	backtestRunner BacktestRunner                 // optional; set via WithBacktestRunner
-	paperStore     PaperStore                     // optional; set via WithPaperStore
-	reportSched    ReportScheduler                // optional; set via WithReportScheduler
-	alertHolder    *appconfig.AlertConfigHolder   // optional; set via WithAlertConfigHolder
-	startTime      time.Time                      // server start timestamp for uptime
-	dataSources    []string                       // active data sources (e.g. ["Binance","Tiingo"])
-	mu             sync.RWMutex
+	configDir        string
+	static           http.Handler                   // nil when webDist is absent or not built yet
+	chartStore       ChartStore                     // optional; set via WithChartStore
+	backtestRunner   BacktestRunner                 // optional; set via WithBacktestRunner
+	paperStore       PaperStore                     // optional; set via WithPaperStore
+	reportSched      ReportScheduler                // optional; set via WithReportScheduler
+	alertHolder      *appconfig.AlertConfigHolder   // optional; set via WithAlertConfigHolder
+	fullStore        FullStore                      // optional; set via WithFullStore
+	analystDirector  AnalystDirector                // optional; set via WithAnalystDirector
+	announcer        Announcer                      // optional; set via WithAnnouncer
+	startTime        time.Time                      // server start timestamp for uptime
+	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
+	mu               sync.RWMutex
 }
 
 // New creates a Server.
@@ -169,6 +197,21 @@ func (s *Server) WithReportScheduler(rs ReportScheduler) {
 // WithAlertConfigHolder wires an optional live-updated alert configuration holder.
 func (s *Server) WithAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 	s.alertHolder = h
+}
+
+// WithFullStore wires the full OHLCV store for the analysis endpoint.
+func (s *Server) WithFullStore(fs FullStore) {
+	s.fullStore = fs
+}
+
+// WithAnalystDirector wires the multi-analyst AI director for the analysis endpoint.
+func (s *Server) WithAnalystDirector(d AnalystDirector) {
+	s.analystDirector = d
+}
+
+// WithAnnouncer wires a notification backend for Telegram export.
+func (s *Server) WithAnnouncer(a Announcer) {
+	s.announcer = a
 }
 
 // Handler returns the fully configured http.Handler for the server.
@@ -219,6 +262,12 @@ func (s *Server) Handler() http.Handler {
 	// Alert config
 	mux.HandleFunc("GET /api/alert/config", s.getAlertConfig)
 	mux.HandleFunc("PUT /api/alert/config", s.updateAlertConfig)
+
+	// Multi-analyst full analysis
+	mux.HandleFunc("POST /api/analysis/full", s.runFullAnalysis)
+	mux.HandleFunc("POST /api/analysis/export", s.runAnalysisExport)
+	mux.HandleFunc("GET /api/analysis/history", s.getAnalysisHistory)
+	mux.HandleFunc("GET /api/analysis/history/{id}", s.getAnalysisDetail)
 
 	// Static frontend (SPA)
 	if s.static != nil {
@@ -857,11 +906,11 @@ func (s *Server) readReportConfigLocked() (appconfig.DailyReportConfig, error) {
 		if os.IsNotExist(err) {
 			return cfg, nil
 		}
-		return cfg, fmt.Errorf("report.yaml 읽기 실패: %w", err)
+		return cfg, fmt.Errorf("failed to read report.yaml: %w", err)
 	}
 	defer f.Close()
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
-		return cfg, fmt.Errorf("report.yaml 파싱 실패: %w", err)
+		return cfg, fmt.Errorf("failed to parse report.yaml: %w", err)
 	}
 	return cfg, nil
 }
@@ -870,7 +919,7 @@ func (s *Server) readReportConfigLocked() (appconfig.DailyReportConfig, error) {
 func (s *Server) writeReportConfigLocked(cfg appconfig.DailyReportConfig) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("report 직렬화 실패: %w", err)
+		return fmt.Errorf("failed to marshal report config: %w", err)
 	}
 	return os.WriteFile(s.reportCfgFile(), data, 0o644)
 }
@@ -944,7 +993,7 @@ func (s *Server) readWatchlistLocked() (appconfig.WatchlistConfig, error) {
 	var wl appconfig.WatchlistConfig
 	f, err := os.Open(s.configDir + "/watchlist.yaml")
 	if err != nil {
-		return wl, fmt.Errorf("watchlist 읽기 실패: %w", err)
+		return wl, fmt.Errorf("failed to read watchlist: %w", err)
 	}
 	defer f.Close()
 	return wl, yaml.NewDecoder(f).Decode(&wl)
@@ -954,7 +1003,7 @@ func (s *Server) readWatchlistLocked() (appconfig.WatchlistConfig, error) {
 func (s *Server) writeWatchlistLocked(wl appconfig.WatchlistConfig) error {
 	data, err := yaml.Marshal(wl)
 	if err != nil {
-		return fmt.Errorf("watchlist 직렬화 실패: %w", err)
+		return fmt.Errorf("failed to marshal watchlist: %w", err)
 	}
 	return os.WriteFile(s.configDir+"/watchlist.yaml", data, 0o644)
 }
@@ -971,7 +1020,7 @@ func (s *Server) readRulesLocked() (appconfig.RulesConfig, error) {
 	var rc appconfig.RulesConfig
 	f, err := os.Open(s.configDir + "/rules.yaml")
 	if err != nil {
-		return rc, fmt.Errorf("rules 읽기 실패: %w", err)
+		return rc, fmt.Errorf("failed to read rules: %w", err)
 	}
 	defer f.Close()
 	return rc, yaml.NewDecoder(f).Decode(&rc)
@@ -981,7 +1030,7 @@ func (s *Server) readRulesLocked() (appconfig.RulesConfig, error) {
 func (s *Server) writeRulesLocked(rc appconfig.RulesConfig) error {
 	data, err := yaml.Marshal(rc)
 	if err != nil {
-		return fmt.Errorf("rules 직렬화 실패: %w", err)
+		return fmt.Errorf("failed to marshal rules: %w", err)
 	}
 	return os.WriteFile(s.configDir+"/rules.yaml", data, 0o644)
 }
@@ -996,11 +1045,11 @@ func configWriteErrorMessage(err error) string {
 		return ""
 	}
 	if os.IsPermission(err) || errors.Is(err, fs.ErrPermission) {
-		return "config 디렉터리에 쓸 수 없습니다 (권한 없음). Docker에서 config 볼륨이 읽기 전용(:ro)이 아닌지 확인하세요."
+		return "cannot write to config directory (permission denied). Check that the config volume is not read-only (:ro) in Docker."
 	}
 	var errno *syscall.Errno
 	if errors.As(err, &errno) && *errno == syscall.EROFS {
-		return "config 디렉터리가 읽기 전용입니다. Docker config 볼륨에서 :ro 를 제거하세요."
+		return "config directory is read-only. Remove :ro from the Docker config volume."
 	}
 	return err.Error()
 }
@@ -1034,6 +1083,185 @@ func (s *Server) exportPineScript(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(script))
+}
+
+// runFullAnalysis handles POST /api/analysis/full.
+// Request body: {"symbol":"SPY","timeframe":"1D"}
+// Fetches full OHLCV history, builds a history summary, computes indicators across
+// all timeframes, and runs the multi-analyst AI analysis, returning a ScenarioResult.
+func (s *Server) runFullAnalysis(w http.ResponseWriter, r *http.Request) {
+	if s.fullStore == nil || s.analystDirector == nil {
+		http.Error(w, "full analysis not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Symbol    string `json:"symbol"`
+		Timeframe string `json:"timeframe"`
+		Language  string `json:"language"` // "en" | "ko" | "ja"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Symbol == "" {
+		http.Error(w, "symbol is required", http.StatusBadRequest)
+		return
+	}
+	if req.Timeframe == "" {
+		req.Timeframe = "1D"
+	}
+
+	// Fetch full daily OHLCV history for history summary
+	bars, err := s.fullStore.GetOHLCVAll(req.Symbol, "1D")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("OHLCV fetch failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Build history summary (~600 tokens)
+	summarizer := history.New()
+	historySummary := summarizer.Summarize(req.Symbol, bars)
+
+	// Fetch recent bars for each timeframe and compute indicators
+	tfList := []string{"1H", "4H", "1D", "1W"}
+	tfBars := make(map[string][]models.OHLCV, len(tfList))
+	for _, tf := range tfList {
+		tfData, err := s.fullStore.GetOHLCV(req.Symbol, tf, 200)
+		if err != nil {
+			continue
+		}
+		// GetOHLCV returns DESC; reverse to ASC for indicator computation
+		for i, j := 0, len(tfData)-1; i < j; i, j = i+1, j-1 {
+			tfData[i], tfData[j] = tfData[j], tfData[i]
+		}
+		tfBars[tf] = tfData
+	}
+	recentIndicators := indicator.Compute(tfBars)
+
+	// Fetch recent signals and format as text
+	sigs, err := s.fullStore.GetSignals(req.Symbol, 20)
+	var ruleSignalText string
+	if err == nil && len(sigs) > 0 {
+		var sb strings.Builder
+		for _, sig := range sigs {
+			sb.WriteString(fmt.Sprintf("[%s] %s %s (score:%.1f) %s\n",
+				sig.CreatedAt.Format("2006-01-02"),
+				sig.Timeframe, sig.Direction, sig.Score, sig.Rule))
+		}
+		ruleSignalText = sb.String()
+	}
+
+	// Fetch SPY as S&P 500 macro backdrop for all non-SPY symbols.
+	// Provides market cycle context that helps all three analysts judge
+	// whether the target symbol is trading with or against the broad market.
+	var macroContext string
+	if req.Symbol != "SPY" && req.Symbol != "^GSPC" {
+		if spyBars, err := s.fullStore.GetOHLCVAll("SPY", "1D"); err == nil && len(spyBars) > 0 {
+			macroContext = summarizer.Summarize("SPY", spyBars)
+		}
+	}
+
+	input := analyst.AnalystInput{
+		Symbol:           req.Symbol,
+		HistorySummary:   historySummary,
+		MacroContext:     macroContext,
+		RecentIndicators: recentIndicators,
+		RuleSignalText:   ruleSignalText,
+		Language:         req.Language,
+	}
+
+	result := s.analystDirector.Analyze(r.Context(), input)
+
+	// Save result to DB
+	if id, err := s.fullStore.SaveAnalysis(result); err != nil {
+		log.Warn().Err(err).Msg("failed to save analysis result")
+	} else {
+		result.ID = id
+	}
+
+	jsonOK(w, result)
+}
+
+// getAnalysisHistory handles GET /api/analysis/history?symbol=SPY&limit=20
+func (s *Server) getAnalysisHistory(w http.ResponseWriter, r *http.Request) {
+	if s.fullStore == nil {
+		http.Error(w, "store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	symbol := r.URL.Query().Get("symbol")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	records, err := s.fullStore.GetAnalysisHistory(symbol, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if records == nil {
+		records = []storage.AnalysisRecord{}
+	}
+	jsonOK(w, records)
+}
+
+// getAnalysisDetail handles GET /api/analysis/history/{id}
+func (s *Server) getAnalysisDetail(w http.ResponseWriter, r *http.Request) {
+	if s.fullStore == nil {
+		http.Error(w, "store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	record, err := s.fullStore.GetAnalysisByID(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	jsonOK(w, record)
+}
+
+// runAnalysisExport handles POST /api/analysis/export.
+// Formats the ScenarioResult as an HTML message and sends it via Telegram.
+func (s *Server) runAnalysisExport(w http.ResponseWriter, r *http.Request) {
+	if s.announcer == nil {
+		http.Error(w, "telegram not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Result analyst.ScenarioResult `json:"result"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	res := req.Result
+	finalEmoji := map[string]string{"BULL": "🟢", "BEAR": "🔴", "SIDEWAYS": "🟡"}[res.Final]
+	confColor := map[string]string{"HIGH": "🔵", "MEDIUM": "🟣", "LOW": "⚪"}[res.Confidence]
+
+	msg := fmt.Sprintf(
+		"📊 <b>%s Analysis Result</b>\n\n"+
+			"%s <b>%s</b> | %s %s\n\n"+
+			"📈 BULL: <b>%.1f%%</b>\n"+
+			"📉 BEAR: <b>%.1f%%</b>\n"+
+			"➡️ SIDEWAYS: <b>%.1f%%</b>\n\n"+
+			"<i>%s</i>",
+		res.Symbol,
+		finalEmoji, res.Final, confColor, res.Confidence,
+		res.BullPct, res.BearPct, res.SidewaysPct,
+		res.AggregatorReason,
+	)
+
+	s.announcer.Announce(r.Context(), msg)
+	jsonOK(w, map[string]string{"status": "sent"})
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.

@@ -20,7 +20,7 @@ const (
 	binanceWSBase    = "wss://stream.binance.com:9443/stream"
 	binanceRESTBase  = "https://api.binance.com/api/v3/klines"
 	binanceReconnect = 5 * time.Second
-	binanceHistLimit = 500 // 시작 시 미리 가져올 과거 봉 수
+	binanceHistLimit = 500 // historical bars to pre-fetch on startup
 )
 
 // BinanceCollector subscribes to Binance kline WebSocket streams
@@ -48,7 +48,7 @@ func (c *BinanceCollector) Start(ctx context.Context) {
 	log.Info().
 		Str("url", streamURL).
 		Strs("symbols", c.symbols).
-		Msg("[Binance] 수집기 시작")
+		Msg("[Binance] collector started")
 
 	// ── 과거 데이터 선행 수집 (REST) ─────────────────────────────────
 	c.fetchHistory()
@@ -56,13 +56,13 @@ func (c *BinanceCollector) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info().Msg("[Binance] 수집기 종료")
+			log.Info().Msg("[Binance] collector stopped")
 			return
 		default:
 			if err := c.connect(ctx, streamURL); err != nil {
 				log.Error().Err(err).
 					Dur("retry_in", binanceReconnect).
-					Msg("[Binance] 연결 오류, 재접속 대기 중")
+					Msg("[Binance] connection error, waiting to reconnect")
 				select {
 				case <-ctx.Done():
 					return
@@ -77,11 +77,11 @@ func (c *BinanceCollector) Start(ctx context.Context) {
 func (c *BinanceCollector) connect(ctx context.Context, url string) error {
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, url, nil)
 	if err != nil {
-		return fmt.Errorf("WebSocket 연결 실패: %w", err)
+		return fmt.Errorf("WebSocket connection failed: %w", err)
 	}
 	defer conn.Close()
 
-	log.Info().Msg("[Binance] WebSocket 연결됨")
+	log.Info().Msg("[Binance] WebSocket connected")
 
 	// ping 타임아웃 설정
 	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -113,12 +113,12 @@ func (c *BinanceCollector) connect(ctx context.Context, url string) error {
 		default:
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				return fmt.Errorf("메시지 수신 오류: %w", err)
+				return fmt.Errorf("message read error: %w", err)
 			}
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 
 			if err := c.handleMessage(msg); err != nil {
-				log.Warn().Err(err).Msg("[Binance] 메시지 처리 오류")
+				log.Warn().Err(err).Msg("[Binance] message processing error")
 			}
 		}
 	}
@@ -160,7 +160,7 @@ type binanceKline struct {
 	Low       flexStr `json:"l"`
 	Close     flexStr `json:"c"`
 	Volume    flexStr `json:"v"`
-	IsClosed  bool    `json:"x"` // true = 캔들 확정
+	IsClosed  bool    `json:"x"` // true = candle closed
 }
 
 func (c *BinanceCollector) handleMessage(raw []byte) error {
@@ -170,7 +170,7 @@ func (c *BinanceCollector) handleMessage(raw []byte) error {
 	}
 
 	k := msg.Data.Kline
-	// 확정된 캔들만 저장
+	// only save closed candles
 	if !k.IsClosed {
 		return nil
 	}
@@ -196,7 +196,7 @@ func (c *BinanceCollector) handleMessage(raw []byte) error {
 		Str("tf", bar.Timeframe).
 		Time("open_time", bar.OpenTime).
 		Float64("close", bar.Close).
-		Msg("[Binance] 캔들 저장")
+		Msg("[Binance] candle saved")
 
 	return nil
 }
@@ -251,15 +251,15 @@ func (c *BinanceCollector) fetchHistory() {
 			bars, err := fetchBinanceKlines(client, sym, interval, binanceHistLimit)
 			if err != nil {
 				log.Warn().Err(err).Str("symbol", sym).Str("tf", tf).
-					Msg("[Binance] 과거 데이터 수집 실패 — WebSocket으로 계속 진행")
+					Msg("[Binance] historical data fetch failed — continuing with WebSocket")
 				continue
 			}
 			if err := c.db.SaveOHLCVBatch(bars, "binance"); err != nil {
-				log.Warn().Err(err).Msg("[Binance] 과거 데이터 저장 실패")
+				log.Warn().Err(err).Msg("[Binance] historical data save failed")
 				continue
 			}
 			log.Debug().Str("symbol", sym).Str("tf", tf).Int("bars", len(bars)).
-				Msg("[Binance] 과거 데이터 저장 완료")
+				Msg("[Binance] historical data saved")
 		}
 	}
 }
@@ -271,7 +271,7 @@ func fetchBinanceKlines(client *http.Client, symbol, interval string, limit int)
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("REST 요청 실패: %w", err)
+		return nil, fmt.Errorf("REST request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -284,7 +284,7 @@ func fetchBinanceKlines(client *http.Client, symbol, interval string, limit int)
 	// [openTime, open, high, low, close, volume, closeTime, ...]
 	var raw [][]json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("JSON 파싱 실패: %w", err)
+		return nil, fmt.Errorf("JSON parse failed: %w", err)
 	}
 
 	tf := binanceIntervalToTF(interval)
@@ -305,7 +305,7 @@ func fetchBinanceKlines(client *http.Client, symbol, interval string, limit int)
 		close_ := parseRawFloat(row[4])
 		vol := parseRawFloat(row[5])
 		if close_ == 0 {
-			continue // 미완성 캔들 스킵
+			continue // skip incomplete candle
 		}
 		bars = append(bars, models.OHLCV{
 			Symbol:    sym,

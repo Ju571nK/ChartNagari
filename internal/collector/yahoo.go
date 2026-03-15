@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	// Yahoo Finance v8 chart API — 공개 엔드포인트 (인증 불필요)
+	// Yahoo Finance v8 chart API — public endpoint (no auth required)
 	yahooChartURL = "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=%s&range=%s"
 
-	// 장중 시간 (NYSE 기준, UTC)
+	// NYSE trading hours (UTC)
 	marketOpenUTC  = 14*60 + 30 // 14:30 UTC = 09:30 EST
 	marketCloseUTC = 21 * 60    // 21:00 UTC = 16:00 EST
 )
@@ -51,9 +51,9 @@ func (c *YahooCollector) Start(ctx context.Context) {
 	log.Info().
 		Strs("symbols", c.symbols).
 		Dur("poll_interval", c.pollInterval).
-		Msg("[Yahoo] 수집기 시작")
+		Msg("[Yahoo] collector started")
 
-	// 최초 즉시 실행
+	// initial fetch
 	c.fetchAll()
 
 	ticker := time.NewTicker(c.pollInterval)
@@ -62,12 +62,12 @@ func (c *YahooCollector) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info().Msg("[Yahoo] 수집기 종료")
+			log.Info().Msg("[Yahoo] collector stopped")
 			return
 		case <-ticker.C:
-			// 장외 시간이면 1D/1W만 폴링
+			// outside market hours — poll daily/weekly only
 			if !isMarketOpen() {
-				log.Debug().Msg("[Yahoo] 장외 시간 — 일봉/주봉만 폴링")
+				log.Debug().Msg("[Yahoo] outside market hours — polling daily/weekly only")
 				c.fetchForTimeframes([]string{"1D", "1W"})
 				continue
 			}
@@ -88,34 +88,34 @@ func (c *YahooCollector) fetchForTimeframes(timeframes []string) {
 				log.Error().Err(err).
 					Str("symbol", sym).
 					Str("tf", tf).
-					Msg("[Yahoo] 데이터 수집 실패")
+					Msg("[Yahoo] data fetch failed")
 				continue
 			}
 			if err := c.db.SaveOHLCVBatch(bars, "yahoo"); err != nil {
-				log.Error().Err(err).Msg("[Yahoo] 저장 실패")
+				log.Error().Err(err).Msg("[Yahoo] save failed")
 				continue
 			}
 			log.Debug().
 				Str("symbol", sym).
 				Str("tf", tf).
 				Int("bars", len(bars)).
-				Msg("[Yahoo] 데이터 저장 완료")
+				Msg("[Yahoo] data saved")
 		}
 	}
 }
 
 // yahooTFParams maps our TF keys to Yahoo interval + range query params.
 var yahooTFParams = map[string][2]string{
-	"1H": {"1h", "5d"},   // 최근 5일 1시간봉
-	"4H": {"1h", "30d"},  // 최근 30일 → 4H로 재구성
-	"1D": {"1d", "60d"},  // 최근 60일 일봉
-	"1W": {"1wk", "2y"},  // 최근 2년 주봉
+	"1H": {"1h", "5d"},   // last 5 days 1-hour bars
+	"4H": {"1h", "30d"},  // last 30 days → rebuilt to 4H
+	"1D": {"1d", "60d"},  // last 60 days daily
+	"1W": {"1wk", "2y"},  // last 2 years weekly
 }
 
 func (c *YahooCollector) fetchOHLCV(symbol, tf string) ([]models.OHLCV, error) {
 	params, ok := yahooTFParams[tf]
 	if !ok {
-		return nil, fmt.Errorf("지원하지 않는 타임프레임: %s", tf)
+		return nil, fmt.Errorf("unsupported timeframe: %s", tf)
 	}
 
 	url := fmt.Sprintf(yahooChartURL, symbol, params[0], params[1])
@@ -123,13 +123,13 @@ func (c *YahooCollector) fetchOHLCV(symbol, tf string) ([]models.OHLCV, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Yahoo는 브라우저 User-Agent를 선호
+	// Yahoo prefers browser User-Agent
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP 요청 실패: %w", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -166,36 +166,36 @@ type yahooChartResponse struct {
 func parseYahooResponse(symbol, tf string, body io.Reader) ([]models.OHLCV, error) {
 	var raw yahooChartResponse
 	if err := json.NewDecoder(body).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("JSON 파싱 실패: %w", err)
+		return nil, fmt.Errorf("JSON parse failed: %w", err)
 	}
 
 	if raw.Chart.Error != nil {
-		return nil, fmt.Errorf("Yahoo API 오류 [%s]: %s",
+		return nil, fmt.Errorf("Yahoo API error [%s]: %s",
 			raw.Chart.Error.Code, raw.Chart.Error.Description)
 	}
 
 	if len(raw.Chart.Result) == 0 {
-		return nil, fmt.Errorf("결과 없음: %s %s", symbol, tf)
+		return nil, fmt.Errorf("no results: %s %s", symbol, tf)
 	}
 
 	res := raw.Chart.Result[0]
 	if len(res.Indicators.Quote) == 0 {
-		return nil, fmt.Errorf("Quote 데이터 없음: %s", symbol)
+		return nil, fmt.Errorf("no quote data: %s", symbol)
 	}
 
 	quote := res.Indicators.Quote[0]
 	n := len(res.Timestamps)
 
-	// 4H는 1H 데이터를 재구성
+	// 4H is rebuilt from 1H data
 	internalTF := tf
 	if tf == "4H" {
-		internalTF = "1H" // 우선 1H로 저장 후 재구성
+		internalTF = "1H" // save as 1H first, then rebuild
 	}
 
 	var bars []models.OHLCV
 	for i := 0; i < n; i++ {
 		if i >= len(quote.Close) || quote.Close[i] == 0 {
-			continue // 결측값 스킵
+			continue // skip missing values
 		}
 		bars = append(bars, models.OHLCV{
 			Symbol:    strings.ToUpper(symbol),
@@ -209,7 +209,7 @@ func parseYahooResponse(symbol, tf string, body io.Reader) ([]models.OHLCV, erro
 		})
 	}
 
-	// 4H 재구성
+	// 4H rebuild
 	if tf == "4H" && len(bars) > 0 {
 		rebuilt := RebuildHigherTF(symbol, bars)
 		return rebuilt["4H"], nil

@@ -47,7 +47,7 @@ type Config struct {
 	Lookback        int           // bars to load per TF (default: 200)
 	SignalMinScore  float64       // minimum score to persist a signal to DB (default: 5.0)
 	SignalCooldown  time.Duration // minimum gap between saves for same symbol+rule (default: 4h)
-	MTFConsensusMin int           // ≥2 시 방향 합의 필터 활성. 1=비활성(기존 동작). 기본값 2
+	MTFConsensusMin int           // ≥2 enables direction consensus filter. 1=disabled (legacy). Default 2
 }
 
 // DefaultConfig returns sensible production defaults.
@@ -161,9 +161,9 @@ func (p *Pipeline) runOnce(ctx context.Context) {
 	isOpen := market.IsUSMarketOpen(time.Now())
 	if isOpen != p.marketOpen {
 		if isOpen {
-			p.log.Info().Msg("미국 장 개장 — 주식 분석 시작")
+			p.log.Info().Msg("US market opened — stock analysis started")
 		} else {
-			p.log.Info().Msg("미국 장 마감 — 주식 분석 중단")
+			p.log.Info().Msg("US market closed — stock analysis paused")
 		}
 		p.marketOpen = isOpen
 	}
@@ -182,7 +182,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	for _, tf := range p.timeframes {
 		bars, err := p.db.GetOHLCV(sym, tf, p.cfg.Lookback)
 		if err != nil {
-			p.log.Error().Err(err).Str("symbol", sym).Str("tf", tf).Msg("OHLCV 로드 실패")
+			p.log.Error().Err(err).Str("symbol", sym).Str("tf", tf).Msg("OHLCV load failed")
 			continue
 		}
 		if len(bars) > 0 {
@@ -191,7 +191,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 
 	if len(allBars) == 0 {
-		p.log.Debug().Str("symbol", sym).Msg("OHLCV 데이터 없음 — 분석 스킵")
+		p.log.Debug().Str("symbol", sym).Msg("no OHLCV data — skipping analysis")
 		return
 	}
 
@@ -207,7 +207,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	signals := p.eng.Run(analysisCtx)
 
 	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
-	// TP/SL 배율 결정 (코인/주식 분리)
+	// Determine TP/SL multipliers (crypto vs stock)
 	tpMult, slMult := 2.0, 1.0
 	if p.alertHolder != nil {
 		ac := p.alertHolder.Get()
@@ -235,7 +235,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	if mtfMin > 1 {
 		signals = filterMTFConsensus(signals, mtfMin)
 		if len(signals) == 0 {
-			p.log.Debug().Str("symbol", sym).Int("mtf_min", mtfMin).Msg("MTF 합의 미달 — 신호 필터링")
+			p.log.Debug().Str("symbol", sym).Int("mtf_min", mtfMin).Msg("MTF consensus not met — signals filtered")
 			return
 		}
 	}
@@ -247,7 +247,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 
 	if len(signals) == 0 {
-		p.log.Debug().Str("symbol", sym).Msg("신호 없음")
+		p.log.Debug().Str("symbol", sym).Msg("no signals")
 		return
 	}
 
@@ -255,7 +255,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		Str("symbol", sym).
 		Int("signals", len(signals)).
 		Float64("top_score", signals[0].Score).
-		Msg("신호 감지")
+		Msg("signals detected")
 
 	// AI enrichment: Claude interprets high-scoring signal groups.
 	group := interpreter.SignalGroup{
@@ -284,7 +284,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 				continue
 			}
 			if err := p.sigSaver.SaveSignal(sig); err != nil {
-				p.log.Warn().Err(err).Str("symbol", sym).Msg("신호 저장 실패")
+				p.log.Warn().Err(err).Str("symbol", sym).Msg("signal save failed")
 			}
 		}
 	}

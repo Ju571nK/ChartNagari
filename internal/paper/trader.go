@@ -97,7 +97,7 @@ func (t *Trader) OnSignals(signals []models.Signal) {
 		}
 		id, err := t.store.SavePaperPosition(pos)
 		if err != nil {
-			t.log.Error().Err(err).Str("symbol", sig.Symbol).Msg("[Paper] 포지션 저장 실패")
+			t.log.Error().Err(err).Str("symbol", sig.Symbol).Msg("[Paper] position save failed")
 			continue
 		}
 		openBySymbol[sig.Symbol] = true
@@ -109,7 +109,7 @@ func (t *Trader) OnSignals(signals []models.Signal) {
 			Float64("entry", sig.EntryPrice).
 			Float64("tp", sig.TP).
 			Float64("sl", sig.SL).
-			Msg("[Paper] 포지션 오픈")
+			Msg("[Paper] position opened")
 	}
 }
 
@@ -152,7 +152,7 @@ func (t *Trader) CheckPositions(sym string, allBars map[string][]models.OHLCV) {
 				pnlPct = (pos.EntryPrice - exitPrice) / pos.EntryPrice * 100
 			}
 			if err := t.store.ClosePaperPosition(pos.ID, exitPrice, status, pnlPct); err != nil {
-				t.log.Error().Err(err).Int64("id", pos.ID).Msg("[Paper] 포지션 청산 실패")
+				t.log.Error().Err(err).Int64("id", pos.ID).Msg("[Paper] position close failed")
 				continue
 			}
 			t.log.Info().
@@ -160,7 +160,7 @@ func (t *Trader) CheckPositions(sym string, allBars map[string][]models.OHLCV) {
 				Str("symbol", pos.Symbol).
 				Str("status", status).
 				Float64("pnl_pct", pnlPct).
-				Msg("[Paper] 포지션 청산")
+				Msg("[Paper] position closed")
 			break // position closed
 		}
 	}

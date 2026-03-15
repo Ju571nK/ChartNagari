@@ -49,7 +49,7 @@ func directionIcon(dir string) string {
 // When sig.AIInterpretation is set, it is appended as an italic paragraph.
 func formatTelegram(sig models.Signal) string {
 	text := fmt.Sprintf(
-		"%s <b>%s</b> — %s [%s]\n룰: %s\n스코어: %.2f\n%s",
+		"%s <b>%s</b> — %s [%s]\nRule: %s\nScore: %.2f\n%s",
 		directionIcon(sig.Direction),
 		sig.Direction,
 		sig.Symbol,
@@ -60,7 +60,7 @@ func formatTelegram(sig models.Signal) string {
 	)
 	if sig.EntryPrice > 0 {
 		text += fmt.Sprintf(
-			"\n💰 진입: <b>%s</b>  |  TP: <b>%s</b>  |  SL: <b>%s</b>",
+			"\n💰 Entry: <b>%s</b>  |  TP: <b>%s</b>  |  SL: <b>%s</b>",
 			fmtPrice(sig.EntryPrice), fmtPrice(sig.TP), fmtPrice(sig.SL),
 		)
 	}

@@ -20,9 +20,18 @@ const (
 	maxTokens = int64(800)
 )
 
-const systemPrompt = "당신은 ICT(Inner Circle Trader)와 Wyckoff 방법론을 전문으로 하는 " +
-	"숙련된 트레이더 겸 리스크 매니저입니다. 분석은 한국어로 작성하며, " +
-	"구체적인 가격 레벨과 리스크:보상 비율을 포함합니다."
+func interpreterSystemPrompt(lang string) string {
+	langInstr := map[string]string{
+		"ko": "Write the analysis in Korean.",
+		"ja": "Write the analysis in Japanese.",
+	}[lang]
+	if langInstr == "" {
+		langInstr = "Write the analysis in English."
+	}
+	return "You are an experienced trader and risk manager specializing in ICT (Inner Circle Trader) " +
+		"and Wyckoff methodology. " + langInstr + " " +
+		"Include specific price levels and risk:reward ratios."
+}
 
 // SignalGroup bundles all signals detected for a single symbol in one analysis cycle,
 // together with the flat indicator map used to build the AI prompt.
@@ -37,14 +46,16 @@ type SignalGroup struct {
 type Interpreter struct {
 	client   anthropic.Client
 	minScore float64 // minimum sum of group scores required to trigger an API call
+	language string
 	enabled  bool
 }
 
 // New creates an Interpreter.
 //   - apiKey: Anthropic API key; empty string disables enrichment.
 //   - minScore: minimum total signal score for a group to trigger an AI call.
+//   - language: output language ("en", "ko", "ja").
 //   - clientOpts: optional SDK options (e.g. option.WithBaseURL for tests).
-func New(apiKey string, minScore float64, clientOpts ...option.RequestOption) *Interpreter {
+func New(apiKey string, minScore float64, language string, clientOpts ...option.RequestOption) *Interpreter {
 	if apiKey == "" {
 		return &Interpreter{enabled: false}
 	}
@@ -52,6 +63,7 @@ func New(apiKey string, minScore float64, clientOpts ...option.RequestOption) *I
 	return &Interpreter{
 		client:   anthropic.NewClient(opts...),
 		minScore: minScore,
+		language: language,
 		enabled:  true,
 	}
 }
@@ -83,7 +95,7 @@ func (i *Interpreter) enrichGroup(ctx context.Context, g SignalGroup) []models.S
 		Model:     model,
 		MaxTokens: maxTokens,
 		System: []anthropic.TextBlockParam{
-			{Text: systemPrompt},
+			{Text: interpreterSystemPrompt(i.language)},
 		},
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
@@ -92,7 +104,7 @@ func (i *Interpreter) enrichGroup(ctx context.Context, g SignalGroup) []models.S
 
 	msg, err := i.client.Messages.New(ctx, params)
 	if err != nil {
-		// 1회 재시도: 2초 대기 후 재호출
+		// retry once after 2s
 		time.Sleep(2 * time.Second)
 		msg, err = i.client.Messages.New(ctx, params)
 		if err != nil {
@@ -114,7 +126,7 @@ func (i *Interpreter) enrichGroup(ctx context.Context, g SignalGroup) []models.S
 	return result
 }
 
-// buildPrompt constructs a Korean-language prompt with signal context and key indicators.
+// buildPrompt constructs a prompt with signal context and key indicators.
 func buildPrompt(g SignalGroup) string {
 	var sb strings.Builder
 
@@ -128,17 +140,17 @@ func buildPrompt(g SignalGroup) string {
 			shorts++
 		}
 	}
-	dominant := "혼재"
+	dominant := "mixed"
 	if longs > shorts {
-		dominant = "롱 우세"
+		dominant = "longs dominant"
 	} else if shorts > longs {
-		dominant = "숏 우세"
+		dominant = "shorts dominant"
 	}
-	sb.WriteString(fmt.Sprintf("## MTF 합류 분석: %s (LONG %d개 / SHORT %d개)\n\n", dominant, longs, shorts))
+	sb.WriteString(fmt.Sprintf("## MTF Confluence: %s (LONG %d / SHORT %d)\n\n", dominant, longs, shorts))
 
-	sb.WriteString(fmt.Sprintf("%s 차트에서 다음 신호가 감지되었습니다:\n\n", g.Symbol))
+	sb.WriteString(fmt.Sprintf("The following signals were detected on %s:\n\n", g.Symbol))
 	for _, s := range g.Signals {
-		sb.WriteString(fmt.Sprintf("- [%s] %s → %s (스코어: %.2f)\n  %s\n",
+		sb.WriteString(fmt.Sprintf("- [%s] %s → %s (score: %.2f)\n  %s\n",
 			s.Timeframe, s.Rule, s.Direction, s.Score, s.Message))
 		if s.EntryPrice > 0 && s.TP > 0 && s.SL > 0 {
 			var rr float64
@@ -153,7 +165,7 @@ func buildPrompt(g SignalGroup) string {
 					rr = (s.EntryPrice - s.TP) / risk
 				}
 			}
-			sb.WriteString(fmt.Sprintf("  진입: %.4f | TP: %.4f | SL: %.4f | R:R=1:%.2f\n",
+			sb.WriteString(fmt.Sprintf("  Entry: %.4f | TP: %.4f | SL: %.4f | R:R=1:%.2f\n",
 				s.EntryPrice, s.TP, s.SL, rr))
 		}
 	}
@@ -172,18 +184,18 @@ func buildPrompt(g SignalGroup) string {
 	for _, k := range keyIndicators {
 		if v, ok := g.Indicators[k]; ok {
 			if !wrote {
-				sb.WriteString("\n주요 지표:\n")
+				sb.WriteString("\nKey Indicators:\n")
 				wrote = true
 			}
 			sb.WriteString(fmt.Sprintf("- %s: %.4f\n", k, v))
 		}
 	}
 
-	sb.WriteString("\n다음 4가지 항목으로 한국어 분석을 작성해줘:\n" +
-		"1. 시장구조: 현재 추세와 구조적 특징\n" +
-		"2. 진입근거: ICT/Wyckoff 관점의 핵심 진입 이유\n" +
-		"3. 위험요인: 시나리오가 무효화되는 조건\n" +
-		"4. 결론: LONG/SHORT/관망 중 하나와 간략한 이유")
+	sb.WriteString("\nWrite an analysis covering these 4 points:\n" +
+		"1. Market Structure: current trend and structural characteristics\n" +
+		"2. Entry Rationale: key entry reason from ICT/Wyckoff perspective\n" +
+		"3. Risk Factors: conditions that invalidate the scenario\n" +
+		"4. Conclusion: one of LONG/SHORT/HOLD with brief reasoning")
 	return sb.String()
 }
 

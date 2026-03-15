@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,12 @@ var tiingoMinInterval = map[string]time.Duration{
 	"1W": 24 * time.Hour,
 }
 
+// tiingoState is persisted to disk so restart doesn't lose fetch history.
+type tiingoState struct {
+	LastFetched map[string]time.Time `json:"last_fetched"`
+	RateLimited time.Time            `json:"rate_limited"`
+}
+
 // TiingoCollector polls Tiingo REST API for stock OHLCV data.
 // Requires a free API key from tiingo.com → set TIINGO_API_KEY in .env.
 //
@@ -44,6 +51,7 @@ type TiingoCollector struct {
 	timeframes   []string
 	pollInterval time.Duration
 	httpClient   *http.Client
+	stateFile    string
 
 	mu          sync.Mutex
 	lastFetched map[string]time.Time // key: "SYMBOL:TF"
@@ -63,12 +71,19 @@ func NewTiingoCollector(apiKey string, db *storage.DB, symbols, timeframes []str
 	}
 }
 
+// SetStateFile sets the path for persisting fetch timestamps across restarts.
+func (c *TiingoCollector) SetStateFile(path string) {
+	c.stateFile = path
+}
+
 // Start begins polling. Blocks until ctx is cancelled.
 func (c *TiingoCollector) Start(ctx context.Context) {
+	c.loadState()
+
 	log.Info().
 		Strs("symbols", c.symbols).
 		Dur("poll_interval", c.pollInterval).
-		Msg("[Tiingo] 수집기 시작")
+		Msg("[Tiingo] collector started")
 
 	c.fetchAll()
 
@@ -78,7 +93,7 @@ func (c *TiingoCollector) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info().Msg("[Tiingo] 수집기 종료")
+			log.Info().Msg("[Tiingo] collector stopped")
 			return
 		case <-ticker.C:
 			if !isMarketOpen() {
@@ -99,7 +114,7 @@ func (c *TiingoCollector) fetchForTimeframes(timeframes []string) {
 	c.mu.Lock()
 	if time.Now().Before(c.rateLimited) {
 		remaining := time.Until(c.rateLimited).Truncate(time.Second)
-		log.Warn().Dur("resume_in", remaining).Msg("[Tiingo] 레이트 리밋 대기 중 — 스킵")
+		log.Warn().Dur("resume_in", remaining).Msg("[Tiingo] rate limited — skipping")
 		c.mu.Unlock()
 		return
 	}
@@ -118,19 +133,20 @@ func (c *TiingoCollector) fetchForTimeframes(timeframes []string) {
 					c.mu.Lock()
 					c.rateLimited = time.Now().Add(30 * time.Minute)
 					c.mu.Unlock()
-					log.Warn().Msg("[Tiingo] 시간당 요청 한도 초과 — 30분 대기 후 재시도")
+					c.saveState()
+					log.Warn().Msg("[Tiingo] hourly request limit exceeded — retrying in 30 minutes")
 					return
 				}
-				log.Error().Err(err).Str("symbol", sym).Str("tf", tf).Msg("[Tiingo] 데이터 수집 실패")
+				log.Error().Err(err).Str("symbol", sym).Str("tf", tf).Msg("[Tiingo] data fetch failed")
 				continue
 			}
 
 			if err := c.db.SaveOHLCVBatch(bars, "tiingo"); err != nil {
-				log.Error().Err(err).Msg("[Tiingo] 저장 실패")
+				log.Error().Err(err).Msg("[Tiingo] save failed")
 				continue
 			}
 			c.markFetched(sym, tf)
-			log.Debug().Str("symbol", sym).Str("tf", tf).Int("bars", len(bars)).Msg("[Tiingo] 데이터 저장 완료")
+			log.Debug().Str("symbol", sym).Str("tf", tf).Int("bars", len(bars)).Msg("[Tiingo] data saved")
 		}
 	}
 }
@@ -152,6 +168,49 @@ func (c *TiingoCollector) markFetched(sym, tf string) {
 	c.mu.Lock()
 	c.lastFetched[sym+":"+tf] = time.Now()
 	c.mu.Unlock()
+	c.saveState()
+}
+
+func (c *TiingoCollector) loadState() {
+	if c.stateFile == "" {
+		return
+	}
+	data, err := os.ReadFile(c.stateFile)
+	if err != nil {
+		return // ignore missing file (first run)
+	}
+	var s tiingoState
+	if err := json.Unmarshal(data, &s); err != nil {
+		log.Warn().Err(err).Msg("[Tiingo] state file parse failed — resetting")
+		return
+	}
+	c.mu.Lock()
+	c.lastFetched = s.LastFetched
+	c.rateLimited = s.RateLimited
+	c.mu.Unlock()
+	if time.Now().Before(s.RateLimited) {
+		log.Info().Time("resume_at", s.RateLimited).Msg("[Tiingo] previous rate limit restored — waiting after restart")
+	}
+	log.Info().Int("entries", len(s.LastFetched)).Msg("[Tiingo] fetch state restored")
+}
+
+func (c *TiingoCollector) saveState() {
+	if c.stateFile == "" {
+		return
+	}
+	c.mu.Lock()
+	s := tiingoState{
+		LastFetched: c.lastFetched,
+		RateLimited: c.rateLimited,
+	}
+	c.mu.Unlock()
+	data, err := json.Marshal(s)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(c.stateFile, data, 0644); err != nil {
+		log.Warn().Err(err).Msg("[Tiingo] state file save failed")
+	}
 }
 
 func (c *TiingoCollector) fetchOHLCV(symbol, tf string) ([]models.OHLCV, error) {
@@ -161,7 +220,7 @@ func (c *TiingoCollector) fetchOHLCV(symbol, tf string) ([]models.OHLCV, error) 
 	case "1H", "4H":
 		return c.fetchIntradayOHLCV(symbol, tf)
 	default:
-		return nil, fmt.Errorf("지원하지 않는 타임프레임: %s", tf)
+		return nil, fmt.Errorf("unsupported timeframe: %s", tf)
 	}
 }
 
@@ -214,7 +273,7 @@ func (c *TiingoCollector) doGet(url string) (io.ReadCloser, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP 요청 실패: %w", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
@@ -254,7 +313,7 @@ type tiingoIntradayBar struct {
 func parseTiingoDailyResponse(symbol, tf string, body io.Reader) ([]models.OHLCV, error) {
 	var raw []tiingoDailyBar
 	if err := json.NewDecoder(body).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("JSON 파싱 실패: %w", err)
+		return nil, fmt.Errorf("JSON parse failed: %w", err)
 	}
 	sym := strings.ToUpper(symbol)
 	bars := make([]models.OHLCV, 0, len(raw))
@@ -277,7 +336,7 @@ func parseTiingoDailyResponse(symbol, tf string, body io.Reader) ([]models.OHLCV
 func parseTiingoIntradayResponse(symbol, tf string, body io.Reader) ([]models.OHLCV, error) {
 	var raw []tiingoIntradayBar
 	if err := json.NewDecoder(body).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("JSON 파싱 실패: %w", err)
+		return nil, fmt.Errorf("JSON parse failed: %w", err)
 	}
 	sym := strings.ToUpper(symbol)
 	bars := make([]models.OHLCV, 0, len(raw))

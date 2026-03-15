@@ -13,6 +13,9 @@ symbols:
         - symbol: TSLA
           exchange: nasdaq
           enabled: true
+        - symbol: SPY
+          exchange: nyse
+          enabled: true
 timeframes:
     - 1W
     - 1D

@@ -79,7 +79,7 @@ func (n *Notifier) Announce(ctx context.Context, text string) {
 	for _, s := range n.senders {
 		if ts, ok := s.(TextSender); ok {
 			if err := ts.SendText(ctx, text); err != nil {
-				n.log.Error().Err(err).Str("sender", s.Name()).Msg("시스템 알림 발송 실패")
+				n.log.Error().Err(err).Str("sender", s.Name()).Msg("failed to send system announcement")
 			}
 		}
 	}
@@ -103,7 +103,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 				Str("rule", sig.Rule).
 				Float64("score", sig.Score).
 				Float64("threshold", threshold).
-				Msg("신호 스코어 미달 — 스킵")
+				Msg("signal score below threshold — skipping")
 			continue
 		}
 
@@ -111,7 +111,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 			n.log.Debug().
 				Str("symbol", sig.Symbol).
 				Str("rule", sig.Rule).
-				Msg("알림 쿨다운 활성 — 스킵")
+				Msg("notification cooldown active — skipping")
 			continue
 		}
 
@@ -120,7 +120,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 			Str("rule", sig.Rule).
 			Str("direction", sig.Direction).
 			Float64("score", sig.Score).
-			Msg("신호 발송")
+			Msg("dispatching signal")
 
 		for _, sender := range n.senders {
 			if err := sender.Send(ctx, sig); err != nil {
@@ -128,7 +128,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 					Err(err).
 					Str("sender", sender.Name()).
 					Str("symbol", sig.Symbol).
-					Msg("알림 발송 실패")
+					Msg("failed to send notification")
 			}
 		}
 	}

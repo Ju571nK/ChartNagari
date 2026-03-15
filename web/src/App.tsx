@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from './i18n'
+import { AnalysisTab } from './AnalysisTab'
 import {
   createChart,
   createSeriesMarkers,
@@ -12,7 +15,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis'
 
 interface OHLCVBar {
   time: number
@@ -103,25 +106,25 @@ function abbreviateRule(rule: string): string {
 
 // ── rule descriptions ─────────────────────────────────────────────────────────
 
-const RULE_DESC: Record<string, string> = {
-  rsi_overbought_oversold:     'RSI 과매수/과매도 구간 신호',
-  rsi_divergence:              'RSI 다이버전스 — 추세 전환 조기 감지',
-  ema_cross:                   'EMA 크로스 — 단기/장기 방향 전환',
-  support_resistance_breakout: '지지·저항 돌파 — 레벨 브레이크아웃',
-  fibonacci_confluence:        '피보나치 수렴 구간 — 반전 가능 지점',
-  volume_spike:                '거래량 급증 — 세력 개입 감지',
-  ict_order_block:             'Order Block — 기관 매수/매도 구간',
-  ict_fair_value_gap:          'Fair Value Gap — 미체결 가격 공백',
-  ict_liquidity_sweep:         'Liquidity Sweep — 스톱 헌팅 후 반전',
-  ict_breaker_block:           'Breaker Block — 무효화된 OB 반전 구간',
-  ict_kill_zone:               'Kill Zone — 런던/뉴욕 세션 주요 시간대',
-  wyckoff_accumulation:        'Wyckoff 축적 — 세력 매집 국면',
-  wyckoff_distribution:        'Wyckoff 분배 — 세력 매도 국면',
-  wyckoff_spring:              'Spring — 저점 이탈 후 급반등',
-  wyckoff_upthrust:            'Upthrust — 고점 돌파 후 급락',
-  wyckoff_volume_anomaly:      '비정상 거래량 — 이상 세력 개입 신호',
-  smc_bos:                     'BOS — Break of Structure (추세 지속)',
-  smc_choch:                   'CHoCH — Change of Character (추세 전환)',
+const RULE_DESC_KEYS: Record<string, string> = {
+  rsi_overbought_oversold:     'rule_desc_rsi_overbought_oversold',
+  rsi_divergence:              'rule_desc_rsi_divergence',
+  ema_cross:                   'rule_desc_ema_cross',
+  support_resistance_breakout: 'rule_desc_support_resistance_breakout',
+  fibonacci_confluence:        'rule_desc_fibonacci_confluence',
+  volume_spike:                'rule_desc_volume_spike',
+  ict_order_block:             'rule_desc_ict_order_block',
+  ict_fair_value_gap:          'rule_desc_ict_fair_value_gap',
+  ict_liquidity_sweep:         'rule_desc_ict_liquidity_sweep',
+  ict_breaker_block:           'rule_desc_ict_breaker_block',
+  ict_kill_zone:               'rule_desc_ict_kill_zone',
+  wyckoff_accumulation:        'rule_desc_wyckoff_accumulation',
+  wyckoff_distribution:        'rule_desc_wyckoff_distribution',
+  wyckoff_spring:              'rule_desc_wyckoff_spring',
+  wyckoff_upthrust:            'rule_desc_wyckoff_upthrust',
+  wyckoff_volume_anomaly:      'rule_desc_wyckoff_volume_anomaly',
+  smc_bos:                     'rule_desc_smc_bos',
+  smc_choch:                   'rule_desc_smc_choch',
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -136,6 +139,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function SymbolsTab() {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -158,19 +162,19 @@ function SymbolsTab() {
       await putJSON(`/symbols/${encodeURIComponent(sym.symbol)}`, { enabled })
       setSymbols((prev) => prev.map((s) => (s.symbol === sym.symbol ? { ...s, enabled } : s)))
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '알 수 없는 오류')
+      setError(e instanceof Error ? e.message : t('unknown_error'))
     }
-  }, [])
+  }, [t])
 
   const remove = useCallback(async (sym: SymbolItem) => {
-    if (!confirm(`${sym.symbol}을 삭제할까요?`)) return
+    if (!confirm(t('confirm_delete', { symbol: sym.symbol }))) return
     try {
       await apiFetch<null>(`/symbols/${encodeURIComponent(sym.symbol)}`, { method: 'DELETE' })
       setSymbols((prev) => prev.filter((s) => s.symbol !== sym.symbol))
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '삭제 실패')
+      setError(e instanceof Error ? e.message : t('delete_failed'))
     }
-  }, [])
+  }, [t])
 
   const add = useCallback(async () => {
     if (!newSymbol.trim()) return
@@ -185,18 +189,18 @@ function SymbolsTab() {
       setNewExchange('')
       reload()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '추가 실패')
+      setError(e instanceof Error ? e.message : t('add_failed'))
     } finally {
       setAdding(false)
     }
-  }, [newSymbol, newType, newExchange, reload])
+  }, [newSymbol, newType, newExchange, reload, t])
 
-  if (loading) return <p className="loading">로딩 중...</p>
-  if (error) return <p className="error-msg">오류: {error}</p>
+  if (loading) return <p className="loading">{t('loading')}</p>
+  if (error) return <p className="error-msg">{t('error')}: {error}</p>
 
   return (
     <>
-      <p className="section-title">종목 관리</p>
+      <p className="section-title">{t('symbol_management')}</p>
       {symbols.map((sym) => (
         <div key={sym.symbol} className="item">
           <div>
@@ -208,49 +212,49 @@ function SymbolsTab() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Toggle checked={sym.enabled} onChange={(v) => toggle(sym, v)} />
-            <button className="remove-btn" onClick={() => remove(sym)} title="삭제">✕</button>
+            <button className="remove-btn" onClick={() => remove(sym)} title={t('delete')}>✕</button>
           </div>
         </div>
       ))}
-      {symbols.length === 0 && <p className="loading">등록된 종목 없음</p>}
+      {symbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}
 
-      {/* 종목 추가 폼 */}
-      <p className="section-title" style={{ marginTop: 24 }}>종목 추가</p>
+      <p className="section-title" style={{ marginTop: 24 }}>{t('add_symbol')}</p>
       <div className="add-symbol-form">
         <select
           className="chart-select"
           value={newType}
           onChange={(e) => setNewType(e.target.value as 'crypto' | 'stock')}
         >
-          <option value="stock">주식</option>
-          <option value="crypto">코인</option>
+          <option value="stock">{t('stock')}</option>
+          <option value="crypto">{t('crypto')}</option>
         </select>
         <input
           className="symbol-input"
-          placeholder="심볼 (예: NVDA)"
+          placeholder={t('symbol_placeholder_nvda')}
           value={newSymbol}
           onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === 'Enter' && add()}
         />
         <input
           className="symbol-input"
-          placeholder="거래소 (예: nasdaq)"
+          placeholder={t('exchange_placeholder')}
           value={newExchange}
           onChange={(e) => setNewExchange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
         />
         <button className="run-btn" onClick={add} disabled={adding || !newSymbol.trim()}>
-          {adding ? '...' : '추가'}
+          {adding ? '...' : t('add')}
         </button>
       </div>
       <p className="item-meta" style={{ marginTop: 8 }}>
-        ⚠️ 추가 후 서버 재시작 시 데이터 수집이 시작됩니다
+        {t('restart_notice')}
       </p>
     </>
   )
 }
 
 function RulesTab() {
+  const { t } = useTranslation()
   const [rules, setRules] = useState<RuleItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -267,12 +271,12 @@ function RulesTab() {
       await putJSON(`/rules/${encodeURIComponent(rule.name)}`, { enabled })
       setRules((prev) => prev.map((r) => (r.name === rule.name ? { ...r, enabled } : r)))
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '알 수 없는 오류')
+      setError(e instanceof Error ? e.message : t('unknown_error'))
     }
-  }, [])
+  }, [t])
 
-  if (loading) return <p className="loading">로딩 중...</p>
-  if (error) return <p className="error-msg">오류: {error}</p>
+  if (loading) return <p className="loading">{t('loading')}</p>
+  if (error) return <p className="error-msg">{t('error')}: {error}</p>
 
   const grouped = rules.reduce<Record<string, RuleItem[]>>((acc, r) => {
     ;(acc[r.methodology] ??= []).push(r)
@@ -291,8 +295,8 @@ function RulesTab() {
                   <span className={`badge badge-${rule.methodology}`}>{rule.methodology}</span>
                   {rule.name}
                 </div>
-                {RULE_DESC[rule.name] && (
-                  <div className="item-meta">{RULE_DESC[rule.name]}</div>
+                {RULE_DESC_KEYS[rule.name] && (
+                  <div className="item-meta">{t(RULE_DESC_KEYS[rule.name])}</div>
                 )}
               </div>
               <Toggle checked={rule.enabled} onChange={(v) => toggle(rule, v)} />
@@ -300,30 +304,31 @@ function RulesTab() {
           ))}
         </div>
       ))}
-      {rules.length === 0 && <p className="loading">등록된 룰 없음</p>}
+      {rules.length === 0 && <p className="loading">{t('no_rules')}</p>}
     </>
   )
 }
 
 function fmtUptime(sec: number | undefined): string {
-  if (!sec || isNaN(sec)) return '계산 중...'
-  if (sec < 60) return `${sec}초`
-  if (sec < 3600) return `${Math.floor(sec / 60)}분`
+  if (!sec || isNaN(sec)) return i18n.t('calculating')
+  if (sec < 60) return i18n.t('uptime_seconds', { n: sec })
+  if (sec < 3600) return i18n.t('uptime_minutes', { n: Math.floor(sec / 60) })
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
-  return `${h}시간 ${m}분`
+  return i18n.t('uptime_hours_minutes', { h, m })
 }
 
 function fmtRelTime(unix: number): string {
-  if (!unix) return '신호 없음'
+  if (!unix) return i18n.t('no_signals')
   const diff = Math.floor(Date.now() / 1000 - unix)
-  if (diff < 60) return `${diff}초 전`
-  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
-  return `${Math.floor(diff / 86400)}일 전`
+  if (diff < 60) return i18n.t('seconds_ago', { n: diff })
+  if (diff < 3600) return i18n.t('minutes_ago', { n: Math.floor(diff / 60) })
+  if (diff < 86400) return i18n.t('hours_ago', { n: Math.floor(diff / 3600) })
+  return i18n.t('days_ago', { n: Math.floor(diff / 86400) })
 }
 
 function StatusTab() {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<StatusData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -343,21 +348,19 @@ function StatusTab() {
   }, [])
   void tick // used to trigger re-render
 
-  if (loading) return <p className="loading">로딩 중...</p>
-  if (error) return <p className="error-msg">오류: {error}</p>
+  if (loading) return <p className="loading">{t('loading')}</p>
+  if (error) return <p className="error-msg">{t('error')}: {error}</p>
   if (!status) return null
 
   return (
     <>
-      {/* 파이프라인 활성 배너 */}
       <div className="status-banner">
         <span className="status-dot" />
-        <span>파이프라인 실행 중</span>
-        <span className="status-uptime">가동 시간 {fmtUptime(status.uptime_sec)}</span>
+        <span>{t('pipeline_running')}</span>
+        <span className="status-uptime">{t('uptime_label', { time: fmtUptime(status.uptime_sec) })}</span>
       </div>
 
-      {/* 데이터 소스 */}
-      <p className="section-title">데이터 소스</p>
+      <p className="section-title">{t('data_sources')}</p>
       <div className="source-list">
         {(status.data_sources ?? []).map((src) => (
           <div key={src} className="source-item">
@@ -367,22 +370,21 @@ function StatusTab() {
         ))}
       </div>
 
-      {/* 분석 현황 */}
-      <p className="section-title">분석 현황</p>
+      <p className="section-title">{t('analysis_status')}</p>
       <div className="status-grid">
         <div className="stat-card">
           <div className="stat-value">{status.symbols}</div>
-          <div className="stat-label">모니터링 종목</div>
+          <div className="stat-label">{t('monitoring_symbols')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{status.rules}</div>
-          <div className="stat-label">활성 룰</div>
+          <div className="stat-label">{t('active_rules')}</div>
         </div>
         <div className="stat-card" style={{ gridColumn: 'span 2' }}>
           <div className="stat-value" style={{ fontSize: '1.2rem' }}>
             {fmtRelTime(status.last_signal_unix)}
           </div>
-          <div className="stat-label">마지막 신호 감지</div>
+          <div className="stat-label">{t('last_signal_detected')}</div>
         </div>
       </div>
 
@@ -397,6 +399,7 @@ const TFS = ['1H', '4H', '1D', '1W'] as const
 type TF = (typeof TFS)[number]
 
 function ChartTab() {
+  const { t } = useTranslation()
   const [symbol, setSymbol] = useState('')
   const [symbols, setSymbols] = useState<string[]>([])
   const [tf, setTf] = useState<TF>('1H')
@@ -526,7 +529,7 @@ function ChartTab() {
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
         >
-          {symbols.length === 0 && <option value="">종목 없음</option>}
+          {symbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
           {symbols.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -545,12 +548,12 @@ function ChartTab() {
           ))}
         </div>
       </div>
-      {loading && <p className="loading">차트 로딩 중...</p>}
-      {error && <p className="error-msg">데이터 없음 — {error}</p>}
+      {loading && <p className="loading">{t('chart_loading')}</p>}
+      {error && <p className="error-msg">{t('no_data_error', { error })}</p>}
       <div ref={containerRef} className="chart-area" />
       {signals.some((s) => s.ai_interpretation) && (
         <>
-          <p className="section-title" style={{ marginTop: 20 }}>AI 해석</p>
+          <p className="section-title" style={{ marginTop: 20 }}>{t('ai_interpretation')}</p>
           <div className="ai-panel">
             {signals
               .filter((s) => s.ai_interpretation)
@@ -622,6 +625,7 @@ function fmt2(n: number) { return n.toFixed(2) }
 function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
 function BacktestTab() {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<string[]>([])
   const [rules, setRules] = useState<string[]>([])
   const [symbol, setSymbol] = useState('')
@@ -660,11 +664,11 @@ function BacktestTab() {
       })
       setResult(r)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '알 수 없는 오류')
+      setError(e instanceof Error ? e.message : t('unknown_error'))
     } finally {
       setLoading(false)
     }
-  }, [symbol, tf, ruleFilter, tpMult, slMult])
+  }, [symbol, tf, ruleFilter, tpMult, slMult, t])
 
   const runPerRule = useCallback(async () => {
     if (!symbol) return
@@ -676,15 +680,15 @@ function BacktestTab() {
       )
       setRuleStats(stats)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '알 수 없는 오류')
+      setError(e instanceof Error ? e.message : t('unknown_error'))
     } finally {
       setRulesLoading(false)
     }
-  }, [symbol, tf, tpMult, slMult])
+  }, [symbol, tf, tpMult, slMult, t])
 
   return (
     <>
-      <p className="section-title">백테스트 설정</p>
+      <p className="section-title">{t('backtest_settings')}</p>
       <div className="backtest-controls">
         <select
           className="chart-select"
@@ -692,7 +696,7 @@ function BacktestTab() {
           onChange={(e) => setSymbol(e.target.value)}
           disabled={loading}
         >
-          {symbols.length === 0 && <option value="">종목 없음</option>}
+          {symbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
           {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
 
@@ -715,7 +719,7 @@ function BacktestTab() {
           onChange={(e) => setRuleFilter(e.target.value)}
           disabled={loading}
         >
-          <option value="">전체 룰</option>
+          <option value="">{t('all_rules')}</option>
           {rules.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
 
@@ -749,7 +753,7 @@ function BacktestTab() {
         </div>
 
         <button className="run-btn" onClick={run} disabled={loading || !symbol}>
-          {loading ? '계산 중...' : '실행'}
+          {loading ? t('calculating') : t('run')}
         </button>
         <button
           className="run-btn"
@@ -757,16 +761,16 @@ function BacktestTab() {
           disabled={rulesLoading || !symbol}
           style={{ background: 'rgba(91,146,121,0.12)', color: 'var(--green)', border: '1px solid rgba(91,146,121,0.4)' }}
         >
-          {rulesLoading ? '분석 중...' : '룰별 분석'}
+          {rulesLoading ? t('analyzing_rules') : t('per_rule_analysis')}
         </button>
       </div>
 
-      {error && <p className="error-msg">오류: {error}</p>}
+      {error && <p className="error-msg">{t('error')}: {error}</p>}
 
       {result && !loading && (
         <>
           <p className="section-title">
-            결과 — {result.symbol} {result.timeframe} ({result.bars} 바, {result.trades} 거래) | TP×{tpMult} SL×{slMult}
+            {t('backtest_result_summary', { symbol: result.symbol, timeframe: result.timeframe, bars: result.bars, trades: result.trades, tp: tpMult, sl: slMult })}
           </p>
 
           <div className="backtest-stats">
@@ -774,31 +778,31 @@ function BacktestTab() {
               <div className="stat-value" style={{ fontSize: '1.4rem' }}>
                 {(result.stats.win_rate * 100).toFixed(1)}%
               </div>
-              <div className="stat-label">승률</div>
+              <div className="stat-label">{t('win_rate')}</div>
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ fontSize: '1.4rem' }}>
                 {fmt2(result.stats.avg_rr)}
               </div>
-              <div className="stat-label">평균 손익비</div>
+              <div className="stat-label">{t('avg_pnl_ratio')}</div>
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ fontSize: '1.4rem' }}>
                 {fmt2(result.stats.profit_factor)}
               </div>
-              <div className="stat-label">수익 팩터</div>
+              <div className="stat-label">{t('profit_factor')}</div>
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ fontSize: '1.4rem', color: 'var(--muted)' }}>
                 {(result.stats.max_drawdown * 100).toFixed(1)}%
               </div>
-              <div className="stat-label">최대낙폭</div>
+              <div className="stat-label">{t('max_drawdown')}</div>
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ fontSize: '1.4rem' }}>
                 {fmt2(result.stats.sharpe)}
               </div>
-              <div className="stat-label">샤프비율</div>
+              <div className="stat-label">{t('sharpe_ratio')}</div>
             </div>
             <div className="stat-card">
               <div
@@ -810,24 +814,24 @@ function BacktestTab() {
               >
                 {fmtPct(result.stats.total_return_pct)}
               </div>
-              <div className="stat-label">누적 수익률</div>
+              <div className="stat-label">{t('total_return')}</div>
             </div>
           </div>
 
           {result.outcomes && result.outcomes.length > 0 && (
             <>
-              <p className="section-title" style={{ marginTop: 24 }}>거래 목록</p>
+              <p className="section-title" style={{ marginTop: 24 }}>{t('trade_list')}</p>
               <div className="backtest-table-wrap">
                 <table className="backtest-table">
                   <thead>
                     <tr>
-                      <th>진입 시간</th>
-                      <th>방향</th>
-                      <th>룰</th>
-                      <th>진입가</th>
-                      <th>청산가</th>
-                      <th>바</th>
-                      <th>수익률</th>
+                      <th>{t('entry_time')}</th>
+                      <th>{t('direction')}</th>
+                      <th>{t('rule')}</th>
+                      <th>{t('entry_price')}</th>
+                      <th>{t('exit_price')}</th>
+                      <th>{t('bars')}</th>
+                      <th>{t('return_pct')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -855,7 +859,7 @@ function BacktestTab() {
           )}
 
           {result.trades === 0 && (
-            <p className="loading">데이터 없음 — 수집된 OHLCV 바가 충분하지 않거나 신호가 발생하지 않았습니다.</p>
+            <p className="loading">{t('no_backtest_data')}</p>
           )}
         </>
       )}
@@ -863,17 +867,17 @@ function BacktestTab() {
       {ruleStats !== null && (
         <>
           <p className="section-title" style={{ marginTop: 24 }}>
-            룰별 성과 분석 — {symbol} {tf} | TP×{tpMult} SL×{slMult}
+            {t('per_rule_result_summary', { symbol, timeframe: tf, tp: tpMult, sl: slMult })}
           </p>
           {ruleStats.length === 0 ? (
-            <p className="loading">거래 데이터 없음 — OHLCV 수집 기간을 늘려주세요.</p>
+            <p className="loading">{t('no_trade_data')}</p>
           ) : (
             <>
               <div className="backtest-table-wrap">
                 <table className="backtest-table">
                   <thead>
                     <tr>
-                      <th>룰</th><th>거래 수</th><th>승률</th><th>평균 RR</th><th>수익 팩터</th><th>누적 수익</th><th>Export</th>
+                      <th>{t('rule_stats_header_rule')}</th><th>{t('rule_stats_header_trades')}</th><th>{t('win_rate')}</th><th>{t('avg_rr')}</th><th>{t('profit_factor')}</th><th>{t('total_return')}</th><th>{t('rule_stats_header_export')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -917,7 +921,7 @@ function BacktestTab() {
                 </table>
               </div>
               <p className="item-meta" style={{ marginTop: 8 }}>
-                🟢 승률 ≥ 45% 달성 &nbsp;|&nbsp; 🔴 미달 — 해당 룰 OFF 또는 스코어 임계값 상향 고려
+                {t('backtest_hint')}
               </p>
             </>
           )}
@@ -957,6 +961,7 @@ interface PaperSummary {
 }
 
 function PaperTab() {
+  const { t } = useTranslation()
   const [summary, setSummary] = useState<PaperSummary | null>(null)
   const [positions, setPositions] = useState<PaperPosition[]>([])
   const [history, setHistory] = useState<PaperPosition[]>([])
@@ -980,25 +985,25 @@ function PaperTab() {
 
   useEffect(() => { reload() }, [reload])
 
-  if (loading) return <p className="loading">로딩 중...</p>
+  if (loading) return <p className="loading">{t('loading')}</p>
 
   return (
     <>
-      <p className="section-title">페이퍼 트레이딩 — 실시간 가상 포트폴리오</p>
+      <p className="section-title">{t('paper_title')}</p>
 
       {summary && (
         <div className="backtest-stats">
           <div className="stat-card">
             <div className="stat-value" style={{ fontSize: '1.4rem' }}>{summary.open_positions}</div>
-            <div className="stat-label">오픈 포지션</div>
+            <div className="stat-label">{t('open_positions')}</div>
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ fontSize: '1.4rem' }}>{summary.closed_trades}</div>
-            <div className="stat-label">총 거래</div>
+            <div className="stat-label">{t('total_trades_label')}</div>
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ fontSize: '1.4rem' }}>{(summary.win_rate * 100).toFixed(1)}%</div>
-            <div className="stat-label">승률</div>
+            <div className="stat-label">{t('win_rate')}</div>
           </div>
           <div className="stat-card">
             <div
@@ -1007,30 +1012,30 @@ function PaperTab() {
             >
               {summary.total_pnl_pct >= 0 ? '+' : ''}{summary.total_pnl_pct.toFixed(2)}%
             </div>
-            <div className="stat-label">누적 손익</div>
+            <div className="stat-label">{t('cumulative_pnl')}</div>
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ fontSize: '1.4rem', color: 'var(--mint)' }}>
               +{summary.avg_win_pct.toFixed(2)}%
             </div>
-            <div className="stat-label">평균 수익</div>
+            <div className="stat-label">{t('avg_win')}</div>
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ fontSize: '1.4rem', color: 'var(--muted)' }}>
               {summary.avg_loss_pct.toFixed(2)}%
             </div>
-            <div className="stat-label">평균 손실</div>
+            <div className="stat-label">{t('avg_loss')}</div>
           </div>
         </div>
       )}
 
       {positions.length > 0 && (
         <>
-          <p className="section-title" style={{ marginTop: 24 }}>오픈 포지션 ({positions.length})</p>
+          <p className="section-title" style={{ marginTop: 24 }}>{t('open_positions_count', { count: positions.length })}</p>
           <div className="backtest-table-wrap">
             <table className="backtest-table">
               <thead>
-                <tr><th>종목</th><th>방향</th><th>룰</th><th>진입가</th><th>TP</th><th>SL</th><th>진입 시간</th></tr>
+                <tr><th>{t('symbol')}</th><th>{t('direction')}</th><th>{t('rule')}</th><th>{t('entry_price')}</th><th>{t('tp')}</th><th>{t('sl')}</th><th>{t('entry_time')}</th></tr>
               </thead>
               <tbody>
                 {positions.map((p) => (
@@ -1053,16 +1058,16 @@ function PaperTab() {
       )}
 
       {positions.length === 0 && (
-        <p className="loading" style={{ marginTop: 16 }}>오픈 포지션 없음 — 신호 발생 시 자동으로 포지션이 생성됩니다.</p>
+        <p className="loading" style={{ marginTop: 16 }}>{t('no_open_positions')}</p>
       )}
 
       {history.length > 0 && (
         <>
-          <p className="section-title" style={{ marginTop: 24 }}>청산 히스토리</p>
+          <p className="section-title" style={{ marginTop: 24 }}>{t('close_history')}</p>
           <div className="backtest-table-wrap">
             <table className="backtest-table">
               <thead>
-                <tr><th>종목</th><th>방향</th><th>진입가</th><th>청산가</th><th>결과</th><th>손익</th></tr>
+                <tr><th>{t('symbol')}</th><th>{t('direction')}</th><th>{t('entry_price')}</th><th>{t('exit_price')}</th><th>{t('result')}</th><th>{t('pnl')}</th></tr>
               </thead>
               <tbody>
                 {history.map((p) => (
@@ -1100,6 +1105,7 @@ interface ReportConfig {
 }
 
 function ReportTab() {
+  const { t } = useTranslation()
   const [config, setConfig] = useState<ReportConfig | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1120,27 +1126,27 @@ function ReportTab() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '저장 실패')
+      setError(e instanceof Error ? e.message : t('save_failed'))
     } finally {
       setSaving(false)
     }
-  }, [config])
+  }, [config, t])
 
-  if (!config && !error) return <p className="loading">로딩 중...</p>
-  if (error && !config) return <p className="error-msg">오류: {error}</p>
+  if (!config && !error) return <p className="loading">{t('loading')}</p>
+  if (error && !config) return <p className="error-msg">{t('error')}: {error}</p>
   if (!config) return null
 
   return (
     <>
-      <p className="section-title">일일 리포트 설정</p>
+      <p className="section-title">{t('daily_report_config')}</p>
 
       <div className="report-field">
-        <span className="field-label">리포트 활성화</span>
+        <span className="field-label">{t('report_enabled')}</span>
         <Toggle checked={config.enabled} onChange={(v) => setConfig({ ...config, enabled: v })} />
       </div>
 
       <div className="report-field">
-        <span className="field-label">발송 시간 (KST)</span>
+        <span className="field-label">{t('send_time_kst')}</span>
         <input
           className="report-input"
           placeholder="09:00"
@@ -1150,7 +1156,7 @@ function ReportTab() {
       </div>
 
       <div className="report-field">
-        <span className="field-label">시간대</span>
+        <span className="field-label">{t('time_zone')}</span>
         <input
           className="report-input"
           value={config.timezone}
@@ -1160,7 +1166,7 @@ function ReportTab() {
       </div>
 
       <div className="report-field">
-        <span className="field-label">AI 최소 스코어</span>
+        <span className="field-label">{t('ai_min_score')}</span>
         <input
           className="report-input"
           type="number"
@@ -1172,20 +1178,20 @@ function ReportTab() {
       </div>
 
       <div className="report-field">
-        <span className="field-label">신호 없는 날 스킵</span>
+        <span className="field-label">{t('skip_no_signal_days')}</span>
         <Toggle checked={config.only_if_signals} onChange={(v) => setConfig({ ...config, only_if_signals: v })} />
       </div>
 
       <div className="report-field">
-        <span className="field-label">축약 모드</span>
+        <span className="field-label">{t('compact_mode_label')}</span>
         <Toggle checked={config.compact} onChange={(v) => setConfig({ ...config, compact: v })} />
       </div>
 
       <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="run-btn" onClick={save} disabled={saving}>
-          {saving ? '저장 중...' : '저장'}
+          {saving ? t('saving') : t('save')}
         </button>
-        {saved && <span className="save-success">✓ 저장됨</span>}
+        {saved && <span className="save-success">{t('saved')}</span>}
         {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
       </div>
     </>
@@ -1205,6 +1211,7 @@ interface AlertConfig {
 }
 
 function AlertTab() {
+  const { t } = useTranslation()
   const [config, setConfig] = useState<AlertConfig | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1225,22 +1232,22 @@ function AlertTab() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '저장 실패')
+      setError(e instanceof Error ? e.message : t('save_failed'))
     } finally {
       setSaving(false)
     }
-  }, [config])
+  }, [config, t])
 
-  if (!config && !error) return <p className="loading">로딩 중...</p>
-  if (error && !config) return <p className="error-msg">오류: {error}</p>
+  if (!config && !error) return <p className="loading">{t('loading')}</p>
+  if (error && !config) return <p className="error-msg">{t('error')}: {error}</p>
   if (!config) return null
 
   return (
     <>
-      <p className="section-title">알림 설정</p>
+      <p className="section-title">{t('alert_settings')}</p>
 
       <div className="report-field">
-        <span className="field-label">신호 스코어 임계값</span>
+        <span className="field-label">{t('signal_score_threshold')}</span>
         <input
           className="report-input"
           type="number"
@@ -1251,11 +1258,11 @@ function AlertTab() {
         />
       </div>
       <p className="item-meta" style={{ marginBottom: 12 }}>
-        이 점수 이상 신호만 Telegram으로 발송됩니다 (현재 기본값: 12.0)
+        {t('score_threshold_hint')}
       </p>
 
       <div className="report-field">
-        <span className="field-label">중복 방지 쿨다운 (시간)</span>
+        <span className="field-label">{t('cooldown_label')}</span>
         <input
           className="report-input"
           type="number"
@@ -1266,31 +1273,31 @@ function AlertTab() {
         />
       </div>
       <p className="item-meta" style={{ marginBottom: 12 }}>
-        같은 종목+룰 알림 최소 간격
+        {t('cooldown_hint')}
       </p>
 
       <div className="report-field">
-        <span className="field-label">MTF 합의 필터</span>
+        <span className="field-label">{t('mtf_consensus_filter')}</span>
         <select
           className="report-input"
           value={config.mtf_consensus_min}
           onChange={(e) => setConfig({ ...config, mtf_consensus_min: parseInt(e.target.value) })}
         >
-          <option value={1}>비활성 (단일 TF 신호도 알림)</option>
-          <option value={2}>2개 이상 TF 합의 (권장)</option>
-          <option value={3}>3개 이상 TF 합의</option>
-          <option value={4}>4개 TF 전체 합의</option>
+          <option value={1}>{t('mtf_option_1')}</option>
+          <option value={2}>{t('mtf_option_2')}</option>
+          <option value={3}>{t('mtf_option_3')}</option>
+          <option value={4}>{t('mtf_option_4')}</option>
         </select>
       </div>
       <p className="item-meta" style={{ marginBottom: 12 }}>
-        여러 타임프레임에서 동시에 같은 방향 신호가 나올 때만 알림 발송 → 역추세 포지션 감소
+        {t('mtf_hint')}
       </p>
 
-      <p className="section-title" style={{ marginTop: 20 }}>TP/SL 배율 설정</p>
-      <p className="item-meta">TP = 진입가 ± ATR × 배율. 낮을수록 빠른 청산, 높을수록 큰 목표가</p>
+      <p className="section-title" style={{ marginTop: 20 }}>{t('tp_sl_settings')}</p>
+      <p className="item-meta">{t('tp_sl_hint')}</p>
 
       <div className="report-field">
-        <span className="field-label">코인 TP 배율</span>
+        <span className="field-label">{t('crypto_tp_mult')}</span>
         <input
           className="report-input"
           type="number"
@@ -1302,7 +1309,7 @@ function AlertTab() {
       </div>
 
       <div className="report-field">
-        <span className="field-label">코인 SL 배율</span>
+        <span className="field-label">{t('crypto_sl_mult')}</span>
         <input
           className="report-input"
           type="number"
@@ -1314,7 +1321,7 @@ function AlertTab() {
       </div>
 
       <div className="report-field">
-        <span className="field-label">주식 TP 배율</span>
+        <span className="field-label">{t('stock_tp_mult')}</span>
         <input
           className="report-input"
           type="number"
@@ -1326,7 +1333,7 @@ function AlertTab() {
       </div>
 
       <div className="report-field">
-        <span className="field-label">주식 SL 배율</span>
+        <span className="field-label">{t('stock_sl_mult')}</span>
         <input
           className="report-input"
           type="number"
@@ -1339,9 +1346,9 @@ function AlertTab() {
 
       <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="run-btn" onClick={save} disabled={saving}>
-          {saving ? '저장 중...' : '저장'}
+          {saving ? t('saving') : t('save')}
         </button>
-        {saved && <span className="save-success">✓ 저장됨</span>}
+        {saved && <span className="save-success">{t('saved')}</span>}
         {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
       </div>
     </>
@@ -1351,6 +1358,7 @@ function AlertTab() {
 // ── History Tab ───────────────────────────────────────────────────────────────
 
 function HistoryTab() {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<string[]>([])
   const [symbol, setSymbol] = useState('ALL')
   const [direction, setDirection] = useState('ALL')
@@ -1380,37 +1388,37 @@ function HistoryTab() {
     <>
       <div className="backtest-controls">
         <select className="chart-select" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-          <option value="ALL">전체 종목</option>
+          <option value="ALL">{t('all_symbols')}</option>
           {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <select className="chart-select" value={direction} onChange={(e) => setDirection(e.target.value)}>
-          <option value="ALL">전체 방향</option>
+          <option value="ALL">{t('all_directions')}</option>
           <option value="LONG">LONG</option>
           <option value="SHORT">SHORT</option>
         </select>
         <select className="chart-select" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-          <option value={50}>50건</option>
-          <option value={100}>100건</option>
-          <option value={200}>200건</option>
+          <option value={50}>{t('items_50')}</option>
+          <option value={100}>{t('items_100')}</option>
+          <option value={200}>{t('items_200')}</option>
         </select>
       </div>
-      {loading && <p className="loading">로딩 중...</p>}
-      {error && <p className="error-msg">오류: {error}</p>}
+      {loading && <p className="loading">{t('loading')}</p>}
+      {error && <p className="error-msg">{t('error')}: {error}</p>}
       {!loading && signals.length === 0 && (
-        <p className="loading">신호 없음 — 수집 기간이 짧거나 필터 조건을 확인하세요.</p>
+        <p className="loading">{t('no_signals_hint')}</p>
       )}
       {signals.length > 0 && (
         <div className="backtest-table-wrap">
           <table className="backtest-table">
             <thead>
               <tr>
-                <th>시간</th>
-                <th>종목</th>
+                <th>{t('time_col')}</th>
+                <th>{t('symbol_col')}</th>
                 <th>TF</th>
-                <th>방향</th>
-                <th>룰</th>
-                <th>스코어</th>
-                <th>AI 해석</th>
+                <th>{t('direction')}</th>
+                <th>{t('rule')}</th>
+                <th>{t('score')}</th>
+                <th>{t('ai_interpretation')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1453,6 +1461,7 @@ interface AggregatedRuleStat {
 }
 
 function PerformanceTab() {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<string[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [tf, setTf] = useState<TF>('1H')
@@ -1488,11 +1497,11 @@ function PerformanceTab() {
       )
       setStats(result)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '오류 발생')
+      setError(e instanceof Error ? e.message : t('unknown_error'))
     } finally {
       setLoading(false)
     }
-  }, [selected, tf, tpMult, slMult])
+  }, [selected, tf, tpMult, slMult, t])
 
   const exportRule = async (rule: string, winRate: number, avgRR: number) => {
     setExporting(rule)
@@ -1511,7 +1520,7 @@ function PerformanceTab() {
 
   return (
     <>
-      <p className="section-title">심볼 선택</p>
+      <p className="section-title">{t('symbol_select')}</p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
         {symbols.map((sym) => (
           <button
@@ -1532,7 +1541,7 @@ function PerformanceTab() {
           style={{ color: 'var(--muted)', fontSize: '0.75rem' }}
           onClick={() => setSelected(symbols.length === selected.length ? [] : [...symbols])}
         >
-          {symbols.length === selected.length ? '전체 해제' : '전체 선택'}
+          {symbols.length === selected.length ? t('deselect_all') : t('select_all')}
         </button>
       </div>
 
@@ -1562,33 +1571,33 @@ function PerformanceTab() {
             disabled={loading} style={{ width: 64 }} />
         </div>
         <button className="run-btn" onClick={run} disabled={loading || selected.length === 0}>
-          {loading ? '분석 중...' : `${selected.length}개 심볼 분석`}
+          {loading ? t('analyzing_rules') : t('analyze_n_symbols', { n: selected.length })}
         </button>
       </div>
 
-      {error && <p className="error-msg">오류: {error}</p>}
+      {error && <p className="error-msg">{t('error')}: {error}</p>}
 
       {stats !== null && !loading && (
         <>
           <p className="section-title" style={{ marginTop: 24 }}>
-            룰 성과 순위 — {tf} | TP×{tpMult} SL×{slMult} | {selected.length}개 심볼 집계
+            {t('rule_ranking', { tf, tp: tpMult, sl: slMult, n: selected.length })}
           </p>
           {stats.length === 0 ? (
-            <p className="loading">데이터 없음 — OHLCV 수집 기간을 늘리거나 다른 TF를 선택하세요.</p>
+            <p className="loading">{t('no_performance_data')}</p>
           ) : (
             <>
               <div className="backtest-table-wrap">
                 <table className="backtest-table">
                   <thead>
                     <tr>
-                      <th>순위</th>
-                      <th>룰</th>
-                      <th>평균 승률</th>
-                      <th>평균 RR</th>
-                      <th>수익 팩터</th>
-                      <th>총 거래</th>
-                      <th>심볼 수</th>
-                      <th style={{ minWidth: 140 }}>TradingView 내보내기</th>
+                      <th>{t('rank')}</th>
+                      <th>{t('rule')}</th>
+                      <th>{t('avg_win_rate')}</th>
+                      <th>{t('avg_rr')}</th>
+                      <th>{t('avg_profit_factor')}</th>
+                      <th>{t('total_trades')}</th>
+                      <th>{t('symbol_count')}</th>
+                      <th style={{ minWidth: 140 }}>{t('tv_export')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1623,10 +1632,10 @@ function PerformanceTab() {
                                   : '1px solid rgba(143,128,115,0.3)',
                               }}
                             >
-                              {exporting === s.rule ? '...' : '📥 TV로 내보내기'}
+                              {exporting === s.rule ? '...' : t('export_to_tv')}
                             </button>
                           ) : (
-                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>미지원</span>
+                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>{t('not_supported')}</span>
                           )}
                         </td>
                       </tr>
@@ -1635,7 +1644,7 @@ function PerformanceTab() {
                 </table>
               </div>
               <p className="item-meta" style={{ marginTop: 8 }}>
-                🟢 승률 ≥ 45% | 1~3위 강조 | 승률 높은 룰만 TradingView에서 활용 권장
+                {t('performance_hint')}
               </p>
             </>
           )}
@@ -1647,58 +1656,122 @@ function PerformanceTab() {
 
 // ── root ──────────────────────────────────────────────────────────────────────
 
+const CONFIG_TABS: Tab[] = ['symbols', 'rules', 'alert', 'report', 'status']
+
+const TAB_KEYS: Record<Tab, string> = {
+  symbols: 'symbols',
+  rules: 'rules',
+  status: 'status',
+  chart: 'chart',
+  backtest: 'backtest',
+  paper: 'paper',
+  report: 'report',
+  history: 'history',
+  alert: 'alert',
+  performance: 'performance',
+  analysis: 'analysis',
+}
+
 export function App() {
-  const [tab, setTab] = useState<Tab>('symbols')
+  const { t } = useTranslation()
+  const [tab, setTab] = useState<Tab>('chart')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const isConfigTab = CONFIG_TABS.includes(tab)
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
+  const goConfig = (t: Tab) => {
+    setTab(t)
+    setMenuOpen(false)
+  }
 
   return (
     <div className="container">
       <header className="header">
-        <h1><span className="brand">Chart</span> Analyzer</h1>
-        <p className="header-sub">ICT · Wyckoff · General TA — MTF 신호 분석 플랫폼</p>
+        <div className="header-top">
+          <div>
+            <h1><span className="brand">Chart</span> Analyzer</h1>
+            <p className="header-sub">{t('header_sub')}</p>
+          </div>
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button
+              className={`hamburger-btn${isConfigTab ? ' config-active' : ''}`}
+              onClick={() => setMenuOpen(o => !o)}
+              title="Config"
+            >
+              ☰
+            </button>
+            {menuOpen && (
+              <div className="config-menu">
+                {(['symbols', 'rules', 'alert', 'report', 'status'] as const).map(tabKey => (
+                  <button
+                    key={tabKey}
+                    className={`config-menu-item${tab === tabKey ? ' active' : ''}`}
+                    onClick={() => goConfig(tabKey)}
+                  >
+                    {t(TAB_KEYS[tabKey])}
+                  </button>
+                ))}
+                <div style={{ borderTop: '1px solid rgba(91,146,121,0.2)', marginTop: '8px', paddingTop: '8px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '6px' }}>{t('language')}</div>
+                  {(['en', 'ko', 'ja'] as const).map(lang => (
+                    <button
+                      key={lang}
+                      onClick={() => { i18n.changeLanguage(lang); localStorage.setItem('language', lang) }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left' as const,
+                        padding: '5px 8px',
+                        background: i18n.language === lang ? 'rgba(91,146,121,0.2)' : 'transparent',
+                        border: 'none',
+                        color: 'var(--text)',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {lang === 'en' ? 'English' : lang === 'ko' ? '한국어' : '日本語'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
         <nav className="tabs">
-          <button className={`tab-btn${tab === 'symbols' ? ' active' : ''}`} onClick={() => setTab('symbols')}>
-            종목
-          </button>
-          <button className={`tab-btn${tab === 'rules' ? ' active' : ''}`} onClick={() => setTab('rules')}>
-            룰
-          </button>
-          <button className={`tab-btn${tab === 'status' ? ' active' : ''}`} onClick={() => setTab('status')}>
-            상태
-          </button>
-          <button className={`tab-btn${tab === 'chart' ? ' active' : ''}`} onClick={() => setTab('chart')}>
-            차트
-          </button>
-          <button className={`tab-btn${tab === 'backtest' ? ' active' : ''}`} onClick={() => setTab('backtest')}>
-            백테스트
-          </button>
-          <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>
-            페이퍼
-          </button>
-          <button className={`tab-btn${tab === 'report' ? ' active' : ''}`} onClick={() => setTab('report')}>
-            리포트
-          </button>
-          <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>
-            히스토리
-          </button>
-          <button className={`tab-btn${tab === 'alert' ? ' active' : ''}`} onClick={() => setTab('alert')}>
-            알림
-          </button>
-          <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>
-            성과
-          </button>
+          <button className={`tab-btn${tab === 'chart' ? ' active' : ''}`} onClick={() => setTab('chart')}>{t('chart')}</button>
+          <button className={`tab-btn${tab === 'analysis' ? ' active' : ''}`} onClick={() => setTab('analysis')}>{t('analysis')}</button>
+          <button className={`tab-btn${tab === 'backtest' ? ' active' : ''}`} onClick={() => setTab('backtest')}>{t('backtest')}</button>
+          <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>{t('performance')}</button>
+          <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>{t('paper')}</button>
+          <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
         </nav>
       </header>
       <main>
+        {tab === 'chart' && <ChartTab />}
+        {tab === 'analysis' && <AnalysisTab />}
+        {tab === 'backtest' && <BacktestTab />}
+        {tab === 'performance' && <PerformanceTab />}
+        {tab === 'paper' && <PaperTab />}
+        {tab === 'history' && <HistoryTab />}
         {tab === 'symbols' && <SymbolsTab />}
         {tab === 'rules' && <RulesTab />}
-        {tab === 'status' && <StatusTab />}
-        {tab === 'chart' && <ChartTab />}
-        {tab === 'backtest' && <BacktestTab />}
-        {tab === 'paper' && <PaperTab />}
-        {tab === 'report' && <ReportTab />}
-        {tab === 'history' && <HistoryTab />}
         {tab === 'alert' && <AlertTab />}
-        {tab === 'performance' && <PerformanceTab />}
+        {tab === 'report' && <ReportTab />}
+        {tab === 'status' && <StatusTab />}
       </main>
     </div>
   )

@@ -1,4 +1,4 @@
-# Contributing to Chartter
+# Contributing to ChartNagari
 
 Thank you for taking the time to contribute! This guide covers everything you need to get started.
 
@@ -9,8 +9,8 @@ Thank you for taking the time to contribute! This guide covers everything you ne
 **Prerequisites:** Go 1.26+, Node.js 20+, Docker (optional)
 
 ```bash
-git clone https://github.com/Ju571nK/Chatter.git
-cd Chatter
+git clone https://github.com/Ju571nK/ChartNagari.git
+cd ChartNagari
 
 # Install Go dependencies
 go mod download

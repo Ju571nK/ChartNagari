@@ -1,6 +1,6 @@
-# Chartter
+# ChartNagari
 
-[![CI](https://github.com/Ju571nK/Chatter/actions/workflows/ci.yml/badge.svg)](https://github.com/Ju571nK/Chatter/actions/workflows/ci.yml)
+[![CI](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
@@ -56,8 +56,8 @@ Data Sources: Binance WS (crypto) │ Tiingo REST (stocks) │ Yahoo Finance (fa
 
 ```bash
 # 1. Clone
-git clone https://github.com/Ju571nK/Chatter.git
-cd Chatter
+git clone https://github.com/Ju571nK/ChartNagari.git
+cd ChartNagari
 
 # 2. Configure
 cp .env.example .env

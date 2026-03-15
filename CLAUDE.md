@@ -1,10 +1,10 @@
-# CLAUDE.md — Chartter AI Contributor Guide
+# CLAUDE.md — ChartNagari AI Contributor Guide
 
 > When Claude Code opens this project, read this file first.
 
 ## Project Summary
 
-Chartter is a local-run platform that automatically detects ICT/Wyckoff and general TA signals
+ChartNagari is a local-run platform that automatically detects ICT/Wyckoff and general TA signals
 across multiple timeframes (1W/1D/4H/1H) for US stocks and crypto, and sends alerts via Telegram/Discord.
 Go backend + TypeScript/React frontend.
 

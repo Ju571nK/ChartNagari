@@ -1,20 +1,15 @@
-# CHANGELOG.md
+# Changelog
 
-> Recorder 에이전트가 테스트 통과 후에만 기록한다.
-> 미완성/진행중 항목은 기록하지 않는다.
+All notable changes to this project are documented in this file.
 
----
-
-## 형식
-
+Format:
 ```
-## [버전 or 날짜] - YYYY-MM-DD
-### Added    → 새 기능
-### Changed  → 변경된 기능
-### Fixed    → 버그 수정
-### Removed  → 제거된 기능
-### Research → Researcher가 채택한 새 기법
-### Docs     → 문서 변경
+## [version or date] - YYYY-MM-DD
+### Added    → new features
+### Changed  → changes to existing features
+### Fixed    → bug fixes
+### Removed  → removed features
+### Docs     → documentation changes
 ```
 
 ---

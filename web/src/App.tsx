@@ -15,7 +15,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings'
 
 interface OHLCVBar {
   time: number
@@ -1654,9 +1654,197 @@ function PerformanceTab() {
   )
 }
 
+// ── SettingsTab ───────────────────────────────────────────────────────────────
+
+const ENV_SENTINEL = '__configured__'
+type EnvMap = Record<string, string>
+
+interface EnvField {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'select'
+  options?: string[]
+}
+interface EnvGroup { label: string; fields: EnvField[] }
+
+const ENV_GROUPS: EnvGroup[] = [
+  {
+    label: 'Server',
+    fields: [
+      { key: 'ENV',                  label: 'Environment',            type: 'select', options: ['development', 'production'] },
+      { key: 'SERVER_PORT',          label: 'Server Port',            type: 'text' },
+      { key: 'LOG_LEVEL',            label: 'Log Level',              type: 'select', options: ['debug', 'info', 'warn', 'error'] },
+      { key: 'ALERT_COOLDOWN_HOURS', label: 'Alert Cooldown (hours)', type: 'text' },
+    ],
+  },
+  {
+    label: 'Notifications',
+    fields: [
+      { key: 'TELEGRAM_BOT_TOKEN',  label: 'Telegram Bot Token',   type: 'password' },
+      { key: 'TELEGRAM_CHAT_ID',    label: 'Telegram Chat ID',     type: 'text' },
+      { key: 'DISCORD_WEBHOOK_URL', label: 'Discord Webhook URL',  type: 'password' },
+    ],
+  },
+  {
+    label: 'Data Sources',
+    fields: [
+      { key: 'TIINGO_API_KEY',       label: 'Tiingo API Key',              type: 'password' },
+      { key: 'TIINGO_POLL_INTERVAL', label: 'Tiingo Poll Interval (sec)',  type: 'text' },
+      { key: 'YAHOO_POLL_INTERVAL',  label: 'Yahoo Poll Interval (sec)',   type: 'text' },
+      { key: 'BINANCE_API_KEY',      label: 'Binance API Key',             type: 'password' },
+      { key: 'BINANCE_SECRET_KEY',   label: 'Binance Secret Key',          type: 'password' },
+      { key: 'ALPHAVANTAGE_API_KEY', label: 'AlphaVantage API Key',        type: 'password' },
+    ],
+  },
+  {
+    label: 'AI / LLM',
+    fields: [
+      { key: 'LLM_PROVIDER',     label: 'LLM Provider',    type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini'] },
+      { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', type: 'password' },
+      { key: 'OPENAI_API_KEY',    label: 'OpenAI API Key',    type: 'password' },
+      { key: 'GROQ_API_KEY',      label: 'Groq API Key',      type: 'password' },
+      { key: 'GEMINI_API_KEY',    label: 'Gemini API Key',    type: 'password' },
+      { key: 'AI_MIN_SCORE',      label: 'AI Min Score',      type: 'text' },
+      { key: 'LLM_LANGUAGE',      label: 'LLM Language',      type: 'select', options: ['en', 'ko', 'ja'] },
+    ],
+  },
+]
+
+function SettingsTab() {
+  const [env, setEnv] = useState<EnvMap>({})
+  const [edits, setEdits] = useState<EnvMap>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadEnv = useCallback(() => {
+    setLoading(true)
+    fetch('/api/env/config')
+      .then(r => r.json())
+      .then((data: EnvMap) => { setEnv(data); setEdits({}) })
+      .catch(() => setError('Failed to load settings'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { loadEnv() }, [loadEnv])
+
+  const getValue = (key: string) => {
+    if (key in edits) return edits[key]
+    const v = env[key] ?? ''
+    return v === ENV_SENTINEL ? '' : v
+  }
+
+  const getPlaceholder = (key: string, type: string) =>
+    type === 'password' && env[key] === ENV_SENTINEL
+      ? 'already configured — leave blank to keep'
+      : ''
+
+  const handleChange = (key: string, value: string) => {
+    setEdits(prev => ({ ...prev, [key]: value }))
+    setSaved(false)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    const payload: EnvMap = {}
+    for (const group of ENV_GROUPS) {
+      for (const field of group.fields) {
+        const k = field.key
+        if (k in edits) {
+          const v = edits[k]
+          // blank password field + was previously set → keep existing
+          payload[k] = (v === '' && field.type === 'password' && env[k] === ENV_SENTINEL)
+            ? ENV_SENTINEL
+            : v
+        } else {
+          payload[k] = env[k] ?? ''
+        }
+      }
+    }
+    try {
+      const res = await fetch('/api/env/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setSaved(true)
+      loadEnv()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="section"><p>Loading…</p></div>
+
+  return (
+    <div className="section">
+      <h2>Environment Settings</h2>
+      <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+        Changes are written to <code>.env</code>. <strong>Restart the server</strong> to apply.
+      </p>
+      {error && (
+        <div className="save-success" style={{ background: 'rgba(255,68,68,0.12)', color: '#ff6b6b', marginBottom: '1rem' }}>
+          {error}
+        </div>
+      )}
+      {saved && (
+        <div className="save-success" style={{ marginBottom: '1rem' }}>
+          Saved — restart the server to apply changes.
+        </div>
+      )}
+      {ENV_GROUPS.map(group => (
+        <div key={group.label} style={{ marginBottom: '2rem' }}>
+          <h3 style={{
+            fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+            color: 'var(--accent)', marginBottom: '0.75rem',
+            borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
+          }}>
+            {group.label}
+          </h3>
+          {group.fields.map(field => (
+            <div key={field.key} className="report-field">
+              <label style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
+                {field.label}
+              </label>
+              {field.type === 'select' ? (
+                <select
+                  className="report-input"
+                  value={getValue(field.key)}
+                  onChange={e => handleChange(field.key, e.target.value)}
+                >
+                  {(field.options ?? []).map(o => (
+                    <option key={o} value={o}>{o || '— auto —'}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="report-input"
+                  type={field.type}
+                  value={getValue(field.key)}
+                  placeholder={getPlaceholder(field.key, field.type)}
+                  onChange={e => handleChange(field.key, e.target.value)}
+                  autoComplete="off"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+      <button className="run-btn" onClick={handleSave} disabled={saving}>
+        {saving ? 'Saving…' : 'Save to .env'}
+      </button>
+    </div>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
-const CONFIG_TABS: Tab[] = ['symbols', 'rules', 'alert', 'report', 'status']
+const CONFIG_TABS: Tab[] = ['symbols', 'rules', 'alert', 'report', 'status', 'settings']
 
 const TAB_KEYS: Record<Tab, string> = {
   symbols: 'symbols',
@@ -1670,6 +1858,7 @@ const TAB_KEYS: Record<Tab, string> = {
   alert: 'alert',
   performance: 'performance',
   analysis: 'analysis',
+  settings: 'settings',
 }
 
 export function App() {
@@ -1715,7 +1904,7 @@ export function App() {
             </button>
             {menuOpen && (
               <div className="config-menu">
-                {(['symbols', 'rules', 'alert', 'report', 'status'] as const).map(tabKey => (
+                {(['symbols', 'rules', 'alert', 'report', 'status', 'settings'] as const).map(tabKey => (
                   <button
                     key={tabKey}
                     className={`config-menu-item${tab === tabKey ? ' active' : ''}`}
@@ -1772,6 +1961,7 @@ export function App() {
         {tab === 'alert' && <AlertTab />}
         {tab === 'report' && <ReportTab />}
         {tab === 'status' && <StatusTab />}
+        {tab === 'settings' && <SettingsTab />}
       </main>
     </div>
   )

@@ -45,7 +45,7 @@ func makeSignal(symbol, rule, direction string, score float64) models.Signal {
 // ── disabled (no API key) ────────────────────────────────────────────────────
 
 func TestEnrich_Disabled(t *testing.T) {
-	interp := New("", 12.0)
+	interp := New("", 12.0, "en")
 	sig := makeSignal("BTCUSDT", "rsi_overbought_oversold", "LONG", 15.0)
 	groups := []SignalGroup{{Symbol: "BTCUSDT", Signals: []models.Signal{sig}}}
 
@@ -68,7 +68,7 @@ func TestEnrich_BelowMinScore(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	interp := New("test-key", 12.0, option.WithBaseURL(srv.URL))
+	interp := New("test-key", 12.0, "en", option.WithBaseURL(srv.URL))
 	sig := makeSignal("BTCUSDT", "ema_cross", "LONG", 5.0)
 	groups := []SignalGroup{{Symbol: "BTCUSDT", Signals: []models.Signal{sig}}}
 
@@ -97,7 +97,7 @@ func TestEnrich_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	interp := New("test-key", 12.0, option.WithBaseURL(srv.URL))
+	interp := New("test-key", 12.0, "en", option.WithBaseURL(srv.URL))
 	sig1 := makeSignal("NVDA", "rsi_overbought_oversold", "LONG", 8.0)
 	sig2 := makeSignal("NVDA", "ict_order_block", "LONG", 6.0)
 	groups := []SignalGroup{
@@ -124,7 +124,7 @@ func TestEnrich_APIError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	interp := New("test-key", 12.0, option.WithBaseURL(srv.URL))
+	interp := New("test-key", 12.0, "en", option.WithBaseURL(srv.URL))
 	sig := makeSignal("AAPL", "wyckoff_spring", "LONG", 15.0)
 	groups := []SignalGroup{{Symbol: "AAPL", Signals: []models.Signal{sig}}}
 
@@ -141,7 +141,7 @@ func TestEnrich_APIError(t *testing.T) {
 // ── empty groups ─────────────────────────────────────────────────────────────
 
 func TestEnrich_EmptyGroups(t *testing.T) {
-	interp := New("test-key", 12.0)
+	interp := New("test-key", 12.0, "en")
 	out := interp.Enrich(context.Background(), nil)
 	if len(out) != 0 {
 		t.Errorf("want empty output, got %d signals", len(out))
@@ -162,7 +162,7 @@ func TestEnrich_MixedScores(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	interp := New("test-key", 12.0, option.WithBaseURL(srv.URL))
+	interp := New("test-key", 12.0, "en", option.WithBaseURL(srv.URL))
 
 	lowSig := makeSignal("ETH", "ema_cross", "LONG", 3.0)   // total=3 < 12
 	highSig := makeSignal("BTC", "ict_order_block", "LONG", 14.0) // total=14 >= 12
@@ -261,7 +261,7 @@ func TestBuildPrompt_MTFConfluence(t *testing.T) {
 
 	p := buildPrompt(g)
 
-	for _, want := range []string{"MTF 합류", "LONG 2개", "SHORT 1개", "롱 우세"} {
+	for _, want := range []string{"MTF Confluence", "LONG 2", "SHORT 1", "longs dominant"} {
 		if !contains(p, want) {
 			t.Errorf("prompt must contain %q", want)
 		}

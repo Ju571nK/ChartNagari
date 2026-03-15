@@ -129,8 +129,8 @@ func TestGenerate_WithSignals_NormalFormat(t *testing.T) {
 	if !strings.Contains(msg, "AAPL") {
 		t.Error("message should contain symbol AAPL")
 	}
-	if !strings.Contains(msg, "일일 리포트") {
-		t.Error("message should contain '일일 리포트'")
+	if !strings.Contains(msg, "Daily Report") {
+		t.Error("message should contain 'Daily Report'")
 	}
 	if !strings.Contains(msg, "BULL") {
 		t.Error("message should contain BULL count")

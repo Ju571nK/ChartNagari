@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/analyst"
@@ -151,6 +152,7 @@ type Server struct {
 	fullStore        FullStore                      // optional; set via WithFullStore
 	analystDirector  AnalystDirector                // optional; set via WithAnalystDirector
 	announcer        Announcer                      // optional; set via WithAnnouncer
+	envFile          string                         // path to .env file; set via WithEnvFile
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
 	mu               sync.RWMutex
@@ -214,6 +216,11 @@ func (s *Server) WithAnnouncer(a Announcer) {
 	s.announcer = a
 }
 
+// WithEnvFile enables the GET/PUT /api/env/config endpoints by pointing them at the .env file.
+func (s *Server) WithEnvFile(path string) {
+	s.envFile = path
+}
+
 // Handler returns the fully configured http.Handler for the server.
 // All /api/* routes are registered; other paths fall through to the static
 // file server when available.
@@ -262,6 +269,12 @@ func (s *Server) Handler() http.Handler {
 	// Alert config
 	mux.HandleFunc("GET /api/alert/config", s.getAlertConfig)
 	mux.HandleFunc("PUT /api/alert/config", s.updateAlertConfig)
+
+	// .env config (only when envFile is set)
+	if s.envFile != "" {
+		mux.HandleFunc("GET /api/env/config", s.getEnvConfig)
+		mux.HandleFunc("PUT /api/env/config", s.updateEnvConfig)
+	}
 
 	// Multi-analyst full analysis
 	mux.HandleFunc("POST /api/analysis/full", s.runFullAnalysis)
@@ -1262,6 +1275,104 @@ func (s *Server) runAnalysisExport(w http.ResponseWriter, r *http.Request) {
 
 	s.announcer.Announce(r.Context(), msg)
 	jsonOK(w, map[string]string{"status": "sent"})
+}
+
+// ── .env config ───────────────────────────────────────────────────────────────
+
+// envSentinel is returned for sensitive fields that are set, so the actual value
+// is never echoed back to the browser. The client sends it back unchanged to mean "keep as-is".
+const envSentinel = "__configured__"
+
+// envSensitiveKeys lists .env keys whose values are masked in GET responses.
+var envSensitiveKeys = map[string]bool{
+	"TELEGRAM_BOT_TOKEN":  true,
+	"DISCORD_WEBHOOK_URL": true,
+	"TIINGO_API_KEY":      true,
+	"BINANCE_API_KEY":     true,
+	"BINANCE_SECRET_KEY":  true,
+	"ALPHAVANTAGE_API_KEY": true,
+	"ANTHROPIC_API_KEY":   true,
+	"OPENAI_API_KEY":      true,
+	"GROQ_API_KEY":        true,
+	"GEMINI_API_KEY":      true,
+}
+
+// envExposedKeys is the ordered list of .env keys exposed via the API.
+var envExposedKeys = []string{
+	"ENV", "SERVER_PORT", "LOG_LEVEL", "ALERT_COOLDOWN_HOURS",
+	"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL",
+	"TIINGO_API_KEY", "TIINGO_POLL_INTERVAL",
+	"YAHOO_POLL_INTERVAL",
+	"BINANCE_API_KEY", "BINANCE_SECRET_KEY",
+	"ALPHAVANTAGE_API_KEY",
+	"LLM_PROVIDER",
+	"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY",
+	"AI_MIN_SCORE", "LLM_LANGUAGE",
+}
+
+// getEnvConfig handles GET /api/env/config.
+// Returns all exposed .env keys; sensitive keys that are set are replaced with envSentinel.
+func (s *Server) getEnvConfig(w http.ResponseWriter, _ *http.Request) {
+	env := s.readEnvFile()
+	out := make(map[string]string, len(envExposedKeys))
+	for _, k := range envExposedKeys {
+		v := env[k]
+		if envSensitiveKeys[k] && v != "" {
+			v = envSentinel
+		}
+		out[k] = v
+	}
+	jsonOK(w, out)
+}
+
+// updateEnvConfig handles PUT /api/env/config.
+// Reads the current .env, applies non-sentinel updates, and writes the file back.
+// Fields set to envSentinel are left unchanged (client means "keep existing").
+func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
+	var updates map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	allowed := make(map[string]bool, len(envExposedKeys))
+	for _, k := range envExposedKeys {
+		allowed[k] = true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	env := s.readEnvFile()
+
+	for k, v := range updates {
+		if !allowed[k] {
+			continue // reject unknown keys
+		}
+		if v == envSentinel {
+			continue // sentinel = "keep existing value"
+		}
+		if v == "" {
+			delete(env, k)
+		} else {
+			env[k] = v
+		}
+	}
+
+	if err := godotenv.Write(env, s.envFile); err != nil {
+		http.Error(w, "failed to write .env: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"message": "saved — restart the server to apply changes"})
+}
+
+// readEnvFile reads the .env file into a map. Returns an empty map on error.
+func (s *Server) readEnvFile() map[string]string {
+	env, _ := godotenv.Read(s.envFile)
+	if env == nil {
+		env = make(map[string]string)
+	}
+	return env
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.

@@ -239,7 +239,7 @@ func TestFormatTelegram_WithLevels(t *testing.T) {
 	sig.SL = 64000.0
 	msg := formatTelegram(sig)
 
-	for _, want := range []string{"65000", "67000", "64000", "진입"} {
+	for _, want := range []string{"65000", "67000", "64000", "Entry"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("formatTelegram with levels: expected %q in message, got:\n%s", want, msg)
 		}
@@ -250,8 +250,8 @@ func TestFormatTelegram_WithLevels(t *testing.T) {
 func TestFormatTelegram_NoLevelsWhenZero(t *testing.T) {
 	sig := makeSig("BTCUSDT", "rsi", "LONG", 10.0)
 	msg := formatTelegram(sig)
-	if strings.Contains(msg, "진입") {
-		t.Errorf("formatTelegram: should not show 진입 line when EntryPrice=0, got:\n%s", msg)
+	if strings.Contains(msg, "Entry") {
+		t.Errorf("formatTelegram: should not show Entry line when EntryPrice=0, got:\n%s", msg)
 	}
 }
 

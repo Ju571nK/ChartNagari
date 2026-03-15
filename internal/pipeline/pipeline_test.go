@@ -50,7 +50,7 @@ func makeBars(n int, close, vol float64) []models.OHLCV {
 
 func newTestPipeline(db OHLCVReader, symbols []string) *Pipeline {
 	eng := engine.New(engine.RuleConfig{Rules: map[string]engine.RuleEntry{}})
-	interp := interpreter.New("", 12.0) // disabled — no API key
+	interp := interpreter.New("", 12.0, "en") // disabled — no API key
 	notif := notifier.New(notifier.DefaultConfig(), zerolog.Nop())
 	p := New(
 		DefaultConfig(),
@@ -85,7 +85,7 @@ func TestRunOnce_QueriesAllTFs(t *testing.T) {
 	tfs := []string{"1H", "4H", "1D"}
 
 	eng := engine.New(engine.RuleConfig{Rules: map[string]engine.RuleEntry{}})
-	interp := interpreter.New("", 12.0)
+	interp := interpreter.New("", 12.0, "en")
 	notif := notifier.New(notifier.DefaultConfig(), zerolog.Nop())
 	p := New(DefaultConfig(), db, eng, interp, notif, symbols, tfs, zerolog.Nop())
 	// Mark all symbols as crypto so tests run regardless of market hours.

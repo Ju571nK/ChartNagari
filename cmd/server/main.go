@@ -213,6 +213,7 @@ func main() {
 
 	// ── HTTP API + 설정 UI 서버 ───────────────────────────────────────
 	apiSrv := api.New("config", "web/dist")
+	apiSrv.WithEnvFile(".env")
 	apiSrv.WithChartStore(db)
 	apiSrv.WithBacktestRunner(btRunner)
 	apiSrv.WithPaperStore(db)

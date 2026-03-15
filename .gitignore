@@ -70,11 +70,10 @@ ehthumbs.db
 # Cursor (선택: 팀 공유 룰만 커밋할 경우 제거 가능)
 # .cursor/
 
-# Claude Code (로컬 설정만 제외, 프로젝트 설정은 유지)
-.claude/settings.local.json
+# Claude Code (폴더 전체 미추적)
+.claude/
 
 # ─── 기타 ───
 # Local overrides for config (if any)
 config/*.local.yaml
 *.local.yaml
-.claude/

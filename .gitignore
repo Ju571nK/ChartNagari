@@ -77,3 +77,4 @@ ehthumbs.db
 # Local overrides for config (if any)
 config/*.local.yaml
 *.local.yaml
+.claude/

@@ -17,6 +17,7 @@ import (
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/backtest"
 	"github.com/Ju571nK/Chatter/internal/paper"
+	"github.com/Ju571nK/Chatter/internal/pinescript"
 	"github.com/Ju571nK/Chatter/pkg/models"
 	"gopkg.in/yaml.v3"
 )
@@ -69,6 +70,17 @@ type SignalBar struct {
 	Score            float64 `json:"score"`
 	Message          string  `json:"message"`
 	AIInterpretation string  `json:"ai_interpretation"`
+}
+
+// AggregatedRuleStat aggregates per-rule backtest stats across multiple symbols.
+type AggregatedRuleStat struct {
+	Rule            string  `json:"rule"`
+	SymbolsTested   int     `json:"symbols_tested"`
+	TotalTrades     int     `json:"total_trades"`
+	AvgWinRate      float64 `json:"avg_win_rate"`
+	AvgRR           float64 `json:"avg_rr"`
+	AvgProfitFactor float64 `json:"avg_profit_factor"`
+	Exportable      bool    `json:"exportable"`
 }
 
 // ChartStore provides OHLCV and signal data for the chart dashboard.
@@ -192,6 +204,8 @@ func (s *Server) Handler() http.Handler {
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
 	mux.HandleFunc("GET /api/backtest/rules", s.runPerRuleBacktest)
+	mux.HandleFunc("GET /api/performance/rules", s.getPerformanceRules)
+	mux.HandleFunc("GET /api/export/pinescript", s.exportPineScript)
 
 	// Paper trading
 	mux.HandleFunc("GET /api/paper/positions", s.getPaperPositions)
@@ -554,6 +568,95 @@ func (s *Server) runPerRuleBacktest(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, stats)
 }
 
+// getPerformanceRules handles GET /api/performance/rules
+// Query params: symbols (comma-separated, required), timeframe (required),
+//               tp_mult (optional), sl_mult (optional)
+func (s *Server) getPerformanceRules(w http.ResponseWriter, r *http.Request) {
+	if s.backtestRunner == nil {
+		http.Error(w, "backtest runner not configured", http.StatusServiceUnavailable)
+		return
+	}
+	symbolsParam := r.URL.Query().Get("symbols")
+	timeframe := r.URL.Query().Get("timeframe")
+	if symbolsParam == "" || timeframe == "" {
+		http.Error(w, "symbols and timeframe are required", http.StatusBadRequest)
+		return
+	}
+	symbols := strings.Split(symbolsParam, ",")
+	var tpMult, slMult float64
+	if v := r.URL.Query().Get("tp_mult"); v != "" {
+		tpMult, _ = strconv.ParseFloat(v, 64)
+	}
+	if v := r.URL.Query().Get("sl_mult"); v != "" {
+		slMult, _ = strconv.ParseFloat(v, 64)
+	}
+
+	// Collect per-rule stats across all symbols
+	type accumulator struct {
+		winRateSum      float64
+		rrSum           float64
+		profitFactorSum float64
+		totalTrades     int
+		count           int
+	}
+	acc := make(map[string]*accumulator)
+
+	for _, sym := range symbols {
+		sym = strings.TrimSpace(sym)
+		if sym == "" {
+			continue
+		}
+		stats, err := s.backtestRunner.RunPerRule(sym, timeframe, tpMult, slMult)
+		if err != nil || len(stats) == 0 {
+			continue
+		}
+		for _, st := range stats {
+			if _, ok := acc[st.Rule]; !ok {
+				acc[st.Rule] = &accumulator{}
+			}
+			a := acc[st.Rule]
+			a.winRateSum += st.WinRate
+			a.rrSum += st.AvgRR
+			a.profitFactorSum += st.ProfitFactor
+			a.totalTrades += st.Trades
+			a.count++
+		}
+	}
+
+	supported := make(map[string]bool)
+	for _, r := range pinescript.SupportedRules() {
+		supported[r] = true
+	}
+
+	result := make([]AggregatedRuleStat, 0, len(acc))
+	for rule, a := range acc {
+		if a.count == 0 {
+			continue
+		}
+		result = append(result, AggregatedRuleStat{
+			Rule:            rule,
+			SymbolsTested:   a.count,
+			TotalTrades:     a.totalTrades,
+			AvgWinRate:      a.winRateSum / float64(a.count),
+			AvgRR:           a.rrSum / float64(a.count),
+			AvgProfitFactor: a.profitFactorSum / float64(a.count),
+			Exportable:      supported[rule],
+		})
+	}
+
+	// Sort by avg win rate descending
+	for i := 1; i < len(result); i++ {
+		for j := i; j > 0 && result[j].AvgWinRate > result[j-1].AvgWinRate; j-- {
+			result[j], result[j-1] = result[j-1], result[j]
+		}
+	}
+
+	if result == nil {
+		result = []AggregatedRuleStat{}
+	}
+	jsonOK(w, result)
+}
+
 func (s *Server) getPaperPositions(w http.ResponseWriter, _ *http.Request) {
 	if s.paperStore == nil {
 		jsonOK(w, []paper.PaperPosition{})
@@ -905,6 +1008,32 @@ func configWriteErrorMessage(err error) string {
 func jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v) //nolint:errcheck
+}
+
+// exportPineScript handles GET /api/export/pinescript?rule=<name>&win_rate=<float>&avg_rr=<float>
+// Returns a plain-text Pine Script v5 file for download.
+func (s *Server) exportPineScript(w http.ResponseWriter, r *http.Request) {
+	rule := r.URL.Query().Get("rule")
+	if rule == "" {
+		http.Error(w, "rule parameter required", http.StatusBadRequest)
+		return
+	}
+
+	var winRate, avgRR float64
+	fmt.Sscanf(r.URL.Query().Get("win_rate"), "%f", &winRate)
+	fmt.Sscanf(r.URL.Query().Get("avg_rr"), "%f", &avgRR)
+
+	script, err := pinescript.Generate(rule, winRate, avgRR)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	filename := rule + ".pine"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(script))
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.

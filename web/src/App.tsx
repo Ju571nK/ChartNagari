@@ -12,7 +12,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance'
 
 interface OHLCVBar {
   time: number
@@ -873,7 +873,7 @@ function BacktestTab() {
                 <table className="backtest-table">
                   <thead>
                     <tr>
-                      <th>룰</th><th>거래 수</th><th>승률</th><th>평균 RR</th><th>수익 팩터</th><th>누적 수익</th>
+                      <th>룰</th><th>거래 수</th><th>승률</th><th>평균 RR</th><th>수익 팩터</th><th>누적 수익</th><th>Export</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -890,6 +890,26 @@ function BacktestTab() {
                         <td>{s.profit_factor.toFixed(2)}</td>
                         <td className={s.total_return_pct >= 0 ? 'pnl-win' : 'pnl-loss'}>
                           {s.total_return_pct >= 0 ? '+' : ''}{s.total_return_pct.toFixed(2)}%
+                        </td>
+                        <td>
+                          <button
+                            className="run-btn"
+                            style={{ padding: '2px 10px', fontSize: '0.75rem', background: 'rgba(91,146,121,0.12)', color: 'var(--green)', border: '1px solid rgba(91,146,121,0.4)' }}
+                            onClick={() => {
+                              const url = `/api/export/pinescript?rule=${encodeURIComponent(s.rule)}&win_rate=${(s.win_rate * 100).toFixed(1)}&avg_rr=${s.avg_rr.toFixed(2)}`
+                              fetch(url)
+                                .then((res) => res.blob())
+                                .then((blob) => {
+                                  const a = document.createElement('a')
+                                  a.href = URL.createObjectURL(blob)
+                                  a.download = `${s.rule}.pine`
+                                  a.click()
+                                  URL.revokeObjectURL(a.href)
+                                })
+                            }}
+                          >
+                            .pine
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1420,6 +1440,211 @@ function HistoryTab() {
   )
 }
 
+// ── performance tab ───────────────────────────────────────────────────────────
+
+interface AggregatedRuleStat {
+  rule: string
+  symbols_tested: number
+  total_trades: number
+  avg_win_rate: number
+  avg_rr: number
+  avg_profit_factor: number
+  exportable: boolean
+}
+
+function PerformanceTab() {
+  const [symbols, setSymbols] = useState<string[]>([])
+  const [selected, setSelected] = useState<string[]>([])
+  const [tf, setTf] = useState<TF>('1H')
+  const [tpMult, setTpMult] = useState(2.0)
+  const [slMult, setSlMult] = useState(1.0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [stats, setStats] = useState<AggregatedRuleStat[] | null>(null)
+  const [exporting, setExporting] = useState<string | null>(null)
+
+  useEffect(() => {
+    apiFetch<SymbolItem[]>('/symbols').then((items) => {
+      const enabled = items.filter((i) => i.enabled).map((i) => i.symbol)
+      setSymbols(enabled)
+      setSelected(enabled)
+    }).catch(() => {})
+  }, [])
+
+  const toggleSymbol = (sym: string) => {
+    setSelected((prev) =>
+      prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym]
+    )
+  }
+
+  const run = useCallback(async () => {
+    if (selected.length === 0) return
+    setLoading(true)
+    setError('')
+    setStats(null)
+    try {
+      const result = await apiFetch<AggregatedRuleStat[]>(
+        `/performance/rules?symbols=${encodeURIComponent(selected.join(','))}&timeframe=${tf}&tp_mult=${tpMult}&sl_mult=${slMult}`
+      )
+      setStats(result)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '오류 발생')
+    } finally {
+      setLoading(false)
+    }
+  }, [selected, tf, tpMult, slMult])
+
+  const exportRule = async (rule: string, winRate: number, avgRR: number) => {
+    setExporting(rule)
+    try {
+      const res = await fetch(`/api/export/pinescript?rule=${encodeURIComponent(rule)}&win_rate=${(winRate * 100).toFixed(1)}&avg_rr=${avgRR.toFixed(2)}`)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${rule}.pine`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  return (
+    <>
+      <p className="section-title">심볼 선택</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        {symbols.map((sym) => (
+          <button
+            key={sym}
+            onClick={() => toggleSymbol(sym)}
+            className="tf-btn"
+            style={{
+              background: selected.includes(sym) ? 'rgba(91,146,121,0.18)' : 'transparent',
+              color: selected.includes(sym) ? 'var(--mint)' : 'var(--muted)',
+              border: selected.includes(sym) ? '1px solid rgba(91,146,121,0.5)' : '1px solid rgba(143,128,115,0.3)',
+            }}
+          >
+            {sym}
+          </button>
+        ))}
+        <button
+          className="tf-btn"
+          style={{ color: 'var(--muted)', fontSize: '0.75rem' }}
+          onClick={() => setSelected(symbols.length === selected.length ? [] : [...symbols])}
+        >
+          {symbols.length === selected.length ? '전체 해제' : '전체 선택'}
+        </button>
+      </div>
+
+      <div className="backtest-controls">
+        <div className="tf-group">
+          {TFS.map((t) => (
+            <button
+              key={t}
+              className={`tf-btn${tf === t ? ' active' : ''}`}
+              onClick={() => setTf(t)}
+              disabled={loading}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="item-meta">TP×</span>
+          <input className="symbol-input" type="number" step="0.5" min="0.5" max="10"
+            value={tpMult} onChange={(e) => setTpMult(Number(e.target.value))}
+            disabled={loading} style={{ width: 64 }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="item-meta">SL×</span>
+          <input className="symbol-input" type="number" step="0.5" min="0.5" max="10"
+            value={slMult} onChange={(e) => setSlMult(Number(e.target.value))}
+            disabled={loading} style={{ width: 64 }} />
+        </div>
+        <button className="run-btn" onClick={run} disabled={loading || selected.length === 0}>
+          {loading ? '분석 중...' : `${selected.length}개 심볼 분석`}
+        </button>
+      </div>
+
+      {error && <p className="error-msg">오류: {error}</p>}
+
+      {stats !== null && !loading && (
+        <>
+          <p className="section-title" style={{ marginTop: 24 }}>
+            룰 성과 순위 — {tf} | TP×{tpMult} SL×{slMult} | {selected.length}개 심볼 집계
+          </p>
+          {stats.length === 0 ? (
+            <p className="loading">데이터 없음 — OHLCV 수집 기간을 늘리거나 다른 TF를 선택하세요.</p>
+          ) : (
+            <>
+              <div className="backtest-table-wrap">
+                <table className="backtest-table">
+                  <thead>
+                    <tr>
+                      <th>순위</th>
+                      <th>룰</th>
+                      <th>평균 승률</th>
+                      <th>평균 RR</th>
+                      <th>수익 팩터</th>
+                      <th>총 거래</th>
+                      <th>심볼 수</th>
+                      <th style={{ minWidth: 140 }}>TradingView 내보내기</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.map((s, idx) => (
+                      <tr key={s.rule}>
+                        <td style={{ color: idx < 3 ? 'var(--mint)' : 'var(--muted)', fontWeight: idx < 3 ? 700 : 400 }}>
+                          {idx + 1}
+                        </td>
+                        <td style={{ color: 'var(--text)' }}>{s.rule}</td>
+                        <td style={{ color: s.avg_win_rate >= 0.45 ? 'var(--mint)' : 'var(--muted)', fontWeight: 600 }}>
+                          {(s.avg_win_rate * 100).toFixed(1)}%
+                        </td>
+                        <td>{s.avg_rr.toFixed(2)}</td>
+                        <td>{s.avg_profit_factor.toFixed(2)}</td>
+                        <td>{s.total_trades}</td>
+                        <td style={{ color: 'var(--muted)' }}>{s.symbols_tested}</td>
+                        <td>
+                          {s.exportable ? (
+                            <button
+                              className="run-btn"
+                              disabled={exporting === s.rule}
+                              onClick={() => exportRule(s.rule, s.avg_win_rate, s.avg_rr)}
+                              style={{
+                                padding: '4px 14px',
+                                fontSize: '0.8rem',
+                                background: s.avg_win_rate >= 0.45
+                                  ? 'rgba(91,146,121,0.18)'
+                                  : 'rgba(143,128,115,0.12)',
+                                color: s.avg_win_rate >= 0.45 ? 'var(--mint)' : 'var(--muted)',
+                                border: s.avg_win_rate >= 0.45
+                                  ? '1px solid rgba(91,146,121,0.5)'
+                                  : '1px solid rgba(143,128,115,0.3)',
+                              }}
+                            >
+                              {exporting === s.rule ? '...' : '📥 TV로 내보내기'}
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>미지원</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="item-meta" style={{ marginTop: 8 }}>
+                🟢 승률 ≥ 45% | 1~3위 강조 | 승률 높은 룰만 TradingView에서 활용 권장
+              </p>
+            </>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -1458,6 +1683,9 @@ export function App() {
           <button className={`tab-btn${tab === 'alert' ? ' active' : ''}`} onClick={() => setTab('alert')}>
             알림
           </button>
+          <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>
+            성과
+          </button>
         </nav>
       </header>
       <main>
@@ -1470,6 +1698,7 @@ export function App() {
         {tab === 'report' && <ReportTab />}
         {tab === 'history' && <HistoryTab />}
         {tab === 'alert' && <AlertTab />}
+        {tab === 'performance' && <PerformanceTab />}
       </main>
     </div>
   )

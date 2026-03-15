@@ -9,6 +9,8 @@ A self-hosted platform that automatically detects ICT/Wyckoff and general TA sig
 
 > **Local-first** — all data stays on your machine. No cloud accounts required to run.
 
+> **Vibe-coded** — this project was built entirely through vibe coding with [Claude Code](https://claude.ai/claude-code).
+
 ---
 
 ## Features

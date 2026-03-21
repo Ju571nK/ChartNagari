@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/analyst"
@@ -152,7 +151,7 @@ type Server struct {
 	fullStore        FullStore                      // optional; set via WithFullStore
 	analystDirector  AnalystDirector                // optional; set via WithAnalystDirector
 	announcer        Announcer                      // optional; set via WithAnnouncer
-	envFile          string                         // path to .env file; set via WithEnvFile
+	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
 	mu               sync.RWMutex
@@ -216,9 +215,9 @@ func (s *Server) WithAnnouncer(a Announcer) {
 	s.announcer = a
 }
 
-// WithEnvFile enables the GET/PUT /api/env/config endpoints by pointing them at the .env file.
-func (s *Server) WithEnvFile(path string) {
-	s.envFile = path
+// WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
+func (s *Server) WithSettingsFile(path string) {
+	s.settingsFile = path
 }
 
 // Handler returns the fully configured http.Handler for the server.
@@ -270,8 +269,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/alert/config", s.getAlertConfig)
 	mux.HandleFunc("PUT /api/alert/config", s.updateAlertConfig)
 
-	// .env config (only when envFile is set)
-	if s.envFile != "" {
+	// settings.yaml config (only when settingsFile is set)
+	if s.settingsFile != "" {
+		mux.HandleFunc("GET /api/settings/config", s.getEnvConfig)
+		mux.HandleFunc("PUT /api/settings/config", s.updateEnvConfig)
+		// backward-compat: old /api/env/config route
 		mux.HandleFunc("GET /api/env/config", s.getEnvConfig)
 		mux.HandleFunc("PUT /api/env/config", s.updateEnvConfig)
 	}
@@ -1277,27 +1279,27 @@ func (s *Server) runAnalysisExport(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"status": "sent"})
 }
 
-// ── .env config ───────────────────────────────────────────────────────────────
+// ── settings.yaml config ──────────────────────────────────────────────────────
 
 // envSentinel is returned for sensitive fields that are set, so the actual value
 // is never echoed back to the browser. The client sends it back unchanged to mean "keep as-is".
 const envSentinel = "__configured__"
 
-// envSensitiveKeys lists .env keys whose values are masked in GET responses.
+// envSensitiveKeys lists setting keys whose values are masked in GET responses.
 var envSensitiveKeys = map[string]bool{
-	"TELEGRAM_BOT_TOKEN":  true,
-	"DISCORD_WEBHOOK_URL": true,
-	"TIINGO_API_KEY":      true,
-	"BINANCE_API_KEY":     true,
-	"BINANCE_SECRET_KEY":  true,
+	"TELEGRAM_BOT_TOKEN":   true,
+	"DISCORD_WEBHOOK_URL":  true,
+	"TIINGO_API_KEY":       true,
+	"BINANCE_API_KEY":      true,
+	"BINANCE_SECRET_KEY":   true,
 	"ALPHAVANTAGE_API_KEY": true,
-	"ANTHROPIC_API_KEY":   true,
-	"OPENAI_API_KEY":      true,
-	"GROQ_API_KEY":        true,
-	"GEMINI_API_KEY":      true,
+	"ANTHROPIC_API_KEY":    true,
+	"OPENAI_API_KEY":       true,
+	"GROQ_API_KEY":         true,
+	"GEMINI_API_KEY":       true,
 }
 
-// envExposedKeys is the ordered list of .env keys exposed via the API.
+// envExposedKeys is the ordered list of setting keys exposed via the API.
 var envExposedKeys = []string{
 	"ENV", "SERVER_PORT", "LOG_LEVEL", "ALERT_COOLDOWN_HOURS",
 	"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL",
@@ -1310,13 +1312,14 @@ var envExposedKeys = []string{
 	"AI_MIN_SCORE", "LLM_LANGUAGE",
 }
 
-// getEnvConfig handles GET /api/env/config.
-// Returns all exposed .env keys; sensitive keys that are set are replaced with envSentinel.
+// getEnvConfig handles GET /api/settings/config.
+// Returns all exposed setting keys; sensitive keys that are set are replaced with envSentinel.
 func (s *Server) getEnvConfig(w http.ResponseWriter, _ *http.Request) {
-	env := s.readEnvFile()
+	settings := s.readSettingsFile()
+	flat := settings.ToMap()
 	out := make(map[string]string, len(envExposedKeys))
 	for _, k := range envExposedKeys {
-		v := env[k]
+		v := flat[k]
 		if envSensitiveKeys[k] && v != "" {
 			v = envSentinel
 		}
@@ -1325,8 +1328,8 @@ func (s *Server) getEnvConfig(w http.ResponseWriter, _ *http.Request) {
 	jsonOK(w, out)
 }
 
-// updateEnvConfig handles PUT /api/env/config.
-// Reads the current .env, applies non-sentinel updates, and writes the file back.
+// updateEnvConfig handles PUT /api/settings/config.
+// Reads the current settings.yaml, applies non-sentinel updates, and writes the file back.
 // Fields set to envSentinel are left unchanged (client means "keep existing").
 func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
 	var updates map[string]string
@@ -1343,36 +1346,31 @@ func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	env := s.readEnvFile()
+	settings := s.readSettingsFile()
 
+	filtered := make(map[string]string)
 	for k, v := range updates {
-		if !allowed[k] {
-			continue // reject unknown keys
+		if !allowed[k] || v == envSentinel {
+			continue
 		}
-		if v == envSentinel {
-			continue // sentinel = "keep existing value"
-		}
-		if v == "" {
-			delete(env, k)
-		} else {
-			env[k] = v
-		}
+		filtered[k] = v
 	}
+	settings.ApplyMap(filtered)
 
-	if err := godotenv.Write(env, s.envFile); err != nil {
-		http.Error(w, "failed to write .env: "+err.Error(), http.StatusInternalServerError)
+	if err := appconfig.SaveSettings(s.settingsFile, settings); err != nil {
+		http.Error(w, "failed to write settings.yaml: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	jsonOK(w, map[string]string{"message": "saved — restart the server to apply changes"})
 }
 
-// readEnvFile reads the .env file into a map. Returns an empty map on error.
-func (s *Server) readEnvFile() map[string]string {
-	env, _ := godotenv.Read(s.envFile)
-	if env == nil {
-		env = make(map[string]string)
+// readSettingsFile loads settings.yaml into a SettingsYAML struct.
+func (s *Server) readSettingsFile() *appconfig.SettingsYAML {
+	settings, _ := appconfig.LoadSettings(s.settingsFile)
+	if settings == nil {
+		settings = &appconfig.SettingsYAML{}
 	}
-	return env
+	return settings
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.

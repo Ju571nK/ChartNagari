@@ -1,0 +1,63 @@
+# ChartNagari 설정 파일 템플릿
+# 이 파일을 복사하여 config/settings.yaml 로 저장하고 값을 채워주세요.
+# settings.yaml 은 .gitignore 에 등록되어 있으므로 절대 커밋되지 않습니다.
+#
+# 우선순위: OS 환경변수 > settings.yaml > 하드코딩 기본값
+
+server:
+  env: development          # development | production
+  port: "8080"
+  log_level: debug          # debug | info | warn | error
+
+database:
+  path: ./data/chart_analyzer.db
+
+# ── Binance (크립토 데이터) ──────────────────────────────────────────────────
+binance:
+  api_key: ""
+  secret_key: ""
+
+# ── Tiingo (주식 데이터 — 권장) ─────────────────────────────────────────────
+# 무료 계정: https://www.tiingo.com → Account → API → Create Token
+tiingo:
+  api_key: ""
+  poll_interval: 900        # 초 단위. 무료 플랜: 50 req/hr → 900 권장
+
+# ── Yahoo Finance (주식 데이터 — Tiingo 미설정 시 폴백) ───────────────────
+yahoo:
+  poll_interval: 60         # 초 단위
+
+# ── Telegram Bot ─────────────────────────────────────────────────────────────
+telegram:
+  bot_token: ""
+  chat_id: ""
+
+# ── Discord Webhook ──────────────────────────────────────────────────────────
+discord:
+  webhook_url: ""
+
+# ── 알림 설정 ────────────────────────────────────────────────────────────────
+alert:
+  cooldown_hours: 4
+
+# ── LLM 해석 레이어 ──────────────────────────────────────────────────────────
+llm:
+  provider: ""              # anthropic | openai | groq | gemini (비어있으면 자동 선택)
+  language: en              # en | ko | ja
+  min_score: 12.0           # AI 해석을 트리거하는 최소 시그널 점수
+
+anthropic:
+  api_key: ""
+
+openai:
+  api_key: ""
+
+groq:
+  api_key: ""
+
+gemini:
+  api_key: ""
+
+# ── AlphaVantage (선택 — 20년 일봉 SPY 데이터) ──────────────────────────────
+alphavantage:
+  api_key: ""

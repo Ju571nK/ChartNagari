@@ -31,6 +31,23 @@ Format:
 
 ---
 
+## [1.9.0] - 2026-03-21
+
+### Added
+- `internal/hub/hub.go`: WebSocket 허브 패키지 — 다중 클라이언트 연결 관리, ping/pong keepalive, `Broadcast(type, payload)` 메서드
+- `GET /ws` 엔드포인트: 브라우저 WebSocket 업그레이드 처리
+- React LIVE 인디케이터: 헤더에 `● LIVE` / `○ --` 연결 상태 표시
+- React 시그널 토스트: 새 신호 발생 시 우하단 슬라이드인 알림 (6초 후 자동 소멸, 클릭 닫기)
+- `/api/status` 응답에 `ws_clients` (현재 연결 수) 필드 추가
+
+### Changed
+- `internal/pipeline/pipeline.go`: `SignalBroadcaster` 인터페이스 + `SetBroadcaster` + AI 해석 완료 후 즉시 브로드캐스트
+- `internal/api/server.go`: `WSHub` 인터페이스 + `WithHub` setter + `/ws` 라우트 등록
+- `cmd/server/main.go`: `hub.New()` 초기화, `go wsHub.Run()`, 파이프라인·API서버 연결
+- `web/src/App.css`: `.ws-indicator`, `.ws-toast`, `@keyframes slideIn` CSS 추가
+
+---
+
 ## [1.8.0] - 2026-03-21
 
 ### Added

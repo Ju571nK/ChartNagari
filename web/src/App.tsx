@@ -2031,6 +2031,46 @@ export function App() {
   const [tab, setTab] = useState<Tab>('chart')
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [wsConnected, setWsConnected] = useState(false)
+  const [liveSignal, setLiveSignal] = useState<SignalBar | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+
+  // WebSocket auto-reconnecting connection
+  useEffect(() => {
+    let ws: WebSocket
+    let reconnectTimer: ReturnType<typeof setTimeout>
+
+    const connect = () => {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      ws = new WebSocket(`${proto}//${window.location.host}/ws`)
+      wsRef.current = ws
+
+      ws.onopen = () => setWsConnected(true)
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.type === 'signal' && msg.payload) {
+            setLiveSignal(msg.payload as SignalBar)
+            setTimeout(() => setLiveSignal(null), 6000)
+          }
+        } catch {}
+      }
+
+      ws.onclose = () => {
+        setWsConnected(false)
+        reconnectTimer = setTimeout(connect, 3000)
+      }
+
+      ws.onerror = () => ws.close()
+    }
+
+    connect()
+    return () => {
+      clearTimeout(reconnectTimer)
+      ws?.close()
+    }
+  }, [])
 
   const isConfigTab = CONFIG_TABS.includes(tab)
 
@@ -2056,7 +2096,11 @@ export function App() {
       <header className="header">
         <div className="header-top">
           <div>
-            <h1><span className="brand">Chart</span> Analyzer</h1>
+            <h1><span className="brand">Chart</span> Analyzer
+              <span className={`ws-indicator ${wsConnected ? 'ws-live' : 'ws-offline'}`}>
+                {wsConnected ? '● LIVE' : '○ --'}
+              </span>
+            </h1>
             <p className="header-sub">{t('header_sub')}</p>
           </div>
           <div ref={menuRef} style={{ position: 'relative' }}>
@@ -2129,6 +2173,15 @@ export function App() {
         {tab === 'settings' && <SettingsTab />}
         {tab === 'price-alerts' && <PriceAlertsTab />}
       </main>
+      {liveSignal && (
+        <div className="ws-toast" onClick={() => setLiveSignal(null)}>
+          <span className="ws-toast-dir" data-dir={liveSignal.direction}>{liveSignal.direction}</span>
+          <strong>{liveSignal.symbol}</strong>
+          <span>{liveSignal.rule}</span>
+          <span className="ws-toast-score">{liveSignal.score?.toFixed(1)}</span>
+          <span className="ws-toast-close">×</span>
+        </div>
+      )}
     </div>
   )
 }

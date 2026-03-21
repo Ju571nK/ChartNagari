@@ -28,6 +28,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
 	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
+	"github.com/Ju571nK/Chatter/internal/hub"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pricealert"
@@ -154,6 +155,10 @@ func main() {
 		eng.Register(r)
 	}
 
+	// ── WebSocket Hub ─────────────────────────────────────────────────
+	wsHub := hub.New(log.Logger)
+	go wsHub.Run()
+
 	// ── AlertConfig 홀더 ──────────────────────────────────────────────
 	alertHolder := appconfig.NewAlertConfigHolder(cfg.Alert)
 
@@ -208,6 +213,7 @@ func main() {
 		pipe.SetPaperTrader(paperTrader)
 		priceWatcher := pricealert.New(db, notif, log.Logger)
 		pipe.SetPriceAlertWatcher(priceWatcher)
+		pipe.SetBroadcaster(wsHub)
 		pipe.SetAlertConfigHolder(alertHolder)
 		pipe.SetCryptoSymbols(cryptoSymbols)
 		go pipe.Run(ctx)
@@ -240,6 +246,7 @@ func main() {
 	apiSrv.WithAlertConfigHolder(alertHolder)
 	apiSrv.WithAnnouncer(notif)
 	apiSrv.WithPriceAlertStore(db)
+	apiSrv.WithHub(wsHub)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

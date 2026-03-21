@@ -47,6 +47,12 @@ type PriceAlertWatcher interface {
 	CheckSymbol(ctx context.Context, symbol string, currentPrice float64)
 }
 
+// SignalBroadcaster pushes new signals to connected WebSocket clients.
+// *hub.Hub satisfies this interface.
+type SignalBroadcaster interface {
+	Broadcast(msgType string, payload interface{})
+}
+
 // Config controls pipeline timing and data parameters.
 type Config struct {
 	Interval        time.Duration // how often to run analysis (default: 1 minute)
@@ -86,6 +92,7 @@ type Pipeline struct {
 	marketOpen   bool // tracks NYSE open/close state for transition logging
 
 	priceAlertWatcher PriceAlertWatcher // optional; set via SetPriceAlertWatcher
+	broadcaster       SignalBroadcaster  // optional; set via SetBroadcaster
 
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
@@ -129,6 +136,11 @@ func (p *Pipeline) SetPaperTrader(pt PaperTrader) {
 // SetPriceAlertWatcher wires an optional price alert checker.
 func (p *Pipeline) SetPriceAlertWatcher(w PriceAlertWatcher) {
 	p.priceAlertWatcher = w
+}
+
+// SetBroadcaster wires an optional WebSocket broadcaster.
+func (p *Pipeline) SetBroadcaster(b SignalBroadcaster) {
+	p.broadcaster = b
 }
 
 // SetAlertConfigHolder wires an optional live-updated alert configuration holder.
@@ -313,6 +325,13 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 			if err := p.sigSaver.SaveSignal(sig); err != nil {
 				p.log.Warn().Err(err).Str("symbol", sym).Msg("signal save failed")
 			}
+		}
+	}
+
+	// Broadcast enriched signals to connected WebSocket clients.
+	if p.broadcaster != nil {
+		for i := range enriched {
+			p.broadcaster.Broadcast("signal", enriched[i])
 		}
 	}
 

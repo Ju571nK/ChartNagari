@@ -676,3 +676,49 @@ input:checked + .slider::before {
   border-radius: 8px;
   border: 1px solid var(--muted);
 }
+
+/* WebSocket live indicator */
+.ws-indicator {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.ws-live { color: #22c55e; }
+.ws-offline { color: #6b7280; }
+
+/* WebSocket signal toast */
+.ws-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-left: 4px solid #22c55e;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 9999;
+  cursor: pointer;
+  font-size: 13px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  animation: slideIn 0.2s ease;
+}
+.ws-toast-dir {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+  background: #22c55e22;
+  color: #22c55e;
+}
+.ws-toast-dir[data-dir="SHORT"] { background: #ef444422; color: #ef4444; }
+.ws-toast-score { color: #94a3b8; font-size: 12px; }
+.ws-toast-close { color: #475569; margin-left: 4px; }
+@keyframes slideIn {
+  from { transform: translateX(60px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}

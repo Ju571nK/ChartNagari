@@ -54,6 +54,7 @@ type StatusItem struct {
 	UptimeSec      int64    `json:"uptime_sec"`
 	LastSignalUnix int64    `json:"last_signal_unix"` // 0 = no signal yet
 	DataSources    []string `json:"data_sources"`
+	WSClients      int      `json:"ws_clients"`
 }
 
 // OHLCVBar is the chart-compatible OHLCV response.
@@ -135,6 +136,12 @@ type ReportScheduler interface {
 	Reset(cfg appconfig.DailyReportConfig)
 }
 
+// WSHub serves WebSocket connections.
+type WSHub interface {
+	ServeWS(w http.ResponseWriter, r *http.Request)
+	ClientCount() int
+}
+
 // PriceAlertStore manages user-defined price target alerts.
 // *storage.DB satisfies this interface.
 type PriceAlertStore interface {
@@ -160,6 +167,7 @@ type Server struct {
 	analystDirector  AnalystDirector                // optional; set via WithAnalystDirector
 	announcer        Announcer                      // optional; set via WithAnnouncer
 	priceAlertStore  PriceAlertStore                // optional; set via WithPriceAlertStore
+	wsHub            WSHub                          // optional; set via WithHub
 	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
@@ -229,6 +237,11 @@ func (s *Server) WithPriceAlertStore(ps PriceAlertStore) {
 	s.priceAlertStore = ps
 }
 
+// WithHub wires the WebSocket hub to the server.
+func (s *Server) WithHub(h WSHub) {
+	s.wsHub = h
+}
+
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
 func (s *Server) WithSettingsFile(path string) {
 	s.settingsFile = path
@@ -245,6 +258,11 @@ func (s *Server) Handler() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
+
+	// WebSocket real-time push
+	if s.wsHub != nil {
+		mux.HandleFunc("GET /ws", s.wsHub.ServeWS)
+	}
 
 	// Status
 	mux.HandleFunc("GET /api/status", s.getStatus)
@@ -334,6 +352,11 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 		sources = []string{}
 	}
 
+	var wsClients int
+	if s.wsHub != nil {
+		wsClients = s.wsHub.ClientCount()
+	}
+
 	jsonOK(w, StatusItem{
 		Phase:          "Phase 2: Enhancement",
 		Symbols:        total,
@@ -341,6 +364,7 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 		UptimeSec:      int64(time.Since(s.startTime).Seconds()),
 		LastSignalUnix: lastSignal,
 		DataSources:    sources,
+		WSClients:      wsClients,
 	})
 }
 

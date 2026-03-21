@@ -113,6 +113,7 @@
   "add": "추가",
   "update": "업데이트",
   "settings": "설정",
+  "calendar": "캘린더",
   "unknown_error": "알 수 없는 오류",
   "confirm_delete": "{{symbol}}을 삭제할까요?",
   "delete_failed": "삭제 실패",

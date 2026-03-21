@@ -2050,6 +2050,7 @@ interface EconomicEvent {
 }
 
 function CalendarTab() {
+  const { t } = useTranslation()
   const [events, setEvents] = useState<EconomicEvent[]>([])
   const [loading, setLoading] = useState(true)
 

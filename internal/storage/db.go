@@ -33,6 +33,11 @@ func New(dbPath string) (*DB, error) {
 	if _, err := conn.Exec("PRAGMA journal_mode=WAL;"); err != nil {
 		return nil, fmt.Errorf("failed to set WAL mode: %w", err)
 	}
+	// busy_timeout: retry for up to 5s before returning SQLITE_BUSY.
+	// Required: Fetcher, Watcher, Tiingo, Pipeline all write concurrently.
+	if _, err := conn.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
+		return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
+	}
 
 	db := &DB{conn: conn}
 	if err := db.migrate(); err != nil {

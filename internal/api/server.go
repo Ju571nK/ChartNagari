@@ -135,6 +135,14 @@ type ReportScheduler interface {
 	Reset(cfg appconfig.DailyReportConfig)
 }
 
+// PriceAlertStore manages user-defined price target alerts.
+// *storage.DB satisfies this interface.
+type PriceAlertStore interface {
+	ListPriceAlerts() ([]storage.PriceAlert, error)
+	AddPriceAlert(symbol, condition string, target float64, note string) (int64, error)
+	DeletePriceAlert(id int64) error
+}
+
 // ── Server ────────────────────────────────────────────────────────────────────
 
 // Server is the HTTP API server for the settings UI.
@@ -151,6 +159,7 @@ type Server struct {
 	fullStore        FullStore                      // optional; set via WithFullStore
 	analystDirector  AnalystDirector                // optional; set via WithAnalystDirector
 	announcer        Announcer                      // optional; set via WithAnnouncer
+	priceAlertStore  PriceAlertStore                // optional; set via WithPriceAlertStore
 	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
@@ -215,6 +224,11 @@ func (s *Server) WithAnnouncer(a Announcer) {
 	s.announcer = a
 }
 
+// WithPriceAlertStore wires the price alert store to the server.
+func (s *Server) WithPriceAlertStore(ps PriceAlertStore) {
+	s.priceAlertStore = ps
+}
+
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
 func (s *Server) WithSettingsFile(path string) {
 	s.settingsFile = path
@@ -276,6 +290,13 @@ func (s *Server) Handler() http.Handler {
 		// backward-compat: old /api/env/config route
 		mux.HandleFunc("GET /api/env/config", s.getEnvConfig)
 		mux.HandleFunc("PUT /api/env/config", s.updateEnvConfig)
+	}
+
+	// Price target alerts
+	if s.priceAlertStore != nil {
+		mux.HandleFunc("GET /api/price-alerts", s.listPriceAlerts)
+		mux.HandleFunc("POST /api/price-alerts", s.createPriceAlert)
+		mux.HandleFunc("DELETE /api/price-alerts/{id}", s.deletePriceAlert)
 	}
 
 	// Multi-analyst full analysis
@@ -1371,6 +1392,60 @@ func (s *Server) readSettingsFile() *appconfig.SettingsYAML {
 		settings = &appconfig.SettingsYAML{}
 	}
 	return settings
+}
+
+// ── Price Alerts ──────────────────────────────────────────────────────────────
+
+func (s *Server) listPriceAlerts(w http.ResponseWriter, _ *http.Request) {
+	alerts, err := s.priceAlertStore.ListPriceAlerts()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if alerts == nil {
+		alerts = []storage.PriceAlert{}
+	}
+	jsonOK(w, alerts)
+}
+
+func (s *Server) createPriceAlert(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol    string  `json:"symbol"`
+		Target    float64 `json:"target"`
+		Condition string  `json:"condition"` // "above" | "below"
+		Note      string  `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Symbol == "" || req.Target <= 0 {
+		http.Error(w, "symbol and target are required", http.StatusBadRequest)
+		return
+	}
+	if req.Condition != "above" && req.Condition != "below" {
+		req.Condition = "above"
+	}
+	id, err := s.priceAlertStore.AddPriceAlert(req.Symbol, req.Condition, req.Target, req.Note)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]int64{"id": id})
+}
+
+func (s *Server) deletePriceAlert(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := s.priceAlertStore.DeletePriceAlert(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"message": "deleted"})
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.

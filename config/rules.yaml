@@ -141,6 +141,103 @@ rules:
       lookback: 30
       strength: 6.0
 
+  # ── 캔들스틱 패턴 ───────────────────────────────────────────────────
+  - name: doji
+    enabled: true
+    methodology: candlestick
+    params:
+      body_ratio: 0.05      # 몸통이 레인지의 5% 미만일 때 도지
+      strength: 1.5
+
+  - name: hammer
+    enabled: true
+    methodology: candlestick
+    params:
+      shadow_ratio: 2.0     # 아래꼬리가 몸통의 2배 이상
+      trend_lookback: 5
+      strength: 2.0
+
+  - name: hanging_man
+    enabled: true
+    methodology: candlestick
+    params:
+      shadow_ratio: 2.0
+      trend_lookback: 5
+      strength: 2.0
+
+  - name: shooting_star
+    enabled: true
+    methodology: candlestick
+    params:
+      shadow_ratio: 2.0     # 위꼬리가 몸통의 2배 이상
+      trend_lookback: 5
+      strength: 2.0
+
+  - name: inverted_hammer
+    enabled: true
+    methodology: candlestick
+    params:
+      shadow_ratio: 2.0
+      trend_lookback: 5
+      strength: 1.5
+
+  - name: marubozu
+    enabled: true
+    methodology: candlestick
+    params:
+      body_ratio: 0.90      # 몸통이 레인지의 90% 이상
+      strength: 2.5
+
+  - name: bullish_engulfing
+    enabled: true
+    methodology: candlestick
+    params:
+      strength: 3.0
+
+  - name: bearish_engulfing
+    enabled: true
+    methodology: candlestick
+    params:
+      strength: 3.0
+
+  - name: bullish_harami
+    enabled: true
+    methodology: candlestick
+    params:
+      body_ratio: 0.50      # 이전 봉 몸통 비율 기준
+      strength: 2.5
+
+  - name: bearish_harami
+    enabled: true
+    methodology: candlestick
+    params:
+      body_ratio: 0.50
+      strength: 2.5
+
+  - name: morning_star
+    enabled: true
+    methodology: candlestick
+    params:
+      strength: 4.0
+
+  - name: evening_star
+    enabled: true
+    methodology: candlestick
+    params:
+      strength: 4.0
+
+  - name: three_white_soldiers
+    enabled: true
+    methodology: candlestick
+    params:
+      strength: 4.0
+
+  - name: three_black_crows
+    enabled: true
+    methodology: candlestick
+    params:
+      strength: 4.0
+
 # ── 신호 스코어링 임계값 ─────────────────────────────────────────────
 scoring:
   mtf_bonus: 3.0            # 3개 TF 이상 동일 방향 시 보너스

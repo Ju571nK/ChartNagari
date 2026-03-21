@@ -41,6 +41,12 @@ type PaperTrader interface {
 	CheckPositions(sym string, allBars map[string][]models.OHLCV)
 }
 
+// PriceAlertWatcher checks user-defined price targets on every pipeline tick.
+// *pricealert.Watcher satisfies this interface.
+type PriceAlertWatcher interface {
+	CheckSymbol(ctx context.Context, symbol string, currentPrice float64)
+}
+
 // Config controls pipeline timing and data parameters.
 type Config struct {
 	Interval        time.Duration // how often to run analysis (default: 1 minute)
@@ -79,6 +85,8 @@ type Pipeline struct {
 	cryptoSyms  map[string]bool
 	marketOpen   bool // tracks NYSE open/close state for transition logging
 
+	priceAlertWatcher PriceAlertWatcher // optional; set via SetPriceAlertWatcher
+
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
 }
@@ -116,6 +124,11 @@ func (p *Pipeline) SetSignalSaver(ss SignalSaver) {
 // SetPaperTrader wires an optional paper trading simulator.
 func (p *Pipeline) SetPaperTrader(pt PaperTrader) {
 	p.paperTrader = pt
+}
+
+// SetPriceAlertWatcher wires an optional price alert checker.
+func (p *Pipeline) SetPriceAlertWatcher(w PriceAlertWatcher) {
+	p.priceAlertWatcher = w
 }
 
 // SetAlertConfigHolder wires an optional live-updated alert configuration holder.
@@ -193,6 +206,20 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	if len(allBars) == 0 {
 		p.log.Debug().Str("symbol", sym).Msg("no OHLCV data — skipping analysis")
 		return
+	}
+
+	// Check price alerts for this symbol using the latest 1D (or any available) close.
+	if p.priceAlertWatcher != nil {
+		var latestClose float64
+		for _, tf := range []string{"1H", "4H", "1D", "1W"} {
+			if bars, ok := allBars[tf]; ok && len(bars) > 0 {
+				latestClose = bars[0].Close
+				break
+			}
+		}
+		if latestClose > 0 {
+			p.priceAlertWatcher.CheckSymbol(ctx, sym, latestClose)
+		}
 	}
 
 	// Compute all indicators across all loaded timeframes.

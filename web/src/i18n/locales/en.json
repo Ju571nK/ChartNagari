@@ -233,5 +233,16 @@
   "rule_desc_wyckoff_upthrust": "Upthrust — high break followed by sharp drop",
   "rule_desc_wyckoff_volume_anomaly": "Abnormal volume — unusual institutional activity",
   "rule_desc_smc_bos": "BOS — Break of Structure (trend continuation)",
-  "rule_desc_smc_choch": "CHoCH — Change of Character (trend reversal)"
+  "rule_desc_smc_choch": "CHoCH — Change of Character (trend reversal)",
+  "price_alerts": "Price Alerts",
+  "condition_above": "Above (≥)",
+  "condition_below": "Below (≤)",
+  "target_price": "Target Price",
+  "note_optional": "Note (optional)",
+  "invalid_target_price": "Invalid target price",
+  "price_alert_added": "Price alert added",
+  "registered_alerts": "Registered Alerts",
+  "no_price_alerts": "No price alerts registered",
+  "triggered": "Triggered",
+  "active": "Active"
 }

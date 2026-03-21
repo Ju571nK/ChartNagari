@@ -233,5 +233,16 @@
   "rule_desc_wyckoff_upthrust": "Upthrust — 고점 돌파 후 급락",
   "rule_desc_wyckoff_volume_anomaly": "비정상 거래량 — 이상 세력 개입 신호",
   "rule_desc_smc_bos": "BOS — Break of Structure (추세 지속)",
-  "rule_desc_smc_choch": "CHoCH — Change of Character (추세 전환)"
+  "rule_desc_smc_choch": "CHoCH — Change of Character (추세 전환)",
+  "price_alerts": "가격 알림",
+  "condition_above": "이상 (≥)",
+  "condition_below": "이하 (≤)",
+  "target_price": "목표 가격",
+  "note_optional": "메모 (선택)",
+  "invalid_target_price": "유효하지 않은 목표 가격",
+  "price_alert_added": "가격 알림이 등록되었습니다",
+  "registered_alerts": "등록된 알림",
+  "no_price_alerts": "등록된 가격 알림이 없습니다",
+  "triggered": "발동됨",
+  "active": "활성"
 }

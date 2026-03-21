@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (CGO_ENABLED=0 compatible)
 )
@@ -133,6 +134,21 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_analysis_history_lookup
 		ON analysis_history(symbol, created_at DESC);
+
+	-- Price target alerts (user-defined price level notifications)
+	CREATE TABLE IF NOT EXISTS price_alerts (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		symbol       TEXT    NOT NULL,
+		target       REAL    NOT NULL,
+		condition    TEXT    NOT NULL DEFAULT 'above',  -- 'above' | 'below'
+		note         TEXT    NOT NULL DEFAULT '',
+		triggered    INTEGER NOT NULL DEFAULT 0,        -- 0=active, 1=triggered
+		created_at   INTEGER NOT NULL,
+		triggered_at INTEGER NOT NULL DEFAULT 0         -- Unix seconds; 0=not yet
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_price_alerts_active
+		ON price_alerts(symbol, triggered);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err
@@ -148,4 +164,91 @@ func (db *DB) migrate() error {
 	}
 
 	return nil
+}
+
+// PriceAlert represents a user-defined price target alert.
+type PriceAlert struct {
+	ID          int64
+	Symbol      string
+	Target      float64
+	Condition   string // "above" | "below"
+	Note        string
+	Triggered   bool
+	CreatedAt   time.Time
+	TriggeredAt *time.Time
+}
+
+// AddPriceAlert creates a new active price alert. Returns the new row ID.
+func (db *DB) AddPriceAlert(symbol, condition string, target float64, note string) (int64, error) {
+	res, err := db.conn.Exec(
+		`INSERT INTO price_alerts (symbol, target, condition, note, created_at) VALUES (?, ?, ?, ?, ?)`,
+		symbol, target, condition, note, time.Now().Unix(),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// ListPriceAlerts returns all alerts (active and triggered), newest first.
+func (db *DB) ListPriceAlerts() ([]PriceAlert, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, symbol, target, condition, note, triggered, created_at, triggered_at
+		 FROM price_alerts ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanPriceAlerts(rows)
+}
+
+// GetActivePriceAlerts returns only alerts that have not yet been triggered.
+func (db *DB) GetActivePriceAlerts() ([]PriceAlert, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, symbol, target, condition, note, triggered, created_at, triggered_at
+		 FROM price_alerts WHERE triggered = 0`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanPriceAlerts(rows)
+}
+
+// MarkAlertTriggered marks an alert as triggered at the given time.
+func (db *DB) MarkAlertTriggered(id int64, at time.Time) error {
+	_, err := db.conn.Exec(
+		`UPDATE price_alerts SET triggered = 1, triggered_at = ? WHERE id = ?`,
+		at.Unix(), id,
+	)
+	return err
+}
+
+// DeletePriceAlert removes an alert by ID.
+func (db *DB) DeletePriceAlert(id int64) error {
+	_, err := db.conn.Exec(`DELETE FROM price_alerts WHERE id = ?`, id)
+	return err
+}
+
+func scanPriceAlerts(rows *sql.Rows) ([]PriceAlert, error) {
+	var out []PriceAlert
+	for rows.Next() {
+		var a PriceAlert
+		var createdAt int64
+		var triggeredAt int64
+		var triggered int
+		if err := rows.Scan(&a.ID, &a.Symbol, &a.Target, &a.Condition, &a.Note,
+			&triggered, &createdAt, &triggeredAt); err != nil {
+			return nil, err
+		}
+		a.Triggered = triggered == 1
+		a.CreatedAt = time.Unix(createdAt, 0)
+		if triggeredAt > 0 {
+			t := time.Unix(triggeredAt, 0)
+			a.TriggeredAt = &t
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }

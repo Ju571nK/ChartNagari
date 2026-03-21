@@ -233,5 +233,16 @@
   "rule_desc_wyckoff_upthrust": "Upthrust — 高値更新後の急落",
   "rule_desc_wyckoff_volume_anomaly": "異常出来高 — 機関投資家の異常活動シグナル",
   "rule_desc_smc_bos": "BOS — Break of Structure (トレンド継続)",
-  "rule_desc_smc_choch": "CHoCH — Change of Character (トレンド転換)"
+  "rule_desc_smc_choch": "CHoCH — Change of Character (トレンド転換)",
+  "price_alerts": "価格アラート",
+  "condition_above": "以上 (≥)",
+  "condition_below": "以下 (≤)",
+  "target_price": "目標価格",
+  "note_optional": "メモ（任意）",
+  "invalid_target_price": "無効な目標価格",
+  "price_alert_added": "価格アラートが登録されました",
+  "registered_alerts": "登録済みアラート",
+  "no_price_alerts": "登録された価格アラートはありません",
+  "triggered": "発動済み",
+  "active": "アクティブ"
 }

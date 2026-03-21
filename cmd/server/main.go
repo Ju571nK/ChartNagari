@@ -27,8 +27,10 @@ import (
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
+	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/paper"
+	"github.com/Ju571nK/Chatter/internal/pricealert"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
 	"github.com/Ju571nK/Chatter/internal/report"
 	"github.com/Ju571nK/Chatter/internal/rule"
@@ -130,6 +132,21 @@ func main() {
 		// SMC
 		&smc.SMCBOSRule{},
 		&smc.SMCChoCHRule{},
+		// Candlestick
+		&candlestick.DojiRule{},
+		&candlestick.HammerRule{},
+		&candlestick.HangingManRule{},
+		&candlestick.ShootingStarRule{},
+		&candlestick.InvertedHammerRule{},
+		&candlestick.MarubozuRule{},
+		&candlestick.BullishEngulfingRule{},
+		&candlestick.BearishEngulfingRule{},
+		&candlestick.BullishHaramiRule{},
+		&candlestick.BearishHaramiRule{},
+		&candlestick.MorningStarRule{},
+		&candlestick.EveningStarRule{},
+		&candlestick.ThreeWhiteSoldiersRule{},
+		&candlestick.ThreeBlackCrowsRule{},
 	}
 
 	eng := engine.New(toEngineConfig(cfg.Rules))
@@ -189,6 +206,8 @@ func main() {
 		)
 		pipe.SetSignalSaver(db)
 		pipe.SetPaperTrader(paperTrader)
+		priceWatcher := pricealert.New(db, notif, log.Logger)
+		pipe.SetPriceAlertWatcher(priceWatcher)
 		pipe.SetAlertConfigHolder(alertHolder)
 		pipe.SetCryptoSymbols(cryptoSymbols)
 		go pipe.Run(ctx)
@@ -220,6 +239,7 @@ func main() {
 	apiSrv.WithReportScheduler(sched)
 	apiSrv.WithAlertConfigHolder(alertHolder)
 	apiSrv.WithAnnouncer(notif)
+	apiSrv.WithPriceAlertStore(db)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

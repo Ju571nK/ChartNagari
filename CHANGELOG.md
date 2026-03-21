@@ -31,6 +31,28 @@ Format:
 
 ---
 
+## [1.8.0] - 2026-03-21
+
+### Added
+- `internal/methodology/candlestick/`: 캔들스틱 패턴 인식 패키지 (14개 룰, 44개 테스트)
+  - 단일봉: `DojiRule`, `HammerRule`, `HangingManRule`, `ShootingStarRule`, `InvertedHammerRule`, `MarubozuRule`
+  - 2봉: `BullishEngulfingRule`, `BearishEngulfingRule`, `BullishHaramiRule`, `BearishHaramiRule`
+  - 3봉: `MorningStarRule`, `EveningStarRule`, `ThreeWhiteSoldiersRule`, `ThreeBlackCrowsRule`
+- `internal/pricealert/watcher.go`: 가격 목표 알림 Watcher (파이프라인 tick마다 조건 체크 → Telegram/Discord 발송)
+- `internal/storage/db.go`: `price_alerts` 테이블 + CRUD 5개 메서드 (`AddPriceAlert`, `ListPriceAlerts`, `GetActivePriceAlerts`, `MarkAlertTriggered`, `DeletePriceAlert`)
+- `config/settings.example.yaml`: `.env` 대체 YAML 설정 파일 템플릿
+
+### Changed
+- `internal/config/config.go`: `SettingsYAML` 구조체 추가, `Load()` 우선순위 OS환경변수 > settings.yaml > .env > 기본값
+- `internal/api/server.go`: `GET/POST/DELETE /api/price-alerts` 엔드포인트, `.env` → `settings.yaml` 기반 설정 API, 하위호환 `/api/env/config` 라우트 유지
+- `internal/pipeline/pipeline.go`: `PriceAlertWatcher` 인터페이스 + `SetPriceAlertWatcher` + `analyzeSymbol`에 가격 체크 연결
+- `cmd/server/main.go`: candlestick 룰 14개 등록, pricealert.New() 초기화 연결
+- `config/rules.yaml`: candlestick 룰 14개 항목 추가
+- `web/src/App.tsx`: "가격 알림" 탭 추가 (en/ko/ja i18n, 30초 자동 갱신)
+- `.gitignore`: `config/settings.yaml` 추가
+
+---
+
 ## [1.5.0] - 2026-03-08
 
 ### Added

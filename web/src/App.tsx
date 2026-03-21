@@ -15,7 +15,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts'
 
 interface OHLCVBar {
   time: number
@@ -57,6 +57,17 @@ interface StatusData {
   uptime_sec: number
   last_signal_unix: number
   data_sources: string[]
+}
+
+interface PriceAlert {
+  ID: number
+  Symbol: string
+  Target: number
+  Condition: 'above' | 'below'
+  Note: string
+  Triggered: boolean
+  CreatedAt: string
+  TriggeredAt?: string
 }
 
 // ── API client ────────────────────────────────────────────────────────────────
@@ -1842,9 +1853,162 @@ function SettingsTab() {
   )
 }
 
+// ── Price Alerts Tab ──────────────────────────────────────────────────────────
+
+function PriceAlertsTab() {
+  const { t } = useTranslation()
+  const [alerts, setAlerts] = useState<PriceAlert[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [symbol, setSymbol] = useState('')
+  const [target, setTarget] = useState('')
+  const [condition, setCondition] = useState<'above' | 'below'>('above')
+  const [note, setNote] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  const reload = useCallback(() => {
+    apiFetch<PriceAlert[]>('/price-alerts')
+      .then(setAlerts)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { reload() }, [reload])
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const id = setInterval(() => {
+      apiFetch<PriceAlert[]>('/price-alerts')
+        .then(setAlerts)
+        .catch(() => {/* silently ignore refresh errors */})
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const add = useCallback(async () => {
+    if (!symbol.trim() || !target.trim()) return
+    const targetNum = parseFloat(target)
+    if (isNaN(targetNum) || targetNum <= 0) {
+      setError(t('invalid_target_price'))
+      return
+    }
+    setAdding(true)
+    setError('')
+    try {
+      await apiFetch<{ id: number }>('/price-alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: symbol.trim().toUpperCase(), target: targetNum, condition, note: note.trim() }),
+      })
+      setSymbol('')
+      setTarget('')
+      setCondition('above')
+      setNote('')
+      setSuccess(t('price_alert_added'))
+      setTimeout(() => setSuccess(''), 2000)
+      reload()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('add_failed'))
+    } finally {
+      setAdding(false)
+    }
+  }, [symbol, target, condition, note, reload, t])
+
+  const remove = useCallback(async (id: number) => {
+    try {
+      await apiFetch<null>(`/price-alerts/${id}`, { method: 'DELETE' })
+      setAlerts((prev) => prev.filter((a) => a.ID !== id))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('delete_failed'))
+    }
+  }, [t])
+
+  const fmtPrice = (n: number) => {
+    if (n >= 1000) return '$' + n.toLocaleString()
+    if (n >= 1) return '$' + n.toFixed(2)
+    return '$' + n.toPrecision(4)
+  }
+
+  if (loading) return <p className="loading">{t('loading')}</p>
+
+  return (
+    <>
+      <p className="section-title">{t('price_alerts')}</p>
+
+      {error && <p className="error-msg" style={{ marginBottom: 12 }}>{error}</p>}
+      {success && <p style={{ color: 'var(--green)', marginBottom: 12, fontSize: '0.85rem' }}>{success}</p>}
+
+      <div className="add-symbol-form">
+        <input
+          className="symbol-input"
+          placeholder={t('symbol_placeholder_nvda')}
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <select
+          className="chart-select"
+          value={condition}
+          onChange={(e) => setCondition(e.target.value as 'above' | 'below')}
+        >
+          <option value="above">{t('condition_above')}</option>
+          <option value="below">{t('condition_below')}</option>
+        </select>
+        <input
+          className="symbol-input"
+          type="number"
+          placeholder={t('target_price')}
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+          step="any"
+          min="0"
+        />
+        <input
+          className="symbol-input"
+          placeholder={t('note_optional')}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <button className="run-btn" onClick={add} disabled={adding || !symbol.trim() || !target.trim()}>
+          {adding ? '...' : t('add')}
+        </button>
+      </div>
+
+      <p className="section-title" style={{ marginTop: 24 }}>{t('registered_alerts')}</p>
+
+      {alerts.length === 0 && <p className="loading">{t('no_price_alerts')}</p>}
+
+      {alerts.map((alert) => (
+        <div key={alert.ID} className="item">
+          <div>
+            <div className="item-name">
+              <span className={`badge ${alert.Triggered ? 'badge-stock' : 'badge-crypto'}`}>
+                {alert.Triggered ? t('triggered') : t('active')}
+              </span>
+              {alert.Symbol}
+            </div>
+            <div className="item-meta">
+              {alert.Condition === 'above' ? '≥' : '≤'} {fmtPrice(alert.Target)}
+              {alert.Note && ` — ${alert.Note}`}
+            </div>
+            <div className="item-meta" style={{ fontSize: '0.7rem' }}>
+              {new Date(alert.CreatedAt).toLocaleString()}
+              {alert.TriggeredAt && ` → ${new Date(alert.TriggeredAt).toLocaleString()}`}
+            </div>
+          </div>
+          <button className="remove-btn" onClick={() => remove(alert.ID)} title={t('delete')}>✕</button>
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ── root ──────────────────────────────────────────────────────────────────────
 
-const CONFIG_TABS: Tab[] = ['symbols', 'rules', 'alert', 'report', 'status', 'settings']
+const CONFIG_TABS: Tab[] = ['symbols', 'rules', 'alert', 'price-alerts', 'report', 'status', 'settings']
 
 const TAB_KEYS: Record<Tab, string> = {
   symbols: 'symbols',
@@ -1859,6 +2023,7 @@ const TAB_KEYS: Record<Tab, string> = {
   performance: 'performance',
   analysis: 'analysis',
   settings: 'settings',
+  'price-alerts': 'price_alerts',
 }
 
 export function App() {
@@ -1962,6 +2127,7 @@ export function App() {
         {tab === 'report' && <ReportTab />}
         {tab === 'status' && <StatusTab />}
         {tab === 'settings' && <SettingsTab />}
+        {tab === 'price-alerts' && <PriceAlertsTab />}
       </main>
     </div>
   )

@@ -16,6 +16,7 @@ import (
 
 	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/api"
+	"github.com/Ju571nK/Chatter/internal/calendar"
 	"github.com/Ju571nK/Chatter/internal/history"
 	"github.com/Ju571nK/Chatter/internal/llm"
 	"github.com/Ju571nK/Chatter/internal/backtest"
@@ -223,6 +224,17 @@ func main() {
 			Msg("analysis pipeline started")
 	}
 
+	// ── 경제 캘린더 ───────────────────────────────────────────────────
+	if cfg.Finnhub.APIKey != "" {
+		calFetcher := calendar.New(cfg.Finnhub.APIKey, db, log.Logger)
+		go calFetcher.Run(ctx)
+		calWatcher := calendar.NewWatcher(db, notif, log.Logger)
+		go calWatcher.Run(ctx)
+		log.Info().Msg("economic calendar enabled (Finnhub)")
+	} else {
+		log.Info().Msg("economic calendar disabled (FINNHUB_API_KEY not set)")
+	}
+
 	// ── 백테스팅 엔진 구성 ────────────────────────────────────────────
 	btEngine := backtest.New(allRules, toEngineConfig(cfg.Rules), backtest.DefaultConfig())
 	btRunner := backtest.NewRunner(db, btEngine)
@@ -247,6 +259,7 @@ func main() {
 	apiSrv.WithAnnouncer(notif)
 	apiSrv.WithPriceAlertStore(db)
 	apiSrv.WithHub(wsHub)
+	apiSrv.WithCalendarStore(db)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

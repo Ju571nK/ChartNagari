@@ -722,3 +722,29 @@ input:checked + .slider::before {
   from { transform: translateX(60px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
+
+/* ── Calendar Tab ──────────────────────────────────────────────────────── */
+.calendar-date-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 8px 0 4px;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.calendar-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #0f172a;
+  font-size: 13px;
+}
+.calendar-time { color: #64748b; font-size: 12px; min-width: 44px; }
+.calendar-impact-high   { background: #ef444422; color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.calendar-impact-medium { background: #f59e0b22; color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.calendar-impact-low    { background: #22c55e22; color: #22c55e; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.calendar-actual        { color: #22c55e; font-weight: 600; }
+.calendar-forecast      { color: #94a3b8; font-size: 12px; }

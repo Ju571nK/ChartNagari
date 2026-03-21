@@ -26,6 +26,7 @@ type Config struct {
 	Yahoo        YahooConfig
 	Tiingo       TiingoConfig
 	AlphaVantage AlphaVantageConfig
+	Finnhub      FinnhubConfig
 	Telegram     TelegramConfig
 	Discord      DiscordConfig
 	Alert        AlertConfig
@@ -66,6 +67,10 @@ type TiingoConfig struct {
 }
 
 type AlphaVantageConfig struct {
+	APIKey string
+}
+
+type FinnhubConfig struct {
 	APIKey string
 }
 
@@ -213,6 +218,9 @@ type SettingsYAML struct {
 	AlphaVantage struct {
 		APIKey string `yaml:"api_key"`
 	} `yaml:"alphavantage"`
+	Finnhub struct {
+		APIKey string `yaml:"api_key"`
+	} `yaml:"finnhub"`
 }
 
 // ToMap converts SettingsYAML to the flat env-key map used by the API.
@@ -250,6 +258,7 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		"GROQ_API_KEY":         s.Groq.APIKey,
 		"GEMINI_API_KEY":       s.Gemini.APIKey,
 		"ALPHAVANTAGE_API_KEY": s.AlphaVantage.APIKey,
+		"FINNHUB_API_KEY":      s.Finnhub.APIKey,
 	}
 }
 
@@ -295,6 +304,7 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.Groq.APIKey, "GROQ_API_KEY")
 	set(&s.Gemini.APIKey, "GEMINI_API_KEY")
 	set(&s.AlphaVantage.APIKey, "ALPHAVANTAGE_API_KEY")
+	set(&s.Finnhub.APIKey, "FINNHUB_API_KEY")
 }
 
 // LoadSettings reads settings.yaml. Returns an empty struct (no error) if the file is absent or empty.
@@ -354,6 +364,9 @@ func Load(envFile, configDir string) (*Config, error) {
 		},
 		AlphaVantage: AlphaVantageConfig{
 			APIKey: getEnvOr("ALPHAVANTAGE_API_KEY", s.AlphaVantage.APIKey, ""),
+		},
+		Finnhub: FinnhubConfig{
+			APIKey: getEnvOr("FINNHUB_API_KEY", s.Finnhub.APIKey, ""),
 		},
 		Telegram: TelegramConfig{
 			BotToken: getEnvOr("TELEGRAM_BOT_TOKEN", s.Telegram.BotToken, ""),

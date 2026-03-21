@@ -19,15 +19,30 @@ Format:
 ### Docs
 - 프로젝트 초기 문서 세트 생성
   - `CLAUDE.md` : 프로젝트 진입점
-  - `AGENTS.md` : 멀티에이전트 운영 지시서
-  - `PRD.md` : 제품 요구사항 문서 v0.1
-  - `SKILLS.md` : 구현 가능 목록 초안
   - `CHANGELOG.md` : 이 파일
 
 ### Research
 - ICT (Order Block, FVG, Liquidity Sweep, Breaker Block, Kill Zone) — 사전 검증 완료
 - Wyckoff (Accumulation, Distribution, Spring, Upthrust, Volume Anomaly) — 사전 검증 완료
 - 일반 기술적분석 (RSI, S/R, EMA Cross, Fibonacci, Volume Spike) — 사전 검증 완료
+
+---
+
+## [2.0.0] - 2026-03-21
+
+### Added
+- `internal/calendar/fetcher.go`: Finnhub 경제 캘린더 Fetcher — 6시간마다 향후 14일 미국 경제지표 데이터 자동 수집, SQLite 캐시
+- `internal/calendar/watcher.go`: 경제 캘린더 Watcher — 1분 주기 체크, 고영향 이벤트 35분 전 Telegram/Discord 사전 알림
+- `internal/storage/db.go`: `economic_events` 테이블 + `UpsertEconomicEvents`, `GetEconomicEvents`, `GetUpcomingAlerts`, `MarkEventAlerted`, `scanEconomicEvents` 메서드
+- `GET /api/calendar` 엔드포인트: `from`/`to` 쿼리 파라미터 지원, 기본 ±14일
+- React `CalendarTab` 컴포넌트: 날짜별 그룹, 고/중/저 영향도 뱃지, 실제값 vs 예측값 표시, 5분 자동 새로고침
+- `config/settings.example.yaml`: `finnhub.api_key` 항목 추가 (무료 계정으로 사용 가능)
+
+### Changed
+- `internal/config/config.go`: `FinnhubConfig` struct + `SettingsYAML.Finnhub` 필드 + `ToMap`/`ApplyMap` 매핑
+- `internal/api/server.go`: `CalendarStore` 인터페이스 + `WithCalendarStore` setter + `/api/calendar` 라우트
+- `cmd/server/main.go`: `calendar.New()` + `calendar.NewWatcher()` 초기화, Finnhub API 키 설정 시 goroutine 실행, `apiSrv.WithCalendarStore(db)` 연결
+- `web/src/App.css`: `.calendar-date-header`, `.calendar-event`, `.calendar-impact-*`, `.calendar-actual`, `.calendar-forecast` CSS 추가
 
 ---
 

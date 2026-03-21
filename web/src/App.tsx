@@ -15,7 +15,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar'
 
 interface OHLCVBar {
   time: number
@@ -2024,6 +2024,92 @@ const TAB_KEYS: Record<Tab, string> = {
   analysis: 'analysis',
   settings: 'settings',
   'price-alerts': 'price_alerts',
+  calendar: 'calendar',
+}
+
+// ── Calendar Tab ─────────────────────────────────────────────────────────────
+
+interface EconomicEvent {
+  ID: number
+  EventTime: string
+  Country: string
+  Event: string
+  Impact: string
+  Actual: string
+  Forecast: string
+  Previous: string
+  Unit: string
+}
+
+function CalendarTab() {
+  const [events, setEvents] = useState<EconomicEvent[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchEvents = useCallback(() => {
+    const now = new Date()
+    const from = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10)
+    const to = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10)
+    apiFetch<EconomicEvent[]>(`/calendar?from=${from}&to=${to}`)
+      .then((data) => setEvents(data ?? []))
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetchEvents()
+    const id = setInterval(fetchEvents, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [fetchEvents])
+
+  if (loading) return <p className="loading">로딩 중...</p>
+  if (events.length === 0) {
+    return <p className="loading">Finnhub API 키를 설정하면 경제 캘린더가 표시됩니다</p>
+  }
+
+  const grouped: Record<string, EconomicEvent[]> = {}
+  for (const ev of events) {
+    const dateKey = ev.EventTime.slice(0, 10)
+    ;(grouped[dateKey] ??= []).push(ev)
+  }
+
+  const now = new Date()
+
+  return (
+    <>
+      <p className="section-title">캘린더</p>
+      {Object.entries(grouped)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, items]) => (
+          <div key={date}>
+            <div className="calendar-date-header">{date}</div>
+            {items.map((ev) => {
+              const evTime = new Date(ev.EventTime)
+              const timeStr = evTime.toISOString().slice(11, 16)
+              const isPast = evTime < now
+              const impactClass =
+                ev.Impact === 'high' ? 'calendar-impact-high' :
+                ev.Impact === 'medium' ? 'calendar-impact-medium' : 'calendar-impact-low'
+
+              return (
+                <div key={ev.ID} className="calendar-event">
+                  <span className="calendar-time">{timeStr}</span>
+                  <span className={impactClass}>{ev.Impact.toUpperCase()}</span>
+                  <span style={{ flex: 1 }}>{ev.Event} ({ev.Country})</span>
+                  {ev.Actual ? (
+                    <span className="calendar-actual">{ev.Actual}{ev.Unit}</span>
+                  ) : isPast ? (
+                    <span className="calendar-forecast">발표됨</span>
+                  ) : (
+                    <span className="calendar-forecast">예정 {ev.Forecast}{ev.Unit}</span>
+                  )}
+                  <span className="calendar-forecast">이전 {ev.Previous}{ev.Unit}</span>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+    </>
+  )
 }
 
 export function App() {
@@ -2156,6 +2242,7 @@ export function App() {
           <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>{t('performance')}</button>
           <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>{t('paper')}</button>
           <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
+          <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>캘린더</button>
         </nav>
       </header>
       <main>
@@ -2172,6 +2259,7 @@ export function App() {
         {tab === 'status' && <StatusTab />}
         {tab === 'settings' && <SettingsTab />}
         {tab === 'price-alerts' && <PriceAlertsTab />}
+        {tab === 'calendar' && <CalendarTab />}
       </main>
       {liveSignal && (
         <div className="ws-toast" onClick={() => setLiveSignal(null)}>

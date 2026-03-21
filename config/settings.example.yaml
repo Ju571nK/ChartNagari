@@ -61,3 +61,9 @@ gemini:
 # ── AlphaVantage (선택 — 20년 일봉 SPY 데이터) ──────────────────────────────
 alphavantage:
   api_key: ""
+
+# ── Finnhub (경제 캘린더 — 선택) ─────────────────────────────────────────────
+# 무료 계정: https://finnhub.io → Dashboard → API Keys
+# 무료 플랜: 60 req/min, 경제 캘린더 접근 가능
+finnhub:
+  api_key: ""

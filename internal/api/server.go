@@ -90,6 +90,11 @@ type AggregatedRuleStat struct {
 	Exportable      bool    `json:"exportable"`
 }
 
+// CalendarStore provides economic event data for the API.
+type CalendarStore interface {
+	GetEconomicEvents(from, to time.Time) ([]storage.EconomicEvent, error)
+}
+
 // ChartStore provides OHLCV and signal data for the chart dashboard.
 // *storage.DB satisfies this interface.
 type ChartStore interface {
@@ -168,6 +173,7 @@ type Server struct {
 	announcer        Announcer                      // optional; set via WithAnnouncer
 	priceAlertStore  PriceAlertStore                // optional; set via WithPriceAlertStore
 	wsHub            WSHub                          // optional; set via WithHub
+	calendarStore    CalendarStore                  // optional; set via WithCalendarStore
 	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
@@ -240,6 +246,10 @@ func (s *Server) WithPriceAlertStore(ps PriceAlertStore) {
 // WithHub wires the WebSocket hub to the server.
 func (s *Server) WithHub(h WSHub) {
 	s.wsHub = h
+}
+
+func (s *Server) WithCalendarStore(cs CalendarStore) {
+	s.calendarStore = cs
 }
 
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
@@ -315,6 +325,11 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/price-alerts", s.listPriceAlerts)
 		mux.HandleFunc("POST /api/price-alerts", s.createPriceAlert)
 		mux.HandleFunc("DELETE /api/price-alerts/{id}", s.deletePriceAlert)
+	}
+
+	// Economic calendar
+	if s.calendarStore != nil {
+		mux.HandleFunc("GET /api/calendar", s.getCalendarEvents)
 	}
 
 	// Multi-analyst full analysis
@@ -1338,6 +1353,7 @@ var envSensitiveKeys = map[string]bool{
 	"BINANCE_API_KEY":      true,
 	"BINANCE_SECRET_KEY":   true,
 	"ALPHAVANTAGE_API_KEY": true,
+	"FINNHUB_API_KEY":      true,
 	"ANTHROPIC_API_KEY":    true,
 	"OPENAI_API_KEY":       true,
 	"GROQ_API_KEY":         true,
@@ -1352,6 +1368,7 @@ var envExposedKeys = []string{
 	"YAHOO_POLL_INTERVAL",
 	"BINANCE_API_KEY", "BINANCE_SECRET_KEY",
 	"ALPHAVANTAGE_API_KEY",
+	"FINNHUB_API_KEY",
 	"LLM_PROVIDER",
 	"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY",
 	"AI_MIN_SCORE", "LLM_LANGUAGE",
@@ -1470,6 +1487,38 @@ func (s *Server) deletePriceAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, map[string]string{"message": "deleted"})
+}
+
+// ── Economic Calendar ─────────────────────────────────────────────────────────
+
+func (s *Server) getCalendarEvents(w http.ResponseWriter, r *http.Request) {
+	fromStr := r.URL.Query().Get("from") // YYYY-MM-DD
+	toStr := r.URL.Query().Get("to")
+
+	now := time.Now()
+	from := now.AddDate(0, 0, -1)
+	to := now.AddDate(0, 0, 14)
+
+	if fromStr != "" {
+		if t, err := time.Parse("2006-01-02", fromStr); err == nil {
+			from = t
+		}
+	}
+	if toStr != "" {
+		if t, err := time.Parse("2006-01-02", toStr); err == nil {
+			to = t.Add(24 * time.Hour) // inclusive
+		}
+	}
+
+	events, err := s.calendarStore.GetEconomicEvents(from, to)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if events == nil {
+		events = []storage.EconomicEvent{}
+	}
+	jsonOK(w, events)
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.

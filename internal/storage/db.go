@@ -149,6 +149,25 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_price_alerts_active
 		ON price_alerts(symbol, triggered);
+
+	-- Economic calendar events (fetched from Finnhub, cached locally)
+	CREATE TABLE IF NOT EXISTS economic_events (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		event_time INTEGER NOT NULL,   -- Unix seconds (UTC)
+		country    TEXT    NOT NULL,   -- "US"
+		event      TEXT    NOT NULL,   -- "CPI (MoM)"
+		impact     TEXT    NOT NULL,   -- "high" | "medium" | "low"
+		actual     TEXT    NOT NULL DEFAULT '',
+		forecast   TEXT    NOT NULL DEFAULT '',
+		previous   TEXT    NOT NULL DEFAULT '',
+		unit       TEXT    NOT NULL DEFAULT '',
+		alerted    INTEGER NOT NULL DEFAULT 0,  -- 1 = pre-event alert already sent
+		fetched_at INTEGER NOT NULL,
+		UNIQUE(event_time, country, event)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_economic_events_time
+		ON economic_events(event_time);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err
@@ -229,6 +248,109 @@ func (db *DB) MarkAlertTriggered(id int64, at time.Time) error {
 func (db *DB) DeletePriceAlert(id int64) error {
 	_, err := db.conn.Exec(`DELETE FROM price_alerts WHERE id = ?`, id)
 	return err
+}
+
+// EconomicEvent represents a single economic calendar entry.
+type EconomicEvent struct {
+	ID        int64
+	EventTime time.Time
+	Country   string
+	Event     string
+	Impact    string // "high" | "medium" | "low"
+	Actual    string
+	Forecast  string
+	Previous  string
+	Unit      string
+	Alerted   bool
+}
+
+// UpsertEconomicEvents inserts or replaces economic events (by unique event_time+country+event).
+func (db *DB) UpsertEconomicEvents(events []EconomicEvent) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO economic_events (event_time, country, event, impact, actual, forecast, previous, unit, fetched_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(event_time, country, event) DO UPDATE SET
+			actual=excluded.actual, forecast=excluded.forecast,
+			previous=excluded.previous, fetched_at=excluded.fetched_at
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	now := time.Now().Unix()
+	for _, e := range events {
+		if _, err := stmt.Exec(e.EventTime.Unix(), e.Country, e.Event, e.Impact,
+			e.Actual, e.Forecast, e.Previous, e.Unit, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetEconomicEvents returns events between from and to (inclusive).
+func (db *DB) GetEconomicEvents(from, to time.Time) ([]EconomicEvent, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, event_time, country, event, impact, actual, forecast, previous, unit, alerted
+		FROM economic_events
+		WHERE event_time >= ? AND event_time <= ?
+		ORDER BY event_time ASC`,
+		from.Unix(), to.Unix(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEconomicEvents(rows)
+}
+
+// GetUpcomingAlerts returns high-impact events in the next alertWindow that haven't been alerted yet.
+func (db *DB) GetUpcomingAlerts(alertWindow time.Duration) ([]EconomicEvent, error) {
+	now := time.Now()
+	rows, err := db.conn.Query(`
+		SELECT id, event_time, country, event, impact, actual, forecast, previous, unit, alerted
+		FROM economic_events
+		WHERE impact = 'high'
+		  AND alerted = 0
+		  AND event_time >= ?
+		  AND event_time <= ?
+		ORDER BY event_time ASC`,
+		now.Unix(), now.Add(alertWindow).Unix(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEconomicEvents(rows)
+}
+
+// MarkEventAlerted marks an economic event as alerted.
+func (db *DB) MarkEventAlerted(id int64) error {
+	_, err := db.conn.Exec(`UPDATE economic_events SET alerted = 1 WHERE id = ?`, id)
+	return err
+}
+
+func scanEconomicEvents(rows *sql.Rows) ([]EconomicEvent, error) {
+	var out []EconomicEvent
+	for rows.Next() {
+		var e EconomicEvent
+		var ts int64
+		var alerted int
+		if err := rows.Scan(&e.ID, &ts, &e.Country, &e.Event, &e.Impact,
+			&e.Actual, &e.Forecast, &e.Previous, &e.Unit, &alerted); err != nil {
+			return nil, err
+		}
+		e.EventTime = time.Unix(ts, 0)
+		e.Alerted = alerted == 1
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 func scanPriceAlerts(rows *sql.Rows) ([]PriceAlert, error) {

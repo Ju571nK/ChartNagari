@@ -83,3 +83,4 @@ config/settings.yaml
 config/*.local.yaml
 *.local.yaml
 docs/research/
+.gstack/

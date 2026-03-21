@@ -1708,6 +1708,13 @@ const ENV_GROUPS: EnvGroup[] = [
     ],
   },
   {
+    label: 'Economic Calendar (둘 중 하나만 설정)',
+    fields: [
+      { key: 'FMP_API_KEY',      label: 'FMP API Key (무료 — 권장)',       type: 'password' },
+      { key: 'FINNHUB_API_KEY',  label: 'Finnhub API Key (유료 플랜 필요)', type: 'password' },
+    ],
+  },
+  {
     label: 'AI / LLM',
     fields: [
       { key: 'LLM_PROVIDER',     label: 'LLM Provider',    type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini'] },
@@ -2063,7 +2070,21 @@ function CalendarTab() {
 
   if (loading) return <p className="loading">로딩 중...</p>
   if (events.length === 0) {
-    return <p className="loading">Finnhub API 키를 설정하면 경제 캘린더가 표시됩니다</p>
+    return (
+      <div style={{ padding: '1rem' }}>
+        <p className="loading">경제 캘린더 데이터가 없습니다.</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted, #888)', marginTop: '0.5rem' }}>
+          유료 API 키가 필요합니다. Settings 탭에서 아래 중 하나를 입력하세요:
+        </p>
+        <ul style={{ fontSize: '0.85rem', color: 'var(--text-muted, #888)', marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
+          <li>FMP API Key — <a href="https://financialmodelingprep.com/developer/docs" target="_blank" rel="noreferrer">financialmodelingprep.com</a></li>
+          <li>Finnhub API Key — <a href="https://finnhub.io/pricing" target="_blank" rel="noreferrer">finnhub.io</a> (유료 플랜)</li>
+        </ul>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted, #888)', marginTop: '0.5rem' }}>
+          키 설정 후 서버를 재시작하면 자동으로 데이터를 가져옵니다.
+        </p>
+      </div>
+    )
   }
 
   const grouped: Record<string, EconomicEvent[]> = {}

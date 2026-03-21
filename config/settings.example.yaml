@@ -62,8 +62,15 @@ gemini:
 alphavantage:
   api_key: ""
 
-# ── Finnhub (경제 캘린더 — 선택) ─────────────────────────────────────────────
-# 무료 계정: https://finnhub.io → Dashboard → API Keys
-# 무료 플랜: 60 req/min, 경제 캘린더 접근 가능
+# ── 경제 캘린더 (둘 중 하나만 설정하면 됨) ───────────────────────────────────
+# FMP가 설정되어 있으면 FMP 우선 사용, 없으면 Finnhub 사용
+
+# Financial Modeling Prep (무료 플랜 포함 — 권장)
+# 무료 계정: https://financialmodelingprep.com → Dashboard → API Keys
+fmp:
+  api_key: ""
+
+# Finnhub (유료 플랜 필요 — /calendar/economic은 무료 플랜 미지원)
+# https://finnhub.io → Dashboard → API Keys
 finnhub:
   api_key: ""

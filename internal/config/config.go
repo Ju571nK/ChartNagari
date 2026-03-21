@@ -27,6 +27,7 @@ type Config struct {
 	Tiingo       TiingoConfig
 	AlphaVantage AlphaVantageConfig
 	Finnhub      FinnhubConfig
+	FMP          FMPConfig
 	Telegram     TelegramConfig
 	Discord      DiscordConfig
 	Alert        AlertConfig
@@ -71,6 +72,10 @@ type AlphaVantageConfig struct {
 }
 
 type FinnhubConfig struct {
+	APIKey string
+}
+
+type FMPConfig struct {
 	APIKey string
 }
 
@@ -221,6 +226,9 @@ type SettingsYAML struct {
 	Finnhub struct {
 		APIKey string `yaml:"api_key"`
 	} `yaml:"finnhub"`
+	Fmp struct {
+		APIKey string `yaml:"api_key"`
+	} `yaml:"fmp"`
 }
 
 // ToMap converts SettingsYAML to the flat env-key map used by the API.
@@ -259,6 +267,7 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		"GEMINI_API_KEY":       s.Gemini.APIKey,
 		"ALPHAVANTAGE_API_KEY": s.AlphaVantage.APIKey,
 		"FINNHUB_API_KEY":      s.Finnhub.APIKey,
+		"FMP_API_KEY":          s.Fmp.APIKey,
 	}
 }
 
@@ -305,6 +314,7 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.Gemini.APIKey, "GEMINI_API_KEY")
 	set(&s.AlphaVantage.APIKey, "ALPHAVANTAGE_API_KEY")
 	set(&s.Finnhub.APIKey, "FINNHUB_API_KEY")
+	set(&s.Fmp.APIKey, "FMP_API_KEY")
 }
 
 // LoadSettings reads settings.yaml. Returns an empty struct (no error) if the file is absent or empty.
@@ -367,6 +377,9 @@ func Load(envFile, configDir string) (*Config, error) {
 		},
 		Finnhub: FinnhubConfig{
 			APIKey: getEnvOr("FINNHUB_API_KEY", s.Finnhub.APIKey, ""),
+		},
+		FMP: FMPConfig{
+			APIKey: getEnvOr("FMP_API_KEY", s.Fmp.APIKey, ""),
 		},
 		Telegram: TelegramConfig{
 			BotToken: getEnvOr("TELEGRAM_BOT_TOKEN", s.Telegram.BotToken, ""),

@@ -225,14 +225,18 @@ func main() {
 	}
 
 	// ── 경제 캘린더 ───────────────────────────────────────────────────
-	if cfg.Finnhub.APIKey != "" {
-		calFetcher := calendar.New(cfg.Finnhub.APIKey, db, log.Logger)
+	if cfg.Finnhub.APIKey != "" || cfg.FMP.APIKey != "" {
+		calProvider := "finnhub"
+		if cfg.FMP.APIKey != "" {
+			calProvider = "fmp"
+		}
+		calFetcher := calendar.New(cfg.Finnhub.APIKey, cfg.FMP.APIKey, db, log.Logger)
 		go calFetcher.Run(ctx)
 		calWatcher := calendar.NewWatcher(db, notif, log.Logger)
 		go calWatcher.Run(ctx)
-		log.Info().Msg("economic calendar enabled (Finnhub)")
+		log.Info().Str("provider", calProvider).Msg("economic calendar enabled")
 	} else {
-		log.Info().Msg("economic calendar disabled (FINNHUB_API_KEY not set)")
+		log.Info().Msg("economic calendar disabled (set FMP_API_KEY or FINNHUB_API_KEY)")
 	}
 
 	// ── 백테스팅 엔진 구성 ────────────────────────────────────────────

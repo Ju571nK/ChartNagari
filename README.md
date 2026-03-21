@@ -25,6 +25,7 @@ A self-hosted platform that automatically detects ICT/Wyckoff and general TA sig
 - **Backtest & paper trading** — validate rules on historical data before going live
 - **Web dashboard** — React frontend with Settings UI to manage .env variables at runtime
 - **Multiple data sources** — Binance WebSocket (crypto, free), Tiingo (stocks, recommended), Yahoo Finance (fallback)
+- **Economic calendar** — US macro event tracker (FMP or Finnhub); pre-event Telegram alerts for high-impact releases
 
 ---
 

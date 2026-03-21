@@ -23,6 +23,9 @@ const (
 	fetchLookahead = 14 * 24 * time.Hour // fetch next 14 days
 )
 
+// retryDelays defines fixed backoff between fetch attempts (2 retries after first failure).
+var retryDelays = []time.Duration{time.Minute, 5 * time.Minute}
+
 // Store is the subset of storage.DB used by the Fetcher.
 type Store interface {
 	UpsertEconomicEvents(events []storage.EconomicEvent) error
@@ -32,51 +35,78 @@ type Store interface {
 // Fetcher periodically fetches economic events and caches them.
 // Uses FMP if fmpKey is set, otherwise falls back to Finnhub.
 type Fetcher struct {
-	finnhubKey string
-	fmpKey     string
-	store      Store
-	log        zerolog.Logger
-	client     *http.Client
+	finnhubKey     string
+	fmpKey         string
+	store          Store
+	log            zerolog.Logger
+	client         *http.Client
+	finnhubBaseURL string // overridable for tests; defaults to finnhubBase
+	fmpBaseURL     string // overridable for tests; defaults to fmpBase
 }
 
 // New creates a Fetcher. FMP is preferred when both keys are set.
 // If neither key is set, Run is a no-op.
 func New(finnhubKey, fmpKey string, store Store, log zerolog.Logger) *Fetcher {
 	return &Fetcher{
-		finnhubKey: finnhubKey,
-		fmpKey:     fmpKey,
-		store:      store,
-		log:        log,
-		client:     &http.Client{Timeout: 15 * time.Second},
+		finnhubKey:     finnhubKey,
+		fmpKey:         fmpKey,
+		store:          store,
+		log:            log,
+		client:         &http.Client{Timeout: 15 * time.Second},
+		finnhubBaseURL: finnhubBase,
+		fmpBaseURL:     fmpBase,
 	}
 }
 
-// Run starts the periodic fetch loop. Fetches immediately on start, then every 6 hours.
+// Run starts the periodic fetch loop. Fetches immediately on start (with backoff retry),
+// then every 6 hours.
 func (f *Fetcher) Run(ctx context.Context) {
 	if f.fmpKey == "" && f.finnhubKey == "" {
 		f.log.Info().Msg("calendar: no API key configured — economic calendar disabled")
 		return
 	}
-	f.fetch(ctx)
+	f.fetchWithRetry(ctx)
 
 	ticker := time.NewTicker(fetchInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			f.fetch(ctx)
+			f.fetchWithRetry(ctx)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (f *Fetcher) fetch(ctx context.Context) {
-	if f.fmpKey != "" {
-		f.fetchFMP(ctx)
-	} else {
-		f.fetchFinnhub(ctx)
+// fetchWithRetry attempts a fetch; on failure retries after 1min then 5min before giving up.
+func (f *Fetcher) fetchWithRetry(ctx context.Context) {
+	if f.tryFetch(ctx) {
+		return
 	}
+	for i, delay := range retryDelays {
+		f.log.Warn().Dur("retry_in", delay).Int("attempt", i+1).Msg("calendar: fetch failed, will retry")
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return
+		}
+		if f.tryFetch(ctx) {
+			return
+		}
+	}
+	f.log.Error().Msg("calendar: all fetch attempts failed, waiting for next 6h cycle")
+}
+
+// tryFetch executes a single fetch attempt. Returns true on success.
+func (f *Fetcher) tryFetch(ctx context.Context) bool {
+	var err error
+	if f.fmpKey != "" {
+		err = f.fetchFMP(ctx)
+	} else {
+		err = f.fetchFinnhub(ctx)
+	}
+	return err == nil
 }
 
 // ── Finnhub ───────────────────────────────────────────────────────────────────
@@ -96,26 +126,28 @@ type finnhubEvent struct {
 	Unit     string `json:"unit"`
 }
 
-func (f *Fetcher) fetchFinnhub(ctx context.Context) {
+func (f *Fetcher) fetchFinnhub(ctx context.Context) error {
 	now := time.Now().UTC()
 	from := now.Format("2006-01-02")
 	to := now.Add(fetchLookahead).Format("2006-01-02")
 
-	url := fmt.Sprintf("%s?from=%s&to=%s&token=%s", finnhubBase, from, to, f.finnhubKey)
-	body, status, err := f.doGet(ctx, url)
+	// Use X-Finnhub-Token header — keeps the API key out of URL/access logs.
+	url := fmt.Sprintf("%s?from=%s&to=%s", f.finnhubBaseURL, from, to)
+	body, status, err := f.doGet(ctx, url, map[string]string{"X-Finnhub-Token": f.finnhubKey})
 	if err != nil {
 		f.log.Error().Err(err).Msg("calendar: Finnhub fetch failed")
-		return
+		return err
 	}
 	if status != http.StatusOK {
+		err := fmt.Errorf("HTTP %d", status)
 		f.log.Error().Int("status", status).Msg("calendar: Finnhub returned error")
-		return
+		return err
 	}
 
 	var result finnhubResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		f.log.Error().Err(err).Msg("calendar: Finnhub failed to parse response")
-		return
+		return err
 	}
 
 	var events []storage.EconomicEvent
@@ -143,6 +175,7 @@ func (f *Fetcher) fetchFinnhub(ctx context.Context) {
 	}
 
 	f.upsert(events, from, to, "finnhub")
+	return nil
 }
 
 // ── Financial Modeling Prep ───────────────────────────────────────────────────
@@ -158,26 +191,27 @@ type fmpEvent struct {
 	Unit     string   `json:"unit"`
 }
 
-func (f *Fetcher) fetchFMP(ctx context.Context) {
+func (f *Fetcher) fetchFMP(ctx context.Context) error {
 	now := time.Now().UTC()
 	from := now.Format("2006-01-02")
 	to := now.Add(fetchLookahead).Format("2006-01-02")
 
-	url := fmt.Sprintf("%s?from=%s&to=%s&apikey=%s", fmpBase, from, to, f.fmpKey)
-	body, status, err := f.doGet(ctx, url)
+	url := fmt.Sprintf("%s?from=%s&to=%s&apikey=%s", f.fmpBaseURL, from, to, f.fmpKey)
+	body, status, err := f.doGet(ctx, url, nil)
 	if err != nil {
 		f.log.Error().Err(err).Msg("calendar: FMP fetch failed")
-		return
+		return err
 	}
 	if status != http.StatusOK {
+		err := fmt.Errorf("HTTP %d", status)
 		f.log.Error().Int("status", status).Msg("calendar: FMP returned error")
-		return
+		return err
 	}
 
 	var result []fmpEvent
 	if err := json.Unmarshal(body, &result); err != nil {
 		f.log.Error().Err(err).Msg("calendar: FMP failed to parse response")
-		return
+		return err
 	}
 
 	fmtNum := func(v *float64) string {
@@ -212,14 +246,18 @@ func (f *Fetcher) fetchFMP(ctx context.Context) {
 	}
 
 	f.upsert(events, from, to, "fmp")
+	return nil
 }
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
-func (f *Fetcher) doGet(ctx context.Context, url string) ([]byte, int, error) {
+func (f *Fetcher) doGet(ctx context.Context, url string, headers map[string]string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, 0, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {

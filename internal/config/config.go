@@ -72,7 +72,8 @@ type AlphaVantageConfig struct {
 }
 
 type FinnhubConfig struct {
-	APIKey string
+	APIKey             string
+	AlertWindowMinutes int // minutes before event to send pre-alert (default 30)
 }
 
 type FMPConfig struct {
@@ -224,7 +225,8 @@ type SettingsYAML struct {
 		APIKey string `yaml:"api_key"`
 	} `yaml:"alphavantage"`
 	Finnhub struct {
-		APIKey string `yaml:"api_key"`
+		APIKey             string `yaml:"api_key"`
+		AlertWindowMinutes int    `yaml:"alert_window_minutes"`
 	} `yaml:"finnhub"`
 	Fmp struct {
 		APIKey string `yaml:"api_key"`
@@ -266,8 +268,9 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		"GROQ_API_KEY":         s.Groq.APIKey,
 		"GEMINI_API_KEY":       s.Gemini.APIKey,
 		"ALPHAVANTAGE_API_KEY": s.AlphaVantage.APIKey,
-		"FINNHUB_API_KEY":      s.Finnhub.APIKey,
-		"FMP_API_KEY":          s.Fmp.APIKey,
+		"FINNHUB_API_KEY":        s.Finnhub.APIKey,
+		"CALENDAR_ALERT_WINDOW":  itoa(s.Finnhub.AlertWindowMinutes),
+		"FMP_API_KEY":            s.Fmp.APIKey,
 	}
 }
 
@@ -314,6 +317,7 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.Gemini.APIKey, "GEMINI_API_KEY")
 	set(&s.AlphaVantage.APIKey, "ALPHAVANTAGE_API_KEY")
 	set(&s.Finnhub.APIKey, "FINNHUB_API_KEY")
+	setInt(&s.Finnhub.AlertWindowMinutes, "CALENDAR_ALERT_WINDOW")
 	set(&s.Fmp.APIKey, "FMP_API_KEY")
 }
 
@@ -376,7 +380,8 @@ func Load(envFile, configDir string) (*Config, error) {
 			APIKey: getEnvOr("ALPHAVANTAGE_API_KEY", s.AlphaVantage.APIKey, ""),
 		},
 		Finnhub: FinnhubConfig{
-			APIKey: getEnvOr("FINNHUB_API_KEY", s.Finnhub.APIKey, ""),
+			APIKey:             getEnvOr("FINNHUB_API_KEY", s.Finnhub.APIKey, ""),
+			AlertWindowMinutes: getEnvOrInt("CALENDAR_ALERT_WINDOW", s.Finnhub.AlertWindowMinutes, 30),
 		},
 		FMP: FMPConfig{
 			APIKey: getEnvOr("FMP_API_KEY", s.Fmp.APIKey, ""),

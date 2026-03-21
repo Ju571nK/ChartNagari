@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Justin-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/justin0830/)
 
 A self-hosted platform that automatically detects ICT/Wyckoff and general TA signals across multiple timeframes (1W/1D/4H/1H) for US stocks and crypto, and delivers alerts via Telegram and Discord.
 
@@ -24,6 +25,7 @@ A self-hosted platform that automatically detects ICT/Wyckoff and general TA sig
 - **Backtest & paper trading** — validate rules on historical data before going live
 - **Web dashboard** — React frontend with Settings UI to manage .env variables at runtime
 - **Multiple data sources** — Binance WebSocket (crypto, free), Tiingo (stocks, recommended), Yahoo Finance (fallback)
+- **Economic calendar** — US macro event tracker (FMP or Finnhub); pre-event Telegram alerts for high-impact releases
 
 ---
 
@@ -176,3 +178,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Builder
+
+Built by [Justin](https://www.linkedin.com/in/justin0830/) — exploring AI-assisted development and applying financial market knowledge through vibe coding with Claude Code.

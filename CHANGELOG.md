@@ -28,6 +28,29 @@ Format:
 
 ---
 
+## [2.1.0] - 2026-03-22
+
+### Added
+- FMP (Financial Modeling Prep) as alternative economic calendar provider — dual-provider support; FMP preferred when `FMP_API_KEY` is set, Finnhub used as fallback
+- `CALENDAR_ALERT_WINDOW` config setting — configurable pre-event alert window (default 30 min); settable via Settings UI
+- 19 new tests: `internal/calendar/fetcher_test.go` (10), `internal/calendar/watcher_test.go` (5), `internal/storage/calendar_test.go` (4)
+- LinkedIn badge added to README (`## Builder` section)
+
+### Changed
+- `internal/calendar/fetcher.go`: refactored to dual-provider architecture; added fixed backoff retry (1 min → 5 min, 2 retries per 6h cycle); `finnhubBaseURL`/`fmpBaseURL` fields for test injection
+- `internal/calendar/watcher.go`: in-memory `alerted map[int64]struct{}` prevents duplicate Telegram alerts when `MarkEventAlerted` DB write fails; `alertWindow` now configurable via `NewWatcher`
+- `internal/config/config.go`: added `FMPConfig`, `FMP FMPConfig` to `Config`; added `AlertWindowMinutes int` to `FinnhubConfig`; `ToMap`/`ApplyMap` updated for `FMP_API_KEY` and `CALENDAR_ALERT_WINDOW`
+- `internal/api/server.go`: `FMP_API_KEY` added to `envSensitiveKeys`; `FINNHUB_API_KEY`, `FMP_API_KEY`, `CALENDAR_ALERT_WINDOW` added to `envExposedKeys`
+- `cmd/server/main.go`: calendar init updated for dual-provider; `alertWindow` passed to `NewWatcher`
+- `web/src/App.tsx`: CalendarTab empty state now explains paid API requirement with links; event times shown in browser local timezone (`toLocaleTimeString`); calendar tab label uses `t('calendar')` i18n key; Settings "Economic Calendar" group with FMP_API_KEY, FINNHUB_API_KEY, CALENDAR_ALERT_WINDOW fields
+- `web/src/i18n/locales/{en,ko,ja}.json`: added `"calendar"` translation key
+
+### Fixed
+- `internal/storage/db.go`: added `PRAGMA busy_timeout = 5000` after WAL mode — prevents `SQLITE_BUSY` errors when Fetcher, Watcher, and Pipeline goroutines write concurrently
+- `internal/calendar/fetcher.go`: Finnhub API key moved from `?token=` URL query param to `X-Finnhub-Token` HTTP header — prevents key exposure in access logs and request URLs
+
+---
+
 ## [2.0.0] - 2026-03-21
 
 ### Added

@@ -10,7 +10,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/storage"
 )
 
-const alertWindow = 35 * time.Minute // check for events in next 35 min, alert at ~30 min before
+const defaultAlertWindow = 30 * time.Minute
 
 // AlertStore is the subset of storage.DB used by the Watcher.
 type AlertStore interface {
@@ -25,14 +25,26 @@ type Announcer interface {
 
 // Watcher checks for upcoming high-impact events and sends pre-event alerts.
 type Watcher struct {
-	store     AlertStore
-	announcer Announcer
-	log       zerolog.Logger
+	store       AlertStore
+	announcer   Announcer
+	log         zerolog.Logger
+	alertWindow time.Duration
+	alerted     map[int64]struct{} // in-memory guard against duplicate alerts
 }
 
-// NewWatcher creates a calendar Watcher.
-func NewWatcher(store AlertStore, announcer Announcer, log zerolog.Logger) *Watcher {
-	return &Watcher{store: store, announcer: announcer, log: log}
+// NewWatcher creates a calendar Watcher. alertWindow controls how far ahead to look;
+// pass 0 to use the default (30 minutes).
+func NewWatcher(store AlertStore, announcer Announcer, alertWindow time.Duration, log zerolog.Logger) *Watcher {
+	if alertWindow <= 0 {
+		alertWindow = defaultAlertWindow
+	}
+	return &Watcher{
+		store:       store,
+		announcer:   announcer,
+		alertWindow: alertWindow,
+		log:         log,
+		alerted:     make(map[int64]struct{}),
+	}
 }
 
 // Run checks every minute for upcoming events. Blocks until ctx is cancelled.
@@ -50,13 +62,18 @@ func (w *Watcher) Run(ctx context.Context) {
 }
 
 func (w *Watcher) check(ctx context.Context) {
-	events, err := w.store.GetUpcomingAlerts(alertWindow)
+	events, err := w.store.GetUpcomingAlerts(w.alertWindow)
 	if err != nil {
 		w.log.Error().Err(err).Msg("calendar watcher: failed to query alerts")
 		return
 	}
 
 	for _, e := range events {
+		// Skip if already alerted this process lifetime (guards against MarkEventAlerted DB failure)
+		if _, ok := w.alerted[e.ID]; ok {
+			continue
+		}
+
 		minsUntil := int(time.Until(e.EventTime).Minutes())
 		if minsUntil < 0 {
 			minsUntil = 0
@@ -74,6 +91,9 @@ func (w *Watcher) check(ctx context.Context) {
 		}
 
 		w.announcer.Announce(ctx, msg)
+
+		// Mark in-memory immediately so retries don't re-fire regardless of DB outcome.
+		w.alerted[e.ID] = struct{}{}
 
 		if err := w.store.MarkEventAlerted(e.ID); err != nil {
 			w.log.Error().Err(err).Int64("id", e.ID).Msg("calendar watcher: mark alerted failed")

@@ -232,7 +232,8 @@ func main() {
 		}
 		calFetcher := calendar.New(cfg.Finnhub.APIKey, cfg.FMP.APIKey, db, log.Logger)
 		go calFetcher.Run(ctx)
-		calWatcher := calendar.NewWatcher(db, notif, log.Logger)
+		alertWindow := time.Duration(cfg.Finnhub.AlertWindowMinutes) * time.Minute
+		calWatcher := calendar.NewWatcher(db, notif, alertWindow, log.Logger)
 		go calWatcher.Run(ctx)
 		log.Info().Str("provider", calProvider).Msg("economic calendar enabled")
 	} else {

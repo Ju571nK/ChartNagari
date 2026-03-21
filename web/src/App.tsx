@@ -1710,8 +1710,9 @@ const ENV_GROUPS: EnvGroup[] = [
   {
     label: 'Economic Calendar (둘 중 하나만 설정)',
     fields: [
-      { key: 'FMP_API_KEY',      label: 'FMP API Key (무료 — 권장)',       type: 'password' },
-      { key: 'FINNHUB_API_KEY',  label: 'Finnhub API Key (유료 플랜 필요)', type: 'password' },
+      { key: 'FMP_API_KEY',             label: 'FMP API Key (무료 — 권장)',           type: 'password' },
+      { key: 'FINNHUB_API_KEY',         label: 'Finnhub API Key (유료 플랜 필요)',     type: 'password' },
+      { key: 'CALENDAR_ALERT_WINDOW',   label: '사전 알림 (분, 기본 30)',              type: 'text' },
     ],
   },
   {
@@ -2097,7 +2098,7 @@ function CalendarTab() {
 
   return (
     <>
-      <p className="section-title">캘린더</p>
+      <p className="section-title">{t('calendar')}</p>
       {Object.entries(grouped)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, items]) => (
@@ -2105,7 +2106,7 @@ function CalendarTab() {
             <div className="calendar-date-header">{date}</div>
             {items.map((ev) => {
               const evTime = new Date(ev.EventTime)
-              const timeStr = evTime.toISOString().slice(11, 16)
+              const timeStr = evTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               const isPast = evTime < now
               const impactClass =
                 ev.Impact === 'high' ? 'calendar-impact-high' :
@@ -2263,7 +2264,7 @@ export function App() {
           <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>{t('performance')}</button>
           <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>{t('paper')}</button>
           <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
-          <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>캘린더</button>
+          <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>{t('calendar')}</button>
         </nav>
       </header>
       <main>

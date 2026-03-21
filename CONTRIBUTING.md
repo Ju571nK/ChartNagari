@@ -53,6 +53,7 @@ make test        # run all Go tests
 | `internal/interpreter/` | Multi-timeframe signal scoring |
 | `internal/pipeline/` | Orchestrates collector → engine → notifier |
 | `internal/notifier/` | Telegram and Discord alert dispatch |
+| `internal/calendar/` | Economic calendar fetcher (FMP/Finnhub) and pre-event alert watcher |
 | `internal/report/` | Daily summary report generation |
 | `internal/history/` | Historical OHLCV storage |
 | `internal/storage/` | SQLite persistence layer |

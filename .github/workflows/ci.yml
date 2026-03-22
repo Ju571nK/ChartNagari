@@ -22,6 +22,30 @@ jobs:
       - name: Test
         run: go test ./...
 
+  check-docs:
+    name: Docs Drift Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check CONTRIBUTING.md documents all AnalysisRule methods
+        run: |
+          # Extract public method names from internal/rule/interface.go.
+          # Matches tab-indented lines starting with a capital letter followed by '('.
+          # If the interface grows (e.g. a new Validate() method), this check
+          # automatically fails until CONTRIBUTING.md is updated to document it.
+          FAILED=0
+          while IFS= read -r method; do
+            if ! grep -q "$method" CONTRIBUTING.md; then
+              echo "FAIL: '$method()' is defined in internal/rule/interface.go but missing from CONTRIBUTING.md"
+              FAILED=1
+            else
+              echo "OK:   '$method()' is documented in CONTRIBUTING.md"
+            fi
+          done < <(grep -v "^[[:space:]]*//" internal/rule/interface.go \
+                   | awk '/^[[:space:]]+[A-Z]/{gsub(/\(.*/, "", $1); print $1}')
+          exit $FAILED
+
   frontend:
     name: Frontend Build
     runs-on: ubuntu-latest

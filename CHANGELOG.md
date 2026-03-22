@@ -14,6 +14,35 @@ Format:
 
 ---
 
+## [2.1.1.0] - 2026-03-22
+
+### Added
+- `.github/workflows/validate-new-rules.yml`: CI workflow that auto-runs on PRs touching
+  `internal/methodology/**` — builds the package and runs tests with the race detector,
+  giving contributors instant feedback without requiring a label
+- `.github/ISSUE_TEMPLATE/new-rule.yml`: Structured GitHub issue form for proposing new
+  ICT/Wyckoff/TA rules, with dropdowns for category, acceptance-criteria checklist, and
+  auto-applied `new-rule` / `good first issue` labels
+- `.github/PULL_REQUEST_TEMPLATE.md`: Universal PR template with new-rule checklist and
+  general PR checklist (items not applicable can be marked N/A)
+- Compile-time interface assertion in `internal/methodology/ict/order_block.go`:
+  `var _ rule.AnalysisRule = (*ICTOrderBlockRule)(nil)` — turns a missing-method silent
+  compile into an instant build error
+
+### Changed
+- `CONTRIBUTING.md`: Complete rewrite — fixed interface name (`rule.AnalysisRule`),
+  added "Ways to Contribute (No Code Required)" section, step-by-step new-rule guide
+  with code examples, compile-time-assertion rationale, and updated PR checklist
+- `README.md`: Added "What You Get in 5 Minutes" quick-start summary, "Why ChartNagari"
+  competitive landscape table, and `LLM_LANGUAGE` i18n entry; fixed interface reference
+  from `rule.Rule` to `rule.AnalysisRule`
+
+### Fixed
+- `data/tiingo_state.json` added to `.gitignore` — runtime state file was being accidentally
+  tracked; it now stays out of version control
+
+---
+
 ## [0.1.0] - 2026-03-07
 
 ### Docs

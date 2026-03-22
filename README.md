@@ -6,11 +6,46 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Justin-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/justin0830/)
 
-A self-hosted platform that automatically detects ICT/Wyckoff and general TA signals across multiple timeframes (1W/1D/4H/1H) for US stocks and crypto, and delivers alerts via Telegram and Discord.
+> **The only open-source platform that automates ICT and Wyckoff methodology across
+> multiple timeframes — with real-time alerts and AI interpretation.
+> Self-hosted. No cloud required.**
 
-> **Local-first** — all data stays on your machine. No cloud accounts required to run.
+---
+
+## What You Get in 5 Minutes
+
+1. Clone → configure one `.env` file → `docker compose up`
+2. ChartNagari scans US stocks and crypto across 1W / 1D / 4H / 1H — simultaneously
+3. When an ICT Order Block, Fair Value Gap, Wyckoff phase shift, or RSI signal fires,
+   you get a Telegram (or Discord) alert with an optional AI interpretation
+4. Everything runs locally — your data never leaves your machine
+
+No cloud account. No subscription. No API rate-limit surprises.
+
+---
+
+## Why ChartNagari
+
+The ICT and Wyckoff methodology space on GitHub is surprisingly empty:
+the top Wyckoff automation repo has 17 stars, and the best ICT library
+is a collection of Python functions with no alerts, no backtest, and no UI.
+
+ChartNagari fills that gap:
+
+| What you need | Status |
+|---|---|
+| Multi-timeframe ICT signal detection (Order Blocks, FVGs, Liquidity Sweeps) | ✅ |
+| Wyckoff phase detection (Accumulation, Distribution, Spring, Upthrust) | ✅ |
+| Real-time Telegram / Discord alerts with cooldown | ✅ |
+| Optional AI interpretation (Anthropic, OpenAI, Groq, Gemini) | ✅ |
+| Multi-timeframe consensus scoring | ✅ |
+| Backtest on historical data | ✅ |
+| Self-hosted, local-first, no cloud required | ✅ |
+| AI output language: `LLM_LANGUAGE: en \| ko \| ja` | ✅ |
 
 > **Vibe-coded** — this project was built entirely through vibe coding with [Claude Code](https://claude.ai/claude-code).
+
+> **Local-first** — all data stays on your machine. No cloud accounts required to run.
 
 ---
 
@@ -163,7 +198,7 @@ Copy `.env.example` to `.env` and fill in the values you need. The server starts
 
 ## Adding a New Rule
 
-1. Create a file in `internal/methodology/<category>/` implementing the `rule.Rule` interface.
+1. Create a file in `internal/methodology/<category>/` implementing the `rule.AnalysisRule` interface.
 2. Register it in `config/rules.yaml` with a unique ID, category, and default parameters.
 3. Add table-driven tests in a `_test.go` file alongside the rule.
 4. Run `go test ./...` — all tests must pass before opening a PR.

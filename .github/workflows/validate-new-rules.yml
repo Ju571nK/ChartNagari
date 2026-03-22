@@ -1,0 +1,31 @@
+name: Validate New Rules
+
+# Runs automatically when a PR touches internal/methodology/.
+# Contributors don't need to set any label — CI feedback is instant.
+on:
+  pull_request:
+    paths:
+      - 'internal/methodology/**'
+
+jobs:
+  validate:
+    name: Build & Test New Rules
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Verify compile-time interface assertions pass.
+      # If a rule is missing a method, this step fails with a clear error.
+      - name: Build methodology package
+        run: go build ./internal/methodology/...
+
+      # Run all methodology tests with verbose output so contributors
+      # can see exactly which test case failed.
+      - name: Test methodology package
+        run: go test ./internal/methodology/... -v -race

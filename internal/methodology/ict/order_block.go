@@ -4,8 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
+
+// Compile-time interface compliance check.
+// If ICTOrderBlockRule is missing any AnalysisRule method, this line will fail to compile.
+var _ rule.AnalysisRule = (*ICTOrderBlockRule)(nil)
 
 // ICTOrderBlockRule detects ICT Order Blocks and signals when price returns to them.
 //

@@ -42,6 +42,7 @@ web/*.local
 *.db
 *.db-shm
 *.db-wal
+/data/tiingo_state.json
 
 # ─── 로그 & 임시 ───
 *.log

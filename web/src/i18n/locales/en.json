@@ -245,5 +245,17 @@
   "registered_alerts": "Registered Alerts",
   "no_price_alerts": "No price alerts registered",
   "triggered": "Triggered",
-  "active": "Active"
+  "active": "Active",
+  "calendar_no_data": "No calendar data available.",
+  "calendar_api_key_required": "A paid API key is required. Enter one of the following in the Settings tab:",
+  "calendar_restart_hint": "After setting the key, restart the server and data will be fetched automatically.",
+  "calendar_load_error": "Failed to load calendar data. Check your API key or server logs.",
+  "calendar_retry": "Retry",
+  "calendar_released": "Released",
+  "calendar_forecast_prefix": "Fcst",
+  "calendar_prev_prefix": "Prev",
+  "calendar_impact_label": "Impact",
+  "calendar_today": "Today",
+  "calendar_tomorrow": "Tomorrow",
+  "calendar_yesterday": "Yesterday"
 }

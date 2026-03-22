@@ -2049,18 +2049,34 @@ interface EconomicEvent {
   Unit: string
 }
 
+function calendarDateHeader(dateKey: string, t: (key: string) => string): string {
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+  const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().slice(0, 10)
+  const yesterdayStr = new Date(today.getTime() - 86400000).toISOString().slice(0, 10)
+  const label = new Date(dateKey + 'T00:00:00').toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+  if (dateKey === todayStr) return `${t('calendar_today')} — ${label}`
+  if (dateKey === tomorrowStr) return `${t('calendar_tomorrow')} — ${label}`
+  if (dateKey === yesterdayStr) return `${t('calendar_yesterday')} — ${label}`
+  return label
+}
+
 function CalendarTab() {
   const { t } = useTranslation()
   const [events, setEvents] = useState<EconomicEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
   const fetchEvents = useCallback(() => {
+    setFetchError(false)
     const now = new Date()
     const from = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10)
     const to = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10)
     apiFetch<EconomicEvent[]>(`/calendar?from=${from}&to=${to}`)
       .then((data) => setEvents(data ?? []))
-      .catch(() => setEvents([]))
+      .catch(() => { setEvents([]); setFetchError(true) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -2070,21 +2086,29 @@ function CalendarTab() {
     return () => clearInterval(id)
   }, [fetchEvents])
 
-  if (loading) return <p className="loading">로딩 중...</p>
+  if (loading) return <p className="loading">{t('loading')}</p>
+
+  if (fetchError) {
+    return (
+      <div className="calendar-error">
+        <p>⚠️ {t('calendar_load_error')}</p>
+        <button className="calendar-retry-btn" onClick={() => { setLoading(true); fetchEvents() }}>
+          {t('calendar_retry')}
+        </button>
+      </div>
+    )
+  }
+
   if (events.length === 0) {
     return (
-      <div style={{ padding: '1rem' }}>
-        <p className="loading">경제 캘린더 데이터가 없습니다.</p>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted, #888)', marginTop: '0.5rem' }}>
-          유료 API 키가 필요합니다. Settings 탭에서 아래 중 하나를 입력하세요:
-        </p>
-        <ul style={{ fontSize: '0.85rem', color: 'var(--text-muted, #888)', marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
+      <div className="calendar-empty">
+        <p className="calendar-empty-title">{t('calendar_no_data')}</p>
+        <p className="calendar-empty-desc">{t('calendar_api_key_required')}</p>
+        <ul className="calendar-empty-list">
           <li>FMP API Key — <a href="https://financialmodelingprep.com/developer/docs" target="_blank" rel="noreferrer">financialmodelingprep.com</a></li>
-          <li>Finnhub API Key — <a href="https://finnhub.io/pricing" target="_blank" rel="noreferrer">finnhub.io</a> (유료 플랜)</li>
+          <li>Finnhub API Key — <a href="https://finnhub.io/pricing" target="_blank" rel="noreferrer">finnhub.io</a></li>
         </ul>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted, #888)', marginTop: '0.5rem' }}>
-          키 설정 후 서버를 재시작하면 자동으로 데이터를 가져옵니다.
-        </p>
+        <p className="calendar-empty-desc">{t('calendar_restart_hint')}</p>
       </div>
     )
   }
@@ -2104,7 +2128,7 @@ function CalendarTab() {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, items]) => (
           <div key={date}>
-            <div className="calendar-date-header">{date}</div>
+            <div className="calendar-date-header">{calendarDateHeader(date, t)}</div>
             {items.map((ev) => {
               const evTime = new Date(ev.EventTime)
               const timeStr = evTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -2116,16 +2140,16 @@ function CalendarTab() {
               return (
                 <div key={ev.ID} className="calendar-event">
                   <span className="calendar-time">{timeStr}</span>
-                  <span className={impactClass}>{ev.Impact.toUpperCase()}</span>
+                  <span className={impactClass} aria-label={`${t('calendar_impact_label')}: ${ev.Impact.toUpperCase()}`}>{ev.Impact.toUpperCase()}</span>
                   <span style={{ flex: 1 }}>{ev.Event} ({ev.Country})</span>
                   {ev.Actual ? (
                     <span className="calendar-actual">{ev.Actual}{ev.Unit}</span>
                   ) : isPast ? (
-                    <span className="calendar-forecast">발표됨</span>
+                    <span className="calendar-forecast">{t('calendar_released')}</span>
                   ) : (
-                    <span className="calendar-forecast">예정 {ev.Forecast}{ev.Unit}</span>
+                    <span className="calendar-forecast">{t('calendar_forecast_prefix')} {ev.Forecast}{ev.Unit}</span>
                   )}
-                  <span className="calendar-forecast">이전 {ev.Previous}{ev.Unit}</span>
+                  <span className="calendar-forecast">{t('calendar_prev_prefix')} {ev.Previous}{ev.Unit}</span>
                 </div>
               )
             })}

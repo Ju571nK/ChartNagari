@@ -245,5 +245,17 @@
   "registered_alerts": "등록된 알림",
   "no_price_alerts": "등록된 가격 알림이 없습니다",
   "triggered": "발동됨",
-  "active": "활성"
+  "active": "활성",
+  "calendar_no_data": "경제 캘린더 데이터가 없습니다.",
+  "calendar_api_key_required": "유료 API 키가 필요합니다. Settings 탭에서 아래 중 하나를 입력하세요:",
+  "calendar_restart_hint": "키 설정 후 서버를 재시작하면 자동으로 데이터를 가져옵니다.",
+  "calendar_load_error": "캘린더 데이터를 불러오지 못했습니다. API 키 또는 서버 로그를 확인하세요.",
+  "calendar_retry": "다시 시도",
+  "calendar_released": "발표됨",
+  "calendar_forecast_prefix": "예정",
+  "calendar_prev_prefix": "이전",
+  "calendar_impact_label": "영향도",
+  "calendar_today": "오늘",
+  "calendar_tomorrow": "내일",
+  "calendar_yesterday": "어제"
 }

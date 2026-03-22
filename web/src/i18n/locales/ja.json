@@ -245,5 +245,17 @@
   "registered_alerts": "登録済みアラート",
   "no_price_alerts": "登録された価格アラートはありません",
   "triggered": "発動済み",
-  "active": "アクティブ"
+  "active": "アクティブ",
+  "calendar_no_data": "経済カレンダーのデータがありません。",
+  "calendar_api_key_required": "有料APIキーが必要です。Settingsタブで以下のいずれかを入力してください:",
+  "calendar_restart_hint": "キー設定後、サーバーを再起動すると自動的にデータを取得します。",
+  "calendar_load_error": "カレンダーデータの読み込みに失敗しました。APIキーまたはサーバーログを確認してください。",
+  "calendar_retry": "再試行",
+  "calendar_released": "発表済み",
+  "calendar_forecast_prefix": "予想",
+  "calendar_prev_prefix": "前回",
+  "calendar_impact_label": "影響度",
+  "calendar_today": "今日",
+  "calendar_tomorrow": "明日",
+  "calendar_yesterday": "昨日"
 }

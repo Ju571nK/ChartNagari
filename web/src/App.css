@@ -1,10 +1,15 @@
-/* ── design tokens: 5-color restricted palette ───────────────────────────── */
+/* ── design tokens: 5-color restricted palette + semantic tokens ──────────── */
 :root {
-  --bg:    #12130F; /* dark ground         */
-  --green: #5B9279; /* sage green          */
-  --mint:  #8FCB9B; /* light mint          */
-  --text:  #EAE6E5; /* warm off-white      */
-  --muted: #8F8073; /* warm brown-gray     */
+  --bg:      #12130F; /* dark ground         */
+  --green:   #5B9279; /* sage green          */
+  --mint:    #8FCB9B; /* light mint          */
+  --text:    #EAE6E5; /* warm off-white      */
+  --muted:   #8F8073; /* warm brown-gray     */
+  /* semantic tokens (financial risk levels) */
+  --danger:  #ef4444; /* high-impact red     */
+  --warning: #f59e0b; /* medium-impact amber */
+  --safe:    #22c55e; /* low-impact green    */
+  --slate:   #94a3b8; /* secondary data      */
 }
 
 /* ── reset ───────────────────────────────────────────────────────────────── */
@@ -712,12 +717,12 @@ input:checked + .slider::before {
   border-radius: 4px;
   font-weight: 700;
   font-size: 11px;
-  background: #22c55e22;
-  color: #22c55e;
+  background: rgba(34, 197, 94, 0.13);
+  color: var(--safe);
 }
-.ws-toast-dir[data-dir="SHORT"] { background: #ef444422; color: #ef4444; }
-.ws-toast-score { color: #94a3b8; font-size: 12px; }
-.ws-toast-close { color: #475569; margin-left: 4px; }
+.ws-toast-dir[data-dir="SHORT"] { background: rgba(239, 68, 68, 0.13); color: var(--danger); }
+.ws-toast-score { color: var(--slate); font-size: 12px; }
+.ws-toast-close { color: var(--muted); margin-left: 4px; }
 @keyframes slideIn {
   from { transform: translateX(60px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
@@ -727,9 +732,9 @@ input:checked + .slider::before {
 .calendar-date-header {
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--muted);
   padding: 8px 0 4px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid rgba(234, 230, 229, 0.08);
   margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -739,12 +744,39 @@ input:checked + .slider::before {
   align-items: center;
   gap: 8px;
   padding: 6px 0;
-  border-bottom: 1px solid #0f172a;
+  border-bottom: 1px solid rgba(18, 19, 15, 0.6);
   font-size: 13px;
 }
-.calendar-time { color: #64748b; font-size: 12px; min-width: 44px; }
-.calendar-impact-high   { background: #ef444422; color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-.calendar-impact-medium { background: #f59e0b22; color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-.calendar-impact-low    { background: #22c55e22; color: #22c55e; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-.calendar-actual        { color: #22c55e; font-weight: 600; }
-.calendar-forecast      { color: #94a3b8; font-size: 12px; }
+.calendar-time { color: var(--muted); font-size: 12px; min-width: 44px; }
+.calendar-impact-high   { background: rgba(239, 68, 68, 0.13); color: var(--danger); padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.calendar-impact-medium { background: rgba(245, 158, 11, 0.13); color: var(--warning); padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.calendar-impact-low    { background: rgba(34, 197, 94, 0.13); color: var(--safe); padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.calendar-actual        { color: var(--safe); font-weight: 600; }
+.calendar-forecast      { color: var(--slate); font-size: 12px; }
+.calendar-empty { padding: 1rem; }
+.calendar-empty-title { color: var(--muted); font-size: 0.9rem; }
+.calendar-empty-desc {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+.calendar-empty-list {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  padding-left: 1.2rem;
+}
+.calendar-empty-list a { color: var(--mint); }
+.calendar-error { padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.calendar-error p { font-size: 0.9rem; color: var(--danger); }
+.calendar-retry-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--muted);
+  color: var(--text);
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.calendar-retry-btn:hover { border-color: var(--mint); color: var(--mint); }

@@ -31,27 +31,45 @@ A self-hosted platform that automatically detects ICT/Wyckoff and general TA sig
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Web Dashboard                         │
-│              TypeScript + React 18 + Vite (:8080)           │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ REST API
-┌──────────────────────────▼──────────────────────────────────┐
-│                       Go Backend                             │
-│                                                             │
-│  ┌──────────┐  ┌───────────┐  ┌──────────┐  ┌──────────┐  │
-│  │Collector │  │  Engine   │  │  Report  │  │ Notifier │  │
-│  │(data src)│→ │(rule eval)│→ │(daily)   │→ │(TG/DC)   │  │
-│  └──────────┘  └─────┬─────┘  └──────────┘  └──────────┘  │
-│                       │                                      │
-│  ┌──────────┐  ┌──────▼─────┐  ┌──────────┐               │
-│  │ History  │  │Interpreter │  │   LLM    │               │
-│  │(SQLite)  │  │(MTF score) │→ │(optional)│               │
-│  └──────────┘  └────────────┘  └──────────┘               │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph UI["Web Dashboard — TypeScript + React 18 + Vite"]
+        direction LR
+        Chart["Chart"]
+        Analysis["Analysis"]
+        Backtest["Backtest"]
+        Paper["Paper"]
+        Calendar["Calendar"]
+        Settings["Settings"]
+    end
 
-Data Sources: Binance WS (crypto) │ Tiingo REST (stocks) │ Yahoo Finance (fallback)
+    subgraph Backend["Go Backend"]
+        direction TB
+        Collector["Collector\n(data sources)"]
+        Engine["Engine\n(rule eval)"]
+        Interpreter["Interpreter\n(MTF score)"]
+        LLM["LLM\n(optional)"]
+        Report["Report\n(daily)"]
+        Notifier["Notifier\n(TG / DC)"]
+        History["History\n(SQLite)"]
+        Calendar2["Calendar\n(FMP / Finnhub)"]
+
+        Collector --> Engine
+        Engine --> Interpreter
+        Interpreter --> LLM
+        Interpreter --> Report
+        Report --> Notifier
+        Engine --> History
+    end
+
+    subgraph Sources["Data Sources"]
+        Binance["Binance WS\n(crypto)"]
+        Tiingo["Tiingo REST\n(stocks)"]
+        Yahoo["Yahoo Finance\n(fallback)"]
+    end
+
+    Sources --> Collector
+    UI -- "REST API" --> Backend
 ```
 
 ---

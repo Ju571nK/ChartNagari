@@ -1,0 +1,65 @@
+name: "Add Rule"
+description: "Propose or claim a new ICT / Wyckoff / TA rule"
+title: "Add Rule: [Rule Name]"
+labels: ["new-rule", "good first issue"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: Which methodology does this rule belong to?
+      options:
+        - ICT
+        - Wyckoff
+        - Momentum
+        - Volume
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Rule Description
+      description: Describe the setup in plain terms — what pattern does it detect, and when does it fire?
+      placeholder: |
+        e.g. A Breaker Block forms when an Order Block is invalidated by price breaking
+        through it. On a retest of that level from above (bearish) or below (bullish),
+        the rule fires a signal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: detection_logic
+    attributes:
+      label: Detection Logic (optional)
+      description: If you have ideas for how to detect this programmatically, describe them here.
+      placeholder: |
+        e.g. Scan last 30 bars. Find a bullish OB (as defined in order_block.go).
+        If price later closes below the OB low, mark it as a Breaker Block.
+        If price returns and closes inside the range → SHORT signal.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to charts, YouTube timestamps, or written explanations of the pattern.
+      placeholder: |
+        e.g. ICT Breaker Block concept: https://...
+
+  - type: checkboxes
+    id: pr_criteria
+    attributes:
+      label: PR Acceptance Criteria
+      description: A PR implementing this rule must satisfy all of the following.
+      options:
+        - label: "`internal/methodology/<category>/<rule_name>.go` file created"
+          required: false
+        - label: "`var _ rule.AnalysisRule = (*MyRule)(nil)` compile-time assertion included"
+          required: false
+        - label: "Rule registered in `config/rules.yaml`"
+          required: false
+        - label: "`_test.go` file with table-driven tests (signal + no-signal cases)"
+          required: false
+        - label: "`go test ./internal/methodology/...` passes locally"
+          required: false

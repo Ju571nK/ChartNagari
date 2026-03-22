@@ -6,6 +6,8 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Justin-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/justin0830/)
 
+<img src="docs/demo.svg" alt="ChartNagari demo — ICT signal detection and Telegram alert" width="800"/>
+
 > **The only open-source platform that automates ICT and Wyckoff methodology across
 > multiple timeframes — with real-time alerts and AI interpretation.
 > Self-hosted. No cloud required.**

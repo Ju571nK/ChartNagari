@@ -73,6 +73,7 @@ make test        # run all Go tests
 | `internal/pipeline/` | Orchestrates collector → engine → notifier |
 | `internal/notifier/` | Telegram and Discord alert dispatch |
 | `internal/calendar/` | Economic calendar fetcher (FMP/Finnhub) and pre-event alert watcher |
+| `internal/wyckoff/` | Wyckoff phase analyzer — detects Markup/Accumulation/Distribution/Markdown/Ranging phases and Spring/Upthrust events from OHLCV bars |
 | `internal/report/` | Daily summary report generation |
 | `internal/history/` | Historical OHLCV storage |
 | `internal/storage/` | SQLite persistence layer |

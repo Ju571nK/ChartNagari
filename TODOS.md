@@ -31,15 +31,6 @@
   **How to apply:** Phase 2 of the open source growth plan. Gate: 100⭐ AND first external PR merged, or Week 8, whichever comes first.
   **Depends on:** Phase 1 community formation (good first issues, CONTRIBUTING.md, 100⭐)
 
-- **Phase 2: Wyckoff Phase Visualization + Backtest UI**
-  **Priority:** P1
-  **What:** Expose `internal/backtest/` module via web dashboard tab. Add Wyckoff phase (Spring/Upthrust/Distribution/Accumulation) visualization to chart view.
-  **Why:** All 6 Wyckoff visualization repos on GitHub total 17⭐. Real-time visualization = immediate #1 position in Wyckoff OSS space. Also a strong hiring signal demo.
-  **Pros:** "Whoa" moment for new visitors; recruiter-visible demo.
-  **Cons:** Must ship Phase 1 (discoverability + contribution infra) first or feature stays undiscovered.
-  **How to apply:** Implement after Phase 1 is complete (CONTRIBUTING.md + 5 good first issues + README reframe).
-  **Depends on:** Phase 1 completion (100⭐ target)
-
 ## Completed
 
 - **Phase 2: Wyckoff Phase Visualization + Backtest UI**

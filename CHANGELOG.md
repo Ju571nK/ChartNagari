@@ -17,16 +17,16 @@ Format:
 ## [2.1.2.0] - 2026-03-23
 
 ### Added
-- `internal/wyckoff/analyzer.go`: new `wyckoff` package with `Analyze()` function that
-  detects Wyckoff phases (Markup, Accumulation, Distribution, Markdown, Ranging) from
-  OHLCV bars using EMA-50 and swing high/low breakout logic; scans Spring and Upthrust
-  events; returns phase zones, events, and current swing levels
-- `GET /api/wyckoff/{symbol}/{timeframe}`: new API endpoint (limit capped at 1000 bars)
-  that runs the Wyckoff analyzer and returns overlay payload for the frontend chart
-- **ChartTab Wyckoff overlay**: toggle button to show/hide Wyckoff phase zones as
+- **Wyckoff phase analyzer** (`internal/wyckoff/`) — you can now detect Markup,
+  Accumulation, Distribution, Markdown, and Ranging phases from OHLCV bars using
+  EMA-50 and swing high/low breakout logic; Spring and Upthrust events are identified
+  and returned alongside phase zones and current swing levels
+- **Wyckoff API endpoint** (`GET /api/wyckoff/{symbol}/{timeframe}`) — fetches up to
+  1000 bars and returns the full overlay payload for the frontend chart
+- **ChartTab Wyckoff overlay** — toggle button to show/hide Wyckoff phase zones as
   semi-transparent price bands with phase labels, plus Spring (Sp) and Upthrust (Ut)
   event markers merged with existing signal markers
-- **BacktestTab trade chart**: Lightweight Charts candlestick overlay that renders entry
+- **BacktestTab trade chart** — Lightweight Charts candlestick overlay renders entry
   (arrow) and exit (circle) markers for each backtest trade; clicking a row in the trade
   list scrolls the chart to that trade's entry bar
 

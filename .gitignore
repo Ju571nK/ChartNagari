@@ -84,4 +84,6 @@ config/settings.yaml
 config/*.local.yaml
 *.local.yaml
 docs/research/
+docs/community-posts.md
+docs/best-of-algotrading-pr.md
 .gstack/

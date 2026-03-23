@@ -146,6 +146,8 @@
   "max_drawdown": "最大ドローダウン",
   "sharpe_ratio": "シャープレシオ",
   "total_return": "累積リターン",
+  "trade_chart": "トレードチャート",
+  "trade_chart_hint": "トレード一覧の行をクリックすると、そのトレードの位置にチャートがジャンプします。",
   "trade_list": "トレード一覧",
   "entry_time": "エントリー時間",
   "exit_price": "決済価格",

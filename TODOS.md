@@ -11,14 +11,6 @@
 
 ## Contribution Infrastructure
 
-- **CI: CONTRIBUTING.md interface drift check**
-  **Priority:** P3
-  **What:** Add a CI step to `ci.yml` that greps `CONTRIBUTING.md` for the `AnalysisRule` method signatures and fails if they don't match `internal/rule/interface.go`.
-  **Why:** The `rule.Rule` interface bug in CONTRIBUTING.md was only caught manually. If the interface ever changes, the doc will silently drift again, breaking new contributors' first experience.
-  **Pros:** Zero-maintenance protection; prevents the same bug from recurring; ~30-line shell script.
-  **Cons:** Slightly brittle grep patterns; needs updating if interface comments change.
-  **How to apply:** Add a `check-docs` job to `.github/workflows/ci.yml` that runs `grep -q "Name() string" CONTRIBUTING.md && grep -q "RequiredIndicators() \[\]string" CONTRIBUTING.md && grep -q "Analyze(" CONTRIBUTING.md` — fails if any method signature is missing.
-  **Depends on:** Phase 1 CONTRIBUTING.md rewrite (must be completed first so the correct signatures exist)
 
 ## Open Source Growth (Phase 2)
 
@@ -40,6 +32,22 @@
   **How to apply:** Implement after Phase 1 is complete (CONTRIBUTING.md + 5 good first issues + README reframe).
   **Depends on:** Phase 1 completion (100⭐ target)
 
+## Community Posts (Ready to Send)
+
+- **Reddit / Show HN / r/selfhosted drafts**
+  **Priority:** P1
+  **What:** Post drafts at `docs/community-posts.md` — r/algotrading, r/golang, r/selfhosted, Show HN.
+  **When:** Post after PR #11 (SVG demo) is live on main. Best time: Mon–Thu 9–11am US East.
+  **HN tip:** Respond to all early comments within the first hour.
+
+- **best-of-algorithmic-trading PR**
+  **Priority:** P2
+  **What:** Submit ChartNagari to algorithmic trading curated lists. Draft at `docs/best-of-algotrading-pr.md`.
+  **Gate:** 10+ GitHub stars.
+  **Targets:** best-of-algorithmic-trading, awesome-systematic-trading, awesome-quant.
+
 ## Completed
 
-<!-- Items completed in this project will be moved here with version + date -->
+- **CI: CONTRIBUTING.md interface drift check** — Completed v2.1.1.0 (2026-03-23) — PR #10
+- **Phase 1: Open source contributor infra** — Completed v2.1.1.0 (2026-03-22) — PR #4 (CONTRIBUTING.md, PR template, issue template, good first issues #5–#9)
+- **GitHub Discussions** — Enabled 2026-03-22 (Ideas, Q&A, Show and Tell categories)

@@ -44,6 +44,33 @@ interface SymbolItem {
   enabled: boolean
 }
 
+interface WyckoffEvent {
+  type: string
+  time: number
+  bar_index: number
+  price: number
+  volume_rel: number
+}
+
+interface WyckoffPhaseZone {
+  phase: string
+  start_time: number
+  end_time: number
+  price_low: number
+  price_high: number
+}
+
+interface WyckoffAnalysis {
+  symbol: string
+  timeframe: string
+  phase: string
+  swing_high: number
+  swing_low: number
+  ema_50: number
+  events: WyckoffEvent[]
+  phase_zones: WyckoffPhaseZone[]
+}
+
 interface RuleItem {
   name: string
   enabled: boolean
@@ -409,6 +436,22 @@ function StatusTab() {
 const TFS = ['1H', '4H', '1D', '1W'] as const
 type TF = (typeof TFS)[number]
 
+const PHASE_COLORS: Record<string, string> = {
+  accumulation: '#5B9279',
+  markup:       '#8FCB9B',
+  distribution: '#B47B4A',
+  markdown:     '#8F8073',
+  ranging:      '#5A5A5A',
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  accumulation: 'Accumulation',
+  markup:       'Markup ↑',
+  distribution: 'Distribution',
+  markdown:     'Markdown ↓',
+  ranging:      'Ranging',
+}
+
 function ChartTab() {
   const { t } = useTranslation()
   const [symbol, setSymbol] = useState('')
@@ -417,10 +460,14 @@ function ChartTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [signals, setSignals] = useState<SignalBar[]>([])
+  const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
+  const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const swingHighLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
+  const swingLowLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
 
   // Load enabled symbols for the selector
   useEffect(() => {
@@ -532,6 +579,78 @@ function ChartTab() {
       .finally(() => setLoading(false))
   }, [symbol, tf])
 
+  // Remove Wyckoff overlays when disabled or symbol/tf changes
+  useEffect(() => {
+    if (!seriesRef.current) return
+    if (swingHighLineRef.current) {
+      seriesRef.current.removePriceLine(swingHighLineRef.current)
+      swingHighLineRef.current = null
+    }
+    if (swingLowLineRef.current) {
+      seriesRef.current.removePriceLine(swingLowLineRef.current)
+      swingLowLineRef.current = null
+    }
+    if (!wyckoffEnabled) {
+      setWyckoffData(null)
+      return
+    }
+    if (!symbol) return
+
+    apiFetch<WyckoffAnalysis>(`/wyckoff/${encodeURIComponent(symbol)}/${tf}`)
+      .then((data) => {
+        setWyckoffData(data)
+        if (!seriesRef.current) return
+        if (data.swing_high > 0) {
+          swingHighLineRef.current = seriesRef.current.createPriceLine({
+            price: data.swing_high,
+            color: 'rgba(143,203,155,0.7)',
+            lineWidth: 1,
+            lineStyle: 2, // dashed
+            axisLabelVisible: true,
+            title: 'Swing H',
+          })
+        }
+        if (data.swing_low > 0) {
+          swingLowLineRef.current = seriesRef.current.createPriceLine({
+            price: data.swing_low,
+            color: 'rgba(143,128,115,0.7)',
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: 'Swing L',
+          })
+        }
+        // Draw Spring / Upthrust event markers on top of existing signal markers
+        if (data.events && data.events.length > 0 && seriesRef.current) {
+          const wyckoffMarkers = data.events
+            .filter((e) => e.type === 'spring' || e.type === 'upthrust')
+            .map((e) => ({
+              time: e.time as UTCTimestamp,
+              position: e.type === 'spring' ? ('belowBar' as const) : ('aboveBar' as const),
+              color: e.type === 'spring' ? '#8FCB9B' : '#B47B4A',
+              shape: e.type === 'spring' ? ('circle' as const) : ('circle' as const),
+              text: e.type === 'spring' ? 'Sp' : 'Ut',
+            }))
+          // Append to existing markers by fetching current set is not possible via API,
+          // so we merge with signals-derived markers
+          const signalMarkers = signals
+            .filter((s) => s.direction !== 'NEUTRAL')
+            .map((s) => ({
+              time: s.time as UTCTimestamp,
+              position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
+              color: s.direction === 'LONG' ? '#8FCB9B' : 'rgba(143,128,115,0.9)',
+              shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
+              text: abbreviateRule(s.rule),
+            }))
+          const allMarkers = [...signalMarkers, ...wyckoffMarkers].sort((a, b) =>
+            (a.time as number) - (b.time as number)
+          )
+          createSeriesMarkers(seriesRef.current, allMarkers)
+        }
+      })
+      .catch(() => {/* silently ignore wyckoff fetch errors */})
+  }, [wyckoffEnabled, symbol, tf]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <>
       <div className="chart-controls">
@@ -558,7 +677,47 @@ function ChartTab() {
             </button>
           ))}
         </div>
+        <button
+          className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
+          onClick={() => setWyckoffEnabled((v) => !v)}
+          title="Toggle Wyckoff overlay"
+          style={{ marginLeft: 8, fontSize: '0.78rem', letterSpacing: '0.02em' }}
+        >
+          Wyckoff
+        </button>
       </div>
+      {wyckoffEnabled && wyckoffData && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span
+            style={{
+              padding: '2px 10px',
+              borderRadius: 4,
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              background: `${PHASE_COLORS[wyckoffData.phase] ?? '#5A5A5A'}22`,
+              color: PHASE_COLORS[wyckoffData.phase] ?? '#8F8073',
+              border: `1px solid ${PHASE_COLORS[wyckoffData.phase] ?? '#5A5A5A'}55`,
+            }}
+          >
+            {PHASE_LABELS[wyckoffData.phase] ?? wyckoffData.phase}
+          </span>
+          {wyckoffData.events.filter((e) => e.type === 'spring' || e.type === 'upthrust').slice(-3).map((e, i) => (
+            <span
+              key={i}
+              style={{
+                padding: '2px 8px',
+                borderRadius: 4,
+                fontSize: '0.72rem',
+                background: e.type === 'spring' ? 'rgba(143,203,155,0.1)' : 'rgba(180,123,74,0.1)',
+                color: e.type === 'spring' ? '#8FCB9B' : '#B47B4A',
+                border: `1px solid ${e.type === 'spring' ? '#8FCB9B' : '#B47B4A'}55`,
+              }}
+            >
+              {e.type === 'spring' ? '↑ Spring' : '↓ Upthrust'}
+            </span>
+          ))}
+        </div>
+      )}
       {loading && <p className="loading">{t('chart_loading')}</p>}
       {error && <p className="error-msg">{t('no_data_error', { error })}</p>}
       <div ref={containerRef} className="chart-area" />

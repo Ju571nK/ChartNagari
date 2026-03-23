@@ -649,7 +649,7 @@ function ChartTab() {
         }
       })
       .catch(() => {/* silently ignore wyckoff fetch errors */})
-  }, [wyckoffEnabled, symbol, tf]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wyckoffEnabled, symbol, tf, signals])
 
   return (
     <>
@@ -759,7 +759,7 @@ interface BacktestStats {
 }
 
 interface TradeOutcome {
-  entry_time: number
+  entry_time: string
   entry_price: number
   direction: string
   rule: string
@@ -924,7 +924,7 @@ function BacktestTab() {
           }
           const markers: MarkerItem[] = []
           for (const o of result.outcomes) {
-            const entryTimeSec = Math.floor(o.entry_time / 1000) as UTCTimestamp
+            const entryTimeSec = Math.floor(new Date(o.entry_time).getTime() / 1000) as UTCTimestamp
             // Entry marker
             markers.push({
               time: entryTimeSec,
@@ -970,7 +970,7 @@ function BacktestTab() {
     if (selectedTrade === null || !result || !btChartRef.current) return
     const o = result.outcomes[selectedTrade]
     if (!o) return
-    const entryTimeSec = Math.floor(o.entry_time / 1000) as UTCTimestamp
+    const entryTimeSec = Math.floor(new Date(o.entry_time).getTime() / 1000) as UTCTimestamp
     btChartRef.current.timeScale().scrollToPosition(0, false)
     btChartRef.current.timeScale().scrollToRealTime()
     // Set visible range to ±20 bars around the entry

@@ -245,9 +245,3 @@ func volRel(vol, volMA float64) float64 {
 	return vol / volMA
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

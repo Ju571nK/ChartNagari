@@ -608,6 +608,9 @@ func (s *Server) getWyckoffAnalysis(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
+	if limit > 1000 {
+		limit = 1000
+	}
 
 	bars, err := s.chartStore.GetOHLCV(symbol, timeframe, limit)
 	if err != nil {

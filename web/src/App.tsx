@@ -808,6 +808,10 @@ function BacktestTab() {
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [ruleStats, setRuleStats] = useState<RuleStats[] | null>(null)
   const [rulesLoading, setRulesLoading] = useState(false)
+  const [selectedTrade, setSelectedTrade] = useState<number | null>(null)
+  const btContainerRef = useRef<HTMLDivElement>(null)
+  const btChartRef = useRef<IChartApi | null>(null)
+  const btSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
 
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
@@ -855,6 +859,128 @@ function BacktestTab() {
       setRulesLoading(false)
     }
   }, [symbol, tf, tpMult, slMult, t])
+
+  // Create backtest chart once the result container is rendered
+  useEffect(() => {
+    if (!result || !btContainerRef.current) return
+
+    // Destroy previous chart instance if result changed
+    if (btChartRef.current) {
+      btChartRef.current.remove()
+      btChartRef.current = null
+      btSeriesRef.current = null
+    }
+
+    const chart = createChart(btContainerRef.current, {
+      layout: {
+        background: { color: '#0E0F0C' },
+        textColor: '#8F8073',
+      },
+      grid: {
+        vertLines: { color: 'rgba(234,230,229,0.04)' },
+        horzLines: { color: 'rgba(234,230,229,0.04)' },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      width: btContainerRef.current.clientWidth,
+      height: 320,
+      timeScale: { borderColor: 'rgba(91,146,121,0.2)' },
+      rightPriceScale: { borderColor: 'rgba(91,146,121,0.2)' },
+    })
+
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: '#8FCB9B',
+      downColor: 'rgba(143,128,115,0.6)',
+      borderUpColor: '#8FCB9B',
+      borderDownColor: 'rgba(143,128,115,0.6)',
+      wickUpColor: '#8FCB9B',
+      wickDownColor: 'rgba(143,128,115,0.6)',
+    })
+    series.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.08 } })
+
+    btChartRef.current = chart
+    btSeriesRef.current = series
+
+    // Fetch OHLCV bars for the backtested symbol/tf
+    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(result.symbol)}/${result.timeframe}?limit=500`)
+      .then((bars) => {
+        series.setData(
+          bars.map((b) => ({
+            time: b.time as UTCTimestamp,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+          }))
+        )
+
+        // Build entry + exit markers from trade outcomes
+        if (result.outcomes && result.outcomes.length > 0) {
+          type MarkerItem = {
+            time: UTCTimestamp
+            position: 'belowBar' | 'aboveBar'
+            color: string
+            shape: 'arrowUp' | 'arrowDown' | 'circle'
+            text: string
+          }
+          const markers: MarkerItem[] = []
+          for (const o of result.outcomes) {
+            const entryTimeSec = Math.floor(o.entry_time / 1000) as UTCTimestamp
+            // Entry marker
+            markers.push({
+              time: entryTimeSec,
+              position: o.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+              color: o.direction === 'LONG' ? '#8FCB9B' : '#B47B4A',
+              shape: o.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
+              text: o.win ? '✓' : '✗',
+            })
+            // Exit marker — approximate via exit_bars * tf seconds offset
+            const tfSeconds: Record<string, number> = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
+            const exitTimeSec = (entryTimeSec + o.exit_bars * (tfSeconds[result.timeframe] ?? 3600)) as UTCTimestamp
+            markers.push({
+              time: exitTimeSec,
+              position: o.direction === 'LONG' ? 'aboveBar' : 'belowBar',
+              color: o.win ? 'rgba(143,203,155,0.6)' : 'rgba(143,128,115,0.6)',
+              shape: 'circle',
+              text: '',
+            })
+          }
+          markers.sort((a, b) => (a.time as number) - (b.time as number))
+          createSeriesMarkers(series, markers)
+        }
+
+        // Fit chart to show all bars initially
+        chart.timeScale().fitContent()
+      })
+      .catch(() => {/* silently ignore */})
+
+    const onResize = () => {
+      if (btContainerRef.current) chart.applyOptions({ width: btContainerRef.current.clientWidth })
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      chart.remove()
+      btChartRef.current = null
+      btSeriesRef.current = null
+    }
+  }, [result]) // re-create chart whenever result changes
+
+  // Scroll chart to selected trade when row is clicked
+  useEffect(() => {
+    if (selectedTrade === null || !result || !btChartRef.current) return
+    const o = result.outcomes[selectedTrade]
+    if (!o) return
+    const entryTimeSec = Math.floor(o.entry_time / 1000) as UTCTimestamp
+    btChartRef.current.timeScale().scrollToPosition(0, false)
+    btChartRef.current.timeScale().scrollToRealTime()
+    // Set visible range to ±20 bars around the entry
+    const tfSeconds: Record<string, number> = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
+    const pad = 20 * (tfSeconds[tf] ?? 3600)
+    btChartRef.current.timeScale().setVisibleRange({
+      from: (entryTimeSec - pad) as UTCTimestamp,
+      to: (entryTimeSec + pad) as UTCTimestamp,
+    })
+  }, [selectedTrade, result, tf])
 
   return (
     <>
@@ -988,9 +1114,24 @@ function BacktestTab() {
             </div>
           </div>
 
+          {/* Trade chart */}
+          <p className="section-title" style={{ marginTop: 24 }}>{t('trade_chart')}</p>
+          <div
+            ref={btContainerRef}
+            style={{
+              width: '100%',
+              height: 320,
+              borderRadius: 6,
+              overflow: 'hidden',
+              border: '1px solid rgba(91,146,121,0.15)',
+              marginBottom: 8,
+            }}
+          />
+          <p className="item-meta" style={{ marginBottom: 16 }}>{t('trade_chart_hint')}</p>
+
           {result.outcomes && result.outcomes.length > 0 && (
             <>
-              <p className="section-title" style={{ marginTop: 24 }}>{t('trade_list')}</p>
+              <p className="section-title" style={{ marginTop: 8 }}>{t('trade_list')}</p>
               <div className="backtest-table-wrap">
                 <table className="backtest-table">
                   <thead>
@@ -1006,7 +1147,12 @@ function BacktestTab() {
                   </thead>
                   <tbody>
                     {result.outcomes.map((o, i) => (
-                      <tr key={i} className={o.win ? 'outcome-win' : 'outcome-loss'}>
+                      <tr
+                        key={i}
+                        className={o.win ? 'outcome-win' : 'outcome-loss'}
+                        style={{ cursor: 'pointer', outline: selectedTrade === i ? '1px solid rgba(91,146,121,0.5)' : undefined }}
+                        onClick={() => setSelectedTrade(i === selectedTrade ? null : i)}
+                      >
                         <td>{new Date(o.entry_time).toLocaleDateString()}</td>
                         <td className={o.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
                           {o.direction}

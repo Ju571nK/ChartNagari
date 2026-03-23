@@ -146,6 +146,8 @@
   "max_drawdown": "최대낙폭",
   "sharpe_ratio": "샤프비율",
   "total_return": "누적 수익률",
+  "trade_chart": "거래 차트",
+  "trade_chart_hint": "거래 목록에서 행을 클릭하면 해당 거래 위치로 차트가 이동합니다.",
   "trade_list": "거래 목록",
   "entry_time": "진입 시간",
   "exit_price": "청산가",

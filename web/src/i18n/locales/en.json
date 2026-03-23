@@ -146,6 +146,8 @@
   "max_drawdown": "Max Drawdown",
   "sharpe_ratio": "Sharpe Ratio",
   "total_return": "Total Return",
+  "trade_chart": "Trade Chart",
+  "trade_chart_hint": "Click a row in the trade list to jump to that trade on the chart.",
   "trade_list": "Trade List",
   "entry_time": "Entry Time",
   "exit_price": "Exit Price",

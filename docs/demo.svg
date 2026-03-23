@@ -1,0 +1,300 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 460" width="800" height="460">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap');
+      text { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+
+      /* Background fade-in */
+      .bg { animation: none; }
+
+      /* Candles */
+      .candle-body { rx: 2; }
+      .candle-bear { fill: #ef4444; }
+      .candle-bull { fill: #22c55e; }
+      .candle-wick { stroke-width: 1.5; }
+      .candle-bear-wick { stroke: #ef4444; }
+      .candle-bull-wick { stroke: #22c55e; }
+
+      /* Order Block Box — fades in at t=1.5s */
+      .ob-box {
+        opacity: 0;
+        animation: obAppear 0.6s ease-out 1.5s forwards;
+      }
+      @keyframes obAppear {
+        from { opacity: 0; transform: scaleY(0.3); transform-origin: center; }
+        to   { opacity: 1; transform: scaleY(1); }
+      }
+
+      /* OB Label */
+      .ob-label {
+        opacity: 0;
+        animation: fadeIn 0.4s ease-out 2.0s forwards;
+      }
+
+      /* Signal badge — appears at t=2.4s */
+      .signal-badge {
+        opacity: 0;
+        animation: badgePop 0.5s cubic-bezier(0.34,1.56,0.64,1) 2.4s forwards;
+      }
+      @keyframes badgePop {
+        from { opacity: 0; transform: scale(0.4); transform-origin: center; }
+        to   { opacity: 1; transform: scale(1); }
+      }
+
+      /* Telegram notification — slides in from right at t=3.2s */
+      .tg-card {
+        opacity: 0;
+        transform: translateX(120px);
+        animation: slideIn 0.5s ease-out 3.2s forwards;
+      }
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateX(120px); }
+        to   { opacity: 1; transform: translateX(0); }
+      }
+
+      /* Ping dot */
+      .ping-dot {
+        opacity: 0;
+        animation: pingAnim 1.2s ease-in-out 3.8s infinite;
+      }
+      @keyframes pingAnim {
+        0%   { opacity: 1; r: 4; }
+        100% { opacity: 0; r: 14; }
+      }
+
+      /* Title fade in */
+      .title-text {
+        opacity: 0;
+        animation: fadeIn 0.8s ease-out 0.2s forwards;
+      }
+
+      /* Chart line */
+      .price-line {
+        opacity: 0;
+        stroke-dasharray: 600;
+        stroke-dashoffset: 600;
+        animation: drawLine 1.4s ease-out 0.4s forwards;
+      }
+      @keyframes drawLine {
+        to { stroke-dashoffset: 0; opacity: 1; }
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+
+      /* Arrow pulse */
+      .arrow-line {
+        opacity: 0;
+        animation: fadeIn 0.4s ease-out 2.9s forwards;
+      }
+    </style>
+
+    <!-- Glow filter for signal -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+
+    <!-- Clip for chart area -->
+    <clipPath id="chartClip">
+      <rect x="40" y="60" width="480" height="280"/>
+    </clipPath>
+  </defs>
+
+  <!-- ═══════════════ BACKGROUND ═══════════════ -->
+  <rect width="800" height="460" fill="#0f172a" rx="12"/>
+
+  <!-- Grid lines -->
+  <g stroke="#1e293b" stroke-width="1">
+    <line x1="40" y1="100" x2="520" y2="100"/>
+    <line x1="40" y1="160" x2="520" y2="160"/>
+    <line x1="40" y1="220" x2="520" y2="220"/>
+    <line x1="40" y1="280" x2="520" y2="280"/>
+    <line x1="40" y1="340" x2="520" y2="340"/>
+  </g>
+
+  <!-- Price labels -->
+  <text x="30" y="103" font-size="10" fill="#334155" text-anchor="end">195</text>
+  <text x="30" y="163" font-size="10" fill="#334155" text-anchor="end">190</text>
+  <text x="30" y="223" font-size="10" fill="#334155" text-anchor="end">185</text>
+  <text x="30" y="283" font-size="10" fill="#334155" text-anchor="end">180</text>
+  <text x="30" y="343" font-size="10" fill="#334155" text-anchor="end">175</text>
+
+  <!-- ═══════════════ TITLE ═══════════════ -->
+  <text class="title-text" x="280" y="38" font-size="15" font-weight="700" fill="#e2e8f0" text-anchor="middle">ChartNagari — ICT / Wyckoff Signal Detection</text>
+  <text class="title-text" x="280" y="56" font-size="10" fill="#64748b" text-anchor="middle">AAPL · 4H · ICT Order Block</text>
+
+  <!-- ═══════════════ CANDLES (static — drawn first) ═══════════════ -->
+  <g clip-path="url(#chartClip)">
+
+    <!-- Candle 1 bear -->
+    <line class="candle-wick candle-bear-wick" x1="70"  y1="118" x2="70"  y2="175"/>
+    <rect class="candle-body candle-bear" x="62"  y="130" width="16" height="36"/>
+
+    <!-- Candle 2 bear -->
+    <line class="candle-wick candle-bear-wick" x1="110" y1="125" x2="110" y2="190"/>
+    <rect class="candle-body candle-bear" x="102" y="138" width="16" height="42"/>
+
+    <!-- Candle 3 bear -->
+    <line class="candle-wick candle-bear-wick" x1="150" y1="140" x2="150" y2="205"/>
+    <rect class="candle-body candle-bear" x="142" y="155" width="16" height="40"/>
+
+    <!-- Candle 4 bull (Order Block candle) -->
+    <line class="candle-wick candle-bull-wick" x1="190" y1="165" x2="190" y2="230"/>
+    <rect class="candle-body candle-bull"  x="182" y="178" width="16" height="40"/>
+
+    <!-- Candle 5 bear -->
+    <line class="candle-wick candle-bear-wick" x1="230" y1="175" x2="230" y2="240"/>
+    <rect class="candle-body candle-bear" x="222" y="188" width="16" height="38"/>
+
+    <!-- Candle 6 bear -->
+    <line class="candle-wick candle-bear-wick" x1="270" y1="195" x2="270" y2="265"/>
+    <rect class="candle-body candle-bear" x="262" y="210" width="16" height="45"/>
+
+    <!-- Candle 7 bull -->
+    <line class="candle-wick candle-bull-wick" x1="310" y1="200" x2="310" y2="275"/>
+    <rect class="candle-body candle-bull"  x="302" y="218" width="16" height="46"/>
+
+    <!-- Candle 8 bull -->
+    <line class="candle-wick candle-bull-wick" x1="350" y1="165" x2="350" y2="230"/>
+    <rect class="candle-body candle-bull"  x="342" y="178" width="16" height="42"/>
+
+    <!-- Candle 9 bull — price returns into OB -->
+    <line class="candle-wick candle-bull-wick" x1="390" y1="155" x2="390" y2="215"/>
+    <rect class="candle-body candle-bull"  x="382" y="168" width="16" height="36"/>
+
+    <!-- Candle 10 — signal candle (bright green) -->
+    <line class="candle-wick candle-bull-wick" x1="430" y1="105" x2="430" y2="168"/>
+    <rect class="candle-body candle-bull"  x="422" y="118" width="16" height="48" filter="url(#glow)"/>
+
+    <!-- Candle 11 bull -->
+    <line class="candle-wick candle-bull-wick" x1="470" y1="88" x2="470" y2="148"/>
+    <rect class="candle-body candle-bull"  x="462" y="100" width="16" height="42"/>
+
+    <!-- ═══ ORDER BLOCK HIGHLIGHT ═══ -->
+    <rect class="ob-box" x="182" y="170" width="280" height="58"
+          fill="#3b82f6" fill-opacity="0.12"
+          stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3" rx="2"/>
+
+    <!-- OB boundary lines -->
+    <line class="ob-label" x1="182" y1="170" x2="462" y2="170" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.6"/>
+    <line class="ob-label" x1="182" y1="228" x2="462" y2="228" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.6"/>
+
+    <!-- OB label badge -->
+    <g class="ob-label">
+      <rect x="184" y="173" width="78" height="18" fill="#3b82f6" fill-opacity="0.85" rx="3"/>
+      <text x="223" y="185" font-size="10" font-weight="600" fill="white" text-anchor="middle">Order Block</text>
+    </g>
+
+  </g>
+
+  <!-- ═══════════════ SIGNAL BADGE ═══════════════ -->
+  <g class="signal-badge" transform="translate(392, 108)">
+    <filter id="signalGlow">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <rect x="-52" y="-18" width="104" height="36" fill="#22c55e" rx="18" filter="url(#signalGlow)"/>
+    <text x="0" y="-4" font-size="9" font-weight="700" fill="white" text-anchor="middle">🔺 SIGNAL</text>
+    <text x="0" y="10" font-size="8" fill="#bbf7d0" text-anchor="middle">OB Bullish · +2.4%</text>
+    <!-- Ping animation -->
+    <circle class="ping-dot" cx="0" cy="-2" fill="none" stroke="#86efac" stroke-width="2"/>
+  </g>
+
+  <!-- Arrow from signal to notification -->
+  <g class="arrow-line">
+    <line x1="496" y1="100" x2="550" y2="100" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,3"/>
+    <polygon points="548,96 556,100 548,104" fill="#64748b"/>
+  </g>
+
+  <!-- ═══════════════ TELEGRAM NOTIFICATION CARD ═══════════════ -->
+  <g class="tg-card" filter="url(#shadow)">
+    <!-- Card background -->
+    <rect x="560" y="60" width="220" height="200" fill="#1e293b" rx="12" stroke="#334155" stroke-width="1"/>
+
+    <!-- Telegram header bar -->
+    <rect x="560" y="60" width="220" height="44" fill="#0088cc" rx="12"/>
+    <rect x="560" y="88" width="220" height="16" fill="#0088cc"/>
+
+    <!-- Telegram icon -->
+    <circle cx="582" cy="82" r="14" fill="white" fill-opacity="0.15"/>
+    <text x="582" y="87" font-size="14" text-anchor="middle" fill="white">✈</text>
+
+    <!-- Header text -->
+    <text x="600" y="77" font-size="11" font-weight="700" fill="white">ChartNagari Bot</text>
+    <text x="600" y="90" font-size="9" fill="#bfdbfe">@chartnagari_alerts</text>
+
+    <!-- Message bubble -->
+    <rect x="572" y="114" width="196" height="134" fill="#0f172a" rx="8"/>
+
+    <!-- Message content -->
+    <text x="584" y="133" font-size="10" font-weight="700" fill="#22c55e">🟢 ICT BUY SIGNAL</text>
+    <line x1="584" y1="138" x2="756" y2="138" stroke="#334155" stroke-width="1"/>
+
+    <text x="584" y="153" font-size="9" fill="#94a3b8">Ticker</text>
+    <text x="700" y="153" font-size="9" font-weight="600" fill="#e2e8f0" text-anchor="end">AAPL</text>
+
+    <text x="584" y="168" font-size="9" fill="#94a3b8">Rule</text>
+    <text x="700" y="168" font-size="9" font-weight="600" fill="#e2e8f0" text-anchor="end">ICT Order Block</text>
+
+    <text x="584" y="183" font-size="9" fill="#94a3b8">Timeframe</text>
+    <text x="700" y="183" font-size="9" font-weight="600" fill="#e2e8f0" text-anchor="end">4H</text>
+
+    <text x="584" y="198" font-size="9" fill="#94a3b8">Entry Zone</text>
+    <text x="700" y="198" font-size="9" font-weight="600" fill="#22c55e" text-anchor="end">$181.20 – $183.80</text>
+
+    <text x="584" y="213" font-size="9" fill="#94a3b8">Target</text>
+    <text x="700" y="213" font-size="9" font-weight="600" fill="#3b82f6" text-anchor="end">$191.50 (+4.6%)</text>
+
+    <text x="584" y="228" font-size="9" fill="#94a3b8">Stop</text>
+    <text x="700" y="228" font-size="9" font-weight="600" fill="#ef4444" text-anchor="end">$179.40 (-1.0%)</text>
+
+    <!-- Timestamp -->
+    <text x="668" y="244" font-size="8" fill="#475569" text-anchor="end">2026-03-23 · 04:00 UTC</text>
+  </g>
+
+  <!-- ═══════════════ BOTTOM STRIP ═══════════════ -->
+  <rect x="0" y="410" width="800" height="50" fill="#0f172a"/>
+  <line x1="0" y1="410" x2="800" y2="410" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Bottom badges -->
+  <g class="title-text">
+    <!-- Go badge -->
+    <rect x="40" y="424" width="64" height="22" fill="#1e293b" rx="11" stroke="#334155" stroke-width="1"/>
+    <text x="72" y="439" font-size="10" font-weight="600" fill="#60a5fa" text-anchor="middle">Go 1.26</text>
+
+    <!-- React badge -->
+    <rect x="116" y="424" width="76" height="22" fill="#1e293b" rx="11" stroke="#334155" stroke-width="1"/>
+    <text x="154" y="439" font-size="10" font-weight="600" fill="#34d399" text-anchor="middle">React + Vite</text>
+
+    <!-- SQLite badge -->
+    <rect x="204" y="424" width="64" height="22" fill="#1e293b" rx="11" stroke="#334155" stroke-width="1"/>
+    <text x="236" y="439" font-size="10" font-weight="600" fill="#a78bfa" text-anchor="middle">SQLite</text>
+
+    <!-- Rules badge -->
+    <rect x="280" y="424" width="90" height="22" fill="#1e293b" rx="11" stroke="#334155" stroke-width="1"/>
+    <text x="325" y="439" font-size="10" font-weight="600" fill="#fb923c" text-anchor="middle">14+ ICT Rules</text>
+
+    <!-- Telegram badge -->
+    <rect x="382" y="424" width="88" height="22" fill="#1e293b" rx="11" stroke="#334155" stroke-width="1"/>
+    <text x="426" y="439" font-size="10" font-weight="600" fill="#38bdf8" text-anchor="middle">Telegram/Discord</text>
+
+    <!-- Open Source badge -->
+    <rect x="482" y="424" width="90" height="22" fill="#1e293b" rx="11" stroke="#334155" stroke-width="1"/>
+    <text x="527" y="439" font-size="10" font-weight="600" fill="#f9a8d4" text-anchor="middle">Open Source ⭐</text>
+
+    <!-- GitHub stars placeholder -->
+    <text x="760" y="439" font-size="10" fill="#475569" text-anchor="end">github.com/Ju571nK/ChartNagari</text>
+  </g>
+
+</svg>

@@ -42,4 +42,6 @@
 
 ## Completed
 
-<!-- Items completed in this project will be moved here with version + date -->
+- **Phase 2: Wyckoff Phase Visualization + Backtest UI**
+  **Completed:** v2.1.2.0 (2026-03-23)
+  Wyckoff phase analyzer (`internal/wyckoff/`), API endpoint (`GET /api/wyckoff/{symbol}/{timeframe}`), ChartTab phase zone overlay with Spring/Upthrust markers, and BacktestTab candlestick trade chart all shipped.

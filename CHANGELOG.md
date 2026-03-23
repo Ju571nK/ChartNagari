@@ -14,6 +14,34 @@ Format:
 
 ---
 
+## [2.1.2.0] - 2026-03-23
+
+### Added
+- `internal/wyckoff/analyzer.go`: new `wyckoff` package with `Analyze()` function that
+  detects Wyckoff phases (Markup, Accumulation, Distribution, Markdown, Ranging) from
+  OHLCV bars using EMA-50 and swing high/low breakout logic; scans Spring and Upthrust
+  events; returns phase zones, events, and current swing levels
+- `GET /api/wyckoff/{symbol}/{timeframe}`: new API endpoint (limit capped at 1000 bars)
+  that runs the Wyckoff analyzer and returns overlay payload for the frontend chart
+- **ChartTab Wyckoff overlay**: toggle button to show/hide Wyckoff phase zones as
+  semi-transparent price bands with phase labels, plus Spring (Sp) and Upthrust (Ut)
+  event markers merged with existing signal markers
+- **BacktestTab trade chart**: Lightweight Charts candlestick overlay that renders entry
+  (arrow) and exit (circle) markers for each backtest trade; clicking a row in the trade
+  list scrolls the chart to that trade's entry bar
+
+### Fixed
+- `TradeOutcome.entry_time`: corrected frontend type from `number` to `string` and parse
+  path from `/ 1000` to `new Date().getTime() / 1000` — eliminates NaN timestamp bug
+  that produced invisible/misplaced trade markers
+- Wyckoff `useEffect` dependency array now includes `signals` — prevents stale closure
+  showing previous symbol's markers when switching symbols with overlay enabled
+- `internal/wyckoff/analyzer.go`: removed local `max()` helper that shadowed Go 1.21+
+  built-in
+- `data/tiingo_state.json` removed from git tracking (was committed before gitignore rule)
+
+---
+
 ## [2.1.1.0] - 2026-03-22
 
 ### Added

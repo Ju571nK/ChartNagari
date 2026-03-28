@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
+import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
   createSeriesMarkers,
@@ -2468,6 +2469,7 @@ export function App() {
   const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('chart')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [liveSignal, setLiveSignal] = useState<SignalBar | null>(null)
@@ -2510,6 +2512,12 @@ export function App() {
     }
   }, [])
 
+  // Show onboarding modal on first run (no localStorage key set)
+  useEffect(() => {
+    const done = localStorage.getItem(ONBOARDING_DONE_KEY)
+    if (!done) setShowOnboarding(true)
+  }, [])
+
   const isConfigTab = CONFIG_TABS.includes(tab)
 
   // Close menu on outside click
@@ -2528,6 +2536,8 @@ export function App() {
     setTab(t)
     setMenuOpen(false)
   }
+
+  const handleGoToSettings = () => setTab('settings')
 
   return (
     <div className="container">
@@ -2613,6 +2623,12 @@ export function App() {
         {tab === 'price-alerts' && <PriceAlertsTab />}
         {tab === 'calendar' && <CalendarTab />}
       </main>
+      {showOnboarding && (
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
+          onGoToSettings={handleGoToSettings}
+        />
+      )}
       {liveSignal && (
         <div className="ws-toast" onClick={() => setLiveSignal(null)}>
           <span className="ws-toast-dir" data-dir={liveSignal.direction}>{liveSignal.direction}</span>

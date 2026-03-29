@@ -16,6 +16,9 @@ symbols:
         - symbol: SPY
           exchange: nyse
           enabled: true
+        - symbol: PLTR
+          exchange: ""
+          enabled: true
 timeframes:
     - 1W
     - 1D

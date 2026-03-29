@@ -14,6 +14,31 @@ Format:
 
 ---
 
+## [2.1.3.0] - 2026-03-28
+
+### Added
+- **OnboardingModal** (`web/src/OnboardingModal.tsx`) — 2-step guided setup modal shown to
+  first-time users; step 1 adds a symbol via `POST /api/symbols`, step 2 runs a full
+  analysis scan via `POST /api/analysis/full` with 60-second abort timeout; completion
+  sets `chartnagari_onboarding_done` in localStorage so it never shows again
+- Alert channel status banner in step 2 — checks `GET /api/settings/config` on mount and
+  shows ok/warning/unknown badge depending on whether Telegram or Discord is configured
+- AI scenario card on completion — bull/bear/sideways probability bars from scan result;
+  falls back to "technical signals only" label when LLM service returns 503
+- Twitter/X share button on completion with confirm dialog before opening external link
+- Vitest test suite for the frontend (`web/src/OnboardingModal.test.tsx`) — 15 tests
+  covering render, step transitions, alert banners, scan results, timeout, localStorage,
+  skip, ESC close, and share dialog
+- `web/src/test-setup.ts` — in-memory localStorage mock for vitest/jsdom environments
+- i18n keys added to `en.json`, `ko.json`, `ja.json` for all onboarding strings
+
+### Changed
+- `web/vite.config.ts` — added vitest configuration (jsdom environment, globals, setup file)
+- `web/package.json` — added vitest, @testing-library/react, @testing-library/user-event,
+  @testing-library/jest-dom, and jsdom as devDependencies
+
+---
+
 ## [2.1.2.0] - 2026-03-23
 
 ### Added

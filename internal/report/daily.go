@@ -172,7 +172,7 @@ func buildNormalMessage(reports []symbolReport, date time.Time, cfg appconfig.Da
 
 	sb.WriteString("\n━━━━━━━━━━━━━━━━━━━━\n")
 	sb.WriteString(fmt.Sprintf("📊 Summary: BULL %d / NEUTRAL %d\n", bullTotal, neutralTotal))
-	sb.WriteString("⚙️ Chartter | Next report: tomorrow " + cfg.Time)
+	sb.WriteString("⚙️ ChartAnalysis | Next report: tomorrow " + cfg.Time)
 
 	_ = bearTotal
 	return sb.String()

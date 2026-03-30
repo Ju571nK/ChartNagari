@@ -27,7 +27,7 @@ run: build
 	$(BINARY)
 
 docker-build: build-frontend
-	docker build -t chartter:latest .
+	docker build -t ChartAnalysis:latest .
 
 docker-up:
 	docker compose up -d

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
@@ -186,6 +186,22 @@ function SymbolsTab() {
   const [newType, setNewType] = useState<'crypto' | 'stock'>('stock')
   const [newExchange, setNewExchange] = useState('')
   const [adding, setAdding] = useState(false)
+  const [marketFilter, setMarketFilter] = useState('all')
+
+  const markets = useMemo(() => {
+    const seen = new Set<string>()
+    symbols.forEach(s => {
+      if (s.type === 'crypto') seen.add('crypto')
+      else if (s.exchange) seen.add(s.exchange.toUpperCase())
+    })
+    return ['all', ...Array.from(seen).sort()]
+  }, [symbols])
+
+  const filteredSymbols = useMemo(() => {
+    if (marketFilter === 'all') return symbols
+    if (marketFilter === 'crypto') return symbols.filter(s => s.type === 'crypto')
+    return symbols.filter(s => s.type === 'stock' && s.exchange.toUpperCase() === marketFilter)
+  }, [symbols, marketFilter])
 
   const reload = useCallback(() => {
     apiFetch<SymbolItem[]>('/symbols')
@@ -240,7 +256,20 @@ function SymbolsTab() {
   return (
     <>
       <p className="section-title">{t('symbol_management')}</p>
-      {symbols.map((sym) => (
+      {markets.length > 1 && (
+        <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          {markets.map(m => (
+            <button
+              key={m}
+              className={`tab-btn${marketFilter === m ? ' active' : ''}`}
+              onClick={() => setMarketFilter(m)}
+            >
+              {m === 'all' ? t('all') : m}
+            </button>
+          ))}
+        </div>
+      )}
+      {filteredSymbols.map((sym) => (
         <div key={sym.symbol} className="item">
           <div>
             <div className="item-name">
@@ -255,7 +284,7 @@ function SymbolsTab() {
           </div>
         </div>
       ))}
-      {symbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}
+      {filteredSymbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}
 
       <p className="section-title" style={{ marginTop: 24 }}>{t('add_symbol')}</p>
       <div className="add-symbol-form">

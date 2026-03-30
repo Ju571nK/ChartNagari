@@ -7,14 +7,14 @@ symbols:
           exchange: binance
           enabled: true
     stocks:
-        - symbol: PLTR
-          exchange: nasdaq
-          enabled: true
         - symbol: TSLA
           exchange: nasdaq
           enabled: true
         - symbol: SPY
           exchange: nyse
+          enabled: true
+        - symbol: PLTR
+          exchange: nasdaq
           enabled: true
 timeframes:
     - 1W

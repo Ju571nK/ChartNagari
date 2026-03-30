@@ -24,6 +24,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/indicator"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pinescript"
+	wyckoffanalyzer "github.com/Ju571nK/Chatter/internal/wyckoff"
 	"github.com/Ju571nK/Chatter/pkg/models"
 	"gopkg.in/yaml.v3"
 )
@@ -291,6 +292,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/ohlcv/{symbol}/{timeframe}", s.getChartOHLCV)
 	mux.HandleFunc("GET /api/signals", s.getChartSignals)
 	mux.HandleFunc("GET /api/history", s.getHistory)
+
+	// Wyckoff phase overlay
+	mux.HandleFunc("GET /api/wyckoff/{symbol}/{timeframe}", s.getWyckoffAnalysis)
 
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
@@ -585,6 +589,42 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	jsonOK(w, result)
+}
+
+// getWyckoffAnalysis handles GET /api/wyckoff/{symbol}/{timeframe}.
+// It loads OHLCV bars, runs the Wyckoff phase analyzer, and returns the
+// full overlay payload (phase zones, spring/upthrust events, swing levels).
+// Query param: limit (default 300).
+func (s *Server) getWyckoffAnalysis(w http.ResponseWriter, r *http.Request) {
+	if s.chartStore == nil {
+		jsonOK(w, wyckoffanalyzer.Analysis{})
+		return
+	}
+	symbol := r.PathValue("symbol")
+	timeframe := r.PathValue("timeframe")
+	limit := 300
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+
+	bars, err := s.chartStore.GetOHLCV(symbol, timeframe, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// DB returns newest-first; analyzer expects oldest-first.
+	for i, j := 0, len(bars)-1; i < j; i, j = i+1, j-1 {
+		bars[i], bars[j] = bars[j], bars[i]
+	}
+
+	analysis := wyckoffanalyzer.Analyze(symbol, timeframe, bars)
+	jsonOK(w, analysis)
 }
 
 // getHistory handles GET /api/history.

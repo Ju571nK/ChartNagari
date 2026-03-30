@@ -73,6 +73,7 @@ make test        # run all Go tests
 | `internal/pipeline/` | Orchestrates collector → engine → notifier |
 | `internal/notifier/` | Telegram and Discord alert dispatch |
 | `internal/calendar/` | Economic calendar fetcher (FMP/Finnhub) and pre-event alert watcher |
+| `internal/wyckoff/` | Wyckoff phase analyzer — detects Markup/Accumulation/Distribution/Markdown/Ranging phases and Spring/Upthrust events from OHLCV bars |
 | `internal/report/` | Daily summary report generation |
 | `internal/history/` | Historical OHLCV storage |
 | `internal/storage/` | SQLite persistence layer |
@@ -252,10 +253,17 @@ The CI will run the same commands automatically when you open a PR that touches
 
 ## Tests
 
+**Go (backend):**
 - All tests must pass: `go test ./...`
 - New rule implementations require at least one table-driven test covering signal and no-signal cases
 - Use the race detector locally before opening a PR: `go test -race ./...`
 - Do **not** mock the database in integration tests — use an in-memory SQLite instance
+
+**Frontend (Vitest):**
+- All frontend tests must pass: `cd web && npm test`
+- New React components require Vitest tests using `@testing-library/react`
+- Mock `fetch` via `globalThis.fetch = vi.fn()` — do not use `msw` or other interceptors
+- Reference `web/src/OnboardingModal.test.tsx` for patterns (mock queue ordering, async `waitFor`, `act`)
 
 ---
 
@@ -264,6 +272,7 @@ The CI will run the same commands automatically when you open a PR that touches
 Before opening a pull request, verify:
 
 - [ ] `go test ./...` passes locally
+- [ ] `cd web && npm test` passes locally (frontend Vitest suite)
 - [ ] `go vet ./...` produces no warnings
 - [ ] `var _ rule.AnalysisRule = (*MyRule)(nil)` added to rule file (if adding a rule)
 - [ ] Rule registered in `config/rules.yaml` (if adding a rule)

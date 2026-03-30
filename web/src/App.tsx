@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
+import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
   createSeriesMarkers,
@@ -42,6 +43,33 @@ interface SymbolItem {
   type: 'crypto' | 'stock'
   exchange: string
   enabled: boolean
+}
+
+interface WyckoffEvent {
+  type: string
+  time: number
+  bar_index: number
+  price: number
+  volume_rel: number
+}
+
+interface WyckoffPhaseZone {
+  phase: string
+  start_time: number
+  end_time: number
+  price_low: number
+  price_high: number
+}
+
+interface WyckoffAnalysis {
+  symbol: string
+  timeframe: string
+  phase: string
+  swing_high: number
+  swing_low: number
+  ema_50: number
+  events: WyckoffEvent[]
+  phase_zones: WyckoffPhaseZone[]
 }
 
 interface RuleItem {
@@ -158,6 +186,22 @@ function SymbolsTab() {
   const [newType, setNewType] = useState<'crypto' | 'stock'>('stock')
   const [newExchange, setNewExchange] = useState('')
   const [adding, setAdding] = useState(false)
+  const [marketFilter, setMarketFilter] = useState('all')
+
+  const markets = useMemo(() => {
+    const seen = new Set<string>()
+    symbols.forEach(s => {
+      if (s.type === 'crypto') seen.add('crypto')
+      else if (s.exchange) seen.add(s.exchange.toUpperCase())
+    })
+    return ['all', ...Array.from(seen).sort()]
+  }, [symbols])
+
+  const filteredSymbols = useMemo(() => {
+    if (marketFilter === 'all') return symbols
+    if (marketFilter === 'crypto') return symbols.filter(s => s.type === 'crypto')
+    return symbols.filter(s => s.type === 'stock' && s.exchange.toUpperCase() === marketFilter)
+  }, [symbols, marketFilter])
 
   const reload = useCallback(() => {
     apiFetch<SymbolItem[]>('/symbols')
@@ -212,7 +256,20 @@ function SymbolsTab() {
   return (
     <>
       <p className="section-title">{t('symbol_management')}</p>
-      {symbols.map((sym) => (
+      {markets.length > 1 && (
+        <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          {markets.map(m => (
+            <button
+              key={m}
+              className={`tab-btn${marketFilter === m ? ' active' : ''}`}
+              onClick={() => setMarketFilter(m)}
+            >
+              {m === 'all' ? t('all') : m}
+            </button>
+          ))}
+        </div>
+      )}
+      {filteredSymbols.map((sym) => (
         <div key={sym.symbol} className="item">
           <div>
             <div className="item-name">
@@ -227,7 +284,7 @@ function SymbolsTab() {
           </div>
         </div>
       ))}
-      {symbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}
+      {filteredSymbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}
 
       <p className="section-title" style={{ marginTop: 24 }}>{t('add_symbol')}</p>
       <div className="add-symbol-form">
@@ -409,6 +466,22 @@ function StatusTab() {
 const TFS = ['1H', '4H', '1D', '1W'] as const
 type TF = (typeof TFS)[number]
 
+const PHASE_COLORS: Record<string, string> = {
+  accumulation: '#5B9279',
+  markup:       '#8FCB9B',
+  distribution: '#B47B4A',
+  markdown:     '#8F8073',
+  ranging:      '#5A5A5A',
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  accumulation: 'Accumulation',
+  markup:       'Markup ↑',
+  distribution: 'Distribution',
+  markdown:     'Markdown ↓',
+  ranging:      'Ranging',
+}
+
 function ChartTab() {
   const { t } = useTranslation()
   const [symbol, setSymbol] = useState('')
@@ -417,10 +490,14 @@ function ChartTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [signals, setSignals] = useState<SignalBar[]>([])
+  const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
+  const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const swingHighLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
+  const swingLowLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
 
   // Load enabled symbols for the selector
   useEffect(() => {
@@ -532,6 +609,78 @@ function ChartTab() {
       .finally(() => setLoading(false))
   }, [symbol, tf])
 
+  // Remove Wyckoff overlays when disabled or symbol/tf changes
+  useEffect(() => {
+    if (!seriesRef.current) return
+    if (swingHighLineRef.current) {
+      seriesRef.current.removePriceLine(swingHighLineRef.current)
+      swingHighLineRef.current = null
+    }
+    if (swingLowLineRef.current) {
+      seriesRef.current.removePriceLine(swingLowLineRef.current)
+      swingLowLineRef.current = null
+    }
+    if (!wyckoffEnabled) {
+      setWyckoffData(null)
+      return
+    }
+    if (!symbol) return
+
+    apiFetch<WyckoffAnalysis>(`/wyckoff/${encodeURIComponent(symbol)}/${tf}`)
+      .then((data) => {
+        setWyckoffData(data)
+        if (!seriesRef.current) return
+        if (data.swing_high > 0) {
+          swingHighLineRef.current = seriesRef.current.createPriceLine({
+            price: data.swing_high,
+            color: 'rgba(143,203,155,0.7)',
+            lineWidth: 1,
+            lineStyle: 2, // dashed
+            axisLabelVisible: true,
+            title: 'Swing H',
+          })
+        }
+        if (data.swing_low > 0) {
+          swingLowLineRef.current = seriesRef.current.createPriceLine({
+            price: data.swing_low,
+            color: 'rgba(143,128,115,0.7)',
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: 'Swing L',
+          })
+        }
+        // Draw Spring / Upthrust event markers on top of existing signal markers
+        if (data.events && data.events.length > 0 && seriesRef.current) {
+          const wyckoffMarkers = data.events
+            .filter((e) => e.type === 'spring' || e.type === 'upthrust')
+            .map((e) => ({
+              time: e.time as UTCTimestamp,
+              position: e.type === 'spring' ? ('belowBar' as const) : ('aboveBar' as const),
+              color: e.type === 'spring' ? '#8FCB9B' : '#B47B4A',
+              shape: e.type === 'spring' ? ('circle' as const) : ('circle' as const),
+              text: e.type === 'spring' ? 'Sp' : 'Ut',
+            }))
+          // Append to existing markers by fetching current set is not possible via API,
+          // so we merge with signals-derived markers
+          const signalMarkers = signals
+            .filter((s) => s.direction !== 'NEUTRAL')
+            .map((s) => ({
+              time: s.time as UTCTimestamp,
+              position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
+              color: s.direction === 'LONG' ? '#8FCB9B' : 'rgba(143,128,115,0.9)',
+              shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
+              text: abbreviateRule(s.rule),
+            }))
+          const allMarkers = [...signalMarkers, ...wyckoffMarkers].sort((a, b) =>
+            (a.time as number) - (b.time as number)
+          )
+          createSeriesMarkers(seriesRef.current, allMarkers)
+        }
+      })
+      .catch(() => {/* silently ignore wyckoff fetch errors */})
+  }, [wyckoffEnabled, symbol, tf, signals])
+
   return (
     <>
       <div className="chart-controls">
@@ -558,7 +707,47 @@ function ChartTab() {
             </button>
           ))}
         </div>
+        <button
+          className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
+          onClick={() => setWyckoffEnabled((v) => !v)}
+          title="Toggle Wyckoff overlay"
+          style={{ marginLeft: 8, fontSize: '0.78rem', letterSpacing: '0.02em' }}
+        >
+          Wyckoff
+        </button>
       </div>
+      {wyckoffEnabled && wyckoffData && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span
+            style={{
+              padding: '2px 10px',
+              borderRadius: 4,
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              background: `${PHASE_COLORS[wyckoffData.phase] ?? '#5A5A5A'}22`,
+              color: PHASE_COLORS[wyckoffData.phase] ?? '#8F8073',
+              border: `1px solid ${PHASE_COLORS[wyckoffData.phase] ?? '#5A5A5A'}55`,
+            }}
+          >
+            {PHASE_LABELS[wyckoffData.phase] ?? wyckoffData.phase}
+          </span>
+          {wyckoffData.events.filter((e) => e.type === 'spring' || e.type === 'upthrust').slice(-3).map((e, i) => (
+            <span
+              key={i}
+              style={{
+                padding: '2px 8px',
+                borderRadius: 4,
+                fontSize: '0.72rem',
+                background: e.type === 'spring' ? 'rgba(143,203,155,0.1)' : 'rgba(180,123,74,0.1)',
+                color: e.type === 'spring' ? '#8FCB9B' : '#B47B4A',
+                border: `1px solid ${e.type === 'spring' ? '#8FCB9B' : '#B47B4A'}55`,
+              }}
+            >
+              {e.type === 'spring' ? '↑ Spring' : '↓ Upthrust'}
+            </span>
+          ))}
+        </div>
+      )}
       {loading && <p className="loading">{t('chart_loading')}</p>}
       {error && <p className="error-msg">{t('no_data_error', { error })}</p>}
       <div ref={containerRef} className="chart-area" />
@@ -600,7 +789,7 @@ interface BacktestStats {
 }
 
 interface TradeOutcome {
-  entry_time: number
+  entry_time: string
   entry_price: number
   direction: string
   rule: string
@@ -649,6 +838,10 @@ function BacktestTab() {
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [ruleStats, setRuleStats] = useState<RuleStats[] | null>(null)
   const [rulesLoading, setRulesLoading] = useState(false)
+  const [selectedTrade, setSelectedTrade] = useState<number | null>(null)
+  const btContainerRef = useRef<HTMLDivElement>(null)
+  const btChartRef = useRef<IChartApi | null>(null)
+  const btSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
 
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
@@ -696,6 +889,128 @@ function BacktestTab() {
       setRulesLoading(false)
     }
   }, [symbol, tf, tpMult, slMult, t])
+
+  // Create backtest chart once the result container is rendered
+  useEffect(() => {
+    if (!result || !btContainerRef.current) return
+
+    // Destroy previous chart instance if result changed
+    if (btChartRef.current) {
+      btChartRef.current.remove()
+      btChartRef.current = null
+      btSeriesRef.current = null
+    }
+
+    const chart = createChart(btContainerRef.current, {
+      layout: {
+        background: { color: '#0E0F0C' },
+        textColor: '#8F8073',
+      },
+      grid: {
+        vertLines: { color: 'rgba(234,230,229,0.04)' },
+        horzLines: { color: 'rgba(234,230,229,0.04)' },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      width: btContainerRef.current.clientWidth,
+      height: 320,
+      timeScale: { borderColor: 'rgba(91,146,121,0.2)' },
+      rightPriceScale: { borderColor: 'rgba(91,146,121,0.2)' },
+    })
+
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: '#8FCB9B',
+      downColor: 'rgba(143,128,115,0.6)',
+      borderUpColor: '#8FCB9B',
+      borderDownColor: 'rgba(143,128,115,0.6)',
+      wickUpColor: '#8FCB9B',
+      wickDownColor: 'rgba(143,128,115,0.6)',
+    })
+    series.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.08 } })
+
+    btChartRef.current = chart
+    btSeriesRef.current = series
+
+    // Fetch OHLCV bars for the backtested symbol/tf
+    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(result.symbol)}/${result.timeframe}?limit=500`)
+      .then((bars) => {
+        series.setData(
+          bars.map((b) => ({
+            time: b.time as UTCTimestamp,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+          }))
+        )
+
+        // Build entry + exit markers from trade outcomes
+        if (result.outcomes && result.outcomes.length > 0) {
+          type MarkerItem = {
+            time: UTCTimestamp
+            position: 'belowBar' | 'aboveBar'
+            color: string
+            shape: 'arrowUp' | 'arrowDown' | 'circle'
+            text: string
+          }
+          const markers: MarkerItem[] = []
+          for (const o of result.outcomes) {
+            const entryTimeSec = Math.floor(new Date(o.entry_time).getTime() / 1000) as UTCTimestamp
+            // Entry marker
+            markers.push({
+              time: entryTimeSec,
+              position: o.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+              color: o.direction === 'LONG' ? '#8FCB9B' : '#B47B4A',
+              shape: o.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
+              text: o.win ? '✓' : '✗',
+            })
+            // Exit marker — approximate via exit_bars * tf seconds offset
+            const tfSeconds: Record<string, number> = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
+            const exitTimeSec = (entryTimeSec + o.exit_bars * (tfSeconds[result.timeframe] ?? 3600)) as UTCTimestamp
+            markers.push({
+              time: exitTimeSec,
+              position: o.direction === 'LONG' ? 'aboveBar' : 'belowBar',
+              color: o.win ? 'rgba(143,203,155,0.6)' : 'rgba(143,128,115,0.6)',
+              shape: 'circle',
+              text: '',
+            })
+          }
+          markers.sort((a, b) => (a.time as number) - (b.time as number))
+          createSeriesMarkers(series, markers)
+        }
+
+        // Fit chart to show all bars initially
+        chart.timeScale().fitContent()
+      })
+      .catch(() => {/* silently ignore */})
+
+    const onResize = () => {
+      if (btContainerRef.current) chart.applyOptions({ width: btContainerRef.current.clientWidth })
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      chart.remove()
+      btChartRef.current = null
+      btSeriesRef.current = null
+    }
+  }, [result]) // re-create chart whenever result changes
+
+  // Scroll chart to selected trade when row is clicked
+  useEffect(() => {
+    if (selectedTrade === null || !result || !btChartRef.current) return
+    const o = result.outcomes[selectedTrade]
+    if (!o) return
+    const entryTimeSec = Math.floor(new Date(o.entry_time).getTime() / 1000) as UTCTimestamp
+    btChartRef.current.timeScale().scrollToPosition(0, false)
+    btChartRef.current.timeScale().scrollToRealTime()
+    // Set visible range to ±20 bars around the entry
+    const tfSeconds: Record<string, number> = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
+    const pad = 20 * (tfSeconds[tf] ?? 3600)
+    btChartRef.current.timeScale().setVisibleRange({
+      from: (entryTimeSec - pad) as UTCTimestamp,
+      to: (entryTimeSec + pad) as UTCTimestamp,
+    })
+  }, [selectedTrade, result, tf])
 
   return (
     <>
@@ -829,9 +1144,24 @@ function BacktestTab() {
             </div>
           </div>
 
+          {/* Trade chart */}
+          <p className="section-title" style={{ marginTop: 24 }}>{t('trade_chart')}</p>
+          <div
+            ref={btContainerRef}
+            style={{
+              width: '100%',
+              height: 320,
+              borderRadius: 6,
+              overflow: 'hidden',
+              border: '1px solid rgba(91,146,121,0.15)',
+              marginBottom: 8,
+            }}
+          />
+          <p className="item-meta" style={{ marginBottom: 16 }}>{t('trade_chart_hint')}</p>
+
           {result.outcomes && result.outcomes.length > 0 && (
             <>
-              <p className="section-title" style={{ marginTop: 24 }}>{t('trade_list')}</p>
+              <p className="section-title" style={{ marginTop: 8 }}>{t('trade_list')}</p>
               <div className="backtest-table-wrap">
                 <table className="backtest-table">
                   <thead>
@@ -847,7 +1177,12 @@ function BacktestTab() {
                   </thead>
                   <tbody>
                     {result.outcomes.map((o, i) => (
-                      <tr key={i} className={o.win ? 'outcome-win' : 'outcome-loss'}>
+                      <tr
+                        key={i}
+                        className={o.win ? 'outcome-win' : 'outcome-loss'}
+                        style={{ cursor: 'pointer', outline: selectedTrade === i ? '1px solid rgba(91,146,121,0.5)' : undefined }}
+                        onClick={() => setSelectedTrade(i === selectedTrade ? null : i)}
+                      >
                         <td>{new Date(o.entry_time).toLocaleDateString()}</td>
                         <td className={o.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
                           {o.direction}
@@ -2163,6 +2498,7 @@ export function App() {
   const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('chart')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [liveSignal, setLiveSignal] = useState<SignalBar | null>(null)
@@ -2205,6 +2541,12 @@ export function App() {
     }
   }, [])
 
+  // Show onboarding modal on first run (no localStorage key set)
+  useEffect(() => {
+    const done = localStorage.getItem(ONBOARDING_DONE_KEY)
+    if (!done) setShowOnboarding(true)
+  }, [])
+
   const isConfigTab = CONFIG_TABS.includes(tab)
 
   // Close menu on outside click
@@ -2223,6 +2565,8 @@ export function App() {
     setTab(t)
     setMenuOpen(false)
   }
+
+  const handleGoToSettings = () => setTab('settings')
 
   return (
     <div className="container">
@@ -2308,6 +2652,12 @@ export function App() {
         {tab === 'price-alerts' && <PriceAlertsTab />}
         {tab === 'calendar' && <CalendarTab />}
       </main>
+      {showOnboarding && (
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
+          onGoToSettings={handleGoToSettings}
+        />
+      )}
       {liveSignal && (
         <div className="ws-toast" onClick={() => setLiveSignal(null)}>
           <span className="ws-toast-dir" data-dir={liveSignal.direction}>{liveSignal.direction}</span>

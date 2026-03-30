@@ -44,6 +44,7 @@ ChartNagari fills that gap:
 | Backtest on historical data | ✅ |
 | Self-hosted, local-first, no cloud required | ✅ |
 | AI output language: `LLM_LANGUAGE: en \| ko \| ja` | ✅ |
+| Guided first-run onboarding with AI scenario scan | ✅ |
 
 > **Vibe-coded** — this project was built entirely through vibe coding with [Claude Code](https://claude.ai/claude-code).
 
@@ -60,7 +61,8 @@ ChartNagari fills that gap:
 - **AI interpretation layer** — optional LLM commentary (Anthropic, OpenAI, Groq, Gemini)
 - **Telegram & Discord alerts** — configurable cooldown to prevent alert spam
 - **Backtest & paper trading** — validate rules on historical data before going live
-- **Web dashboard** — React frontend with Settings UI to manage .env variables at runtime
+- **Web dashboard** — React frontend with guided first-run onboarding, Settings UI, and AI scenario card
+- **Frontend test suite** — Vitest + Testing Library covering all onboarding flows
 - **Multiple data sources** — Binance WebSocket (crypto, free), Tiingo (stocks, recommended), Yahoo Finance (fallback)
 - **Economic calendar** — US macro event tracker (FMP or Finnhub); pre-event Telegram alerts for high-impact releases
 

@@ -136,7 +136,7 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol: sym, type: 'stock', exchange: '' }),
       })
-      if (res.status === 201) {
+      if (res.ok) {
         setScanSymbol(sym)
         setStep1Done(true)
         setActiveStep(2)

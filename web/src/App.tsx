@@ -755,17 +755,14 @@ function ChartTab() {
       .finally(() => setLoading(false))
   }, [symbol, tf])
 
-  // Rebuild chart markers when signals or category filter changes
-  useEffect(() => {
-    if (!seriesRef.current || signals.length === 0) return
-    // Build set of enabled rule names from enabled categories
+  // Build filtered signal markers (shared between signal and wyckoff effects)
+  const buildFilteredMarkers = useCallback(() => {
     const enabledRules = new Set<string>()
     for (const [cat, def] of Object.entries(SIGNAL_CATEGORIES)) {
       if (enabledCategories.has(cat)) {
         for (const r of def.rules) enabledRules.add(r)
       }
     }
-    // Deduplicate: per candle+direction, keep highest-scoring signal
     const bestByKey = new Map<string, SignalBar>()
     for (const s of signals) {
       if (s.direction === 'NEUTRAL') continue
@@ -776,7 +773,7 @@ function ChartTab() {
         bestByKey.set(key, s)
       }
     }
-    const markers = Array.from(bestByKey.values()).map((s) => ({
+    return Array.from(bestByKey.values()).map((s) => ({
       time: s.time as UTCTimestamp,
       position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
       color: s.direction === 'LONG'
@@ -785,8 +782,13 @@ function ChartTab() {
       shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
       text: abbreviateRule(s.rule),
     }))
-    createSeriesMarkers(seriesRef.current, markers)
   }, [signals, enabledCategories])
+
+  // Rebuild chart markers when signals or category filter changes
+  useEffect(() => {
+    if (!seriesRef.current || signals.length === 0) return
+    createSeriesMarkers(seriesRef.current, buildFilteredMarkers())
+  }, [signals, enabledCategories, buildFilteredMarkers])
 
   // Remove Wyckoff overlays when disabled or symbol/tf changes
   useEffect(() => {
@@ -840,27 +842,15 @@ function ChartTab() {
               shape: e.type === 'spring' ? ('circle' as const) : ('circle' as const),
               text: e.type === 'spring' ? 'Sp' : 'Ut',
             }))
-          // Append to existing markers by fetching current set is not possible via API,
-          // so we merge with signals-derived markers
-          const signalMarkers = signals
-            .filter((s) => s.direction !== 'NEUTRAL')
-            .map((s) => ({
-              time: s.time as UTCTimestamp,
-              position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
-              color: s.direction === 'LONG'
-                ? `rgba(143,203,155,${scoreAlpha(s.score)})`
-                : `rgba(143,128,115,${scoreAlpha(s.score)})`,
-              shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
-              text: abbreviateRule(s.rule),
-            }))
-          const allMarkers = [...signalMarkers, ...wyckoffMarkers].sort((a, b) =>
+          // Merge with category-filtered signal markers
+          const allMarkers = [...buildFilteredMarkers(), ...wyckoffMarkers].sort((a, b) =>
             (a.time as number) - (b.time as number)
           )
           createSeriesMarkers(seriesRef.current, allMarkers)
         }
       })
       .catch(() => {/* silently ignore wyckoff fetch errors */})
-  }, [wyckoffEnabled, symbol, tf, signals])
+  }, [wyckoffEnabled, symbol, tf, signals, buildFilteredMarkers])
 
   return (
     <>

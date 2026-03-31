@@ -784,11 +784,24 @@ function ChartTab() {
     }))
   }, [signals, enabledCategories])
 
-  // Rebuild chart markers when signals or category filter changes
+  // Single unified marker effect: merges filtered signals + wyckoff events
   useEffect(() => {
-    if (!seriesRef.current || signals.length === 0) return
-    createSeriesMarkers(seriesRef.current, buildFilteredMarkers())
-  }, [signals, enabledCategories, buildFilteredMarkers])
+    if (!seriesRef.current) return
+    const signalMarkers = buildFilteredMarkers()
+    const wyckoffMarkers = (wyckoffEnabled && wyckoffData?.events || [])
+      .filter((e: WyckoffEvent) => e.type === 'spring' || e.type === 'upthrust')
+      .map((e: WyckoffEvent) => ({
+        time: e.time as UTCTimestamp,
+        position: e.type === 'spring' ? ('belowBar' as const) : ('aboveBar' as const),
+        color: e.type === 'spring' ? '#8FCB9B' : '#B47B4A',
+        shape: 'circle' as const,
+        text: e.type === 'spring' ? 'Sp' : 'Ut',
+      }))
+    const allMarkers = [...signalMarkers, ...wyckoffMarkers].sort((a, b) =>
+      (a.time as number) - (b.time as number)
+    )
+    createSeriesMarkers(seriesRef.current, allMarkers)
+  }, [signals, enabledCategories, buildFilteredMarkers, wyckoffEnabled, wyckoffData])
 
   // Remove Wyckoff overlays when disabled or symbol/tf changes
   useEffect(() => {
@@ -831,26 +844,10 @@ function ChartTab() {
             title: 'Swing L',
           })
         }
-        // Draw Spring / Upthrust event markers on top of existing signal markers
-        if (data.events && data.events.length > 0 && seriesRef.current) {
-          const wyckoffMarkers = data.events
-            .filter((e) => e.type === 'spring' || e.type === 'upthrust')
-            .map((e) => ({
-              time: e.time as UTCTimestamp,
-              position: e.type === 'spring' ? ('belowBar' as const) : ('aboveBar' as const),
-              color: e.type === 'spring' ? '#8FCB9B' : '#B47B4A',
-              shape: e.type === 'spring' ? ('circle' as const) : ('circle' as const),
-              text: e.type === 'spring' ? 'Sp' : 'Ut',
-            }))
-          // Merge with category-filtered signal markers
-          const allMarkers = [...buildFilteredMarkers(), ...wyckoffMarkers].sort((a, b) =>
-            (a.time as number) - (b.time as number)
-          )
-          createSeriesMarkers(seriesRef.current, allMarkers)
-        }
+        // Markers are rendered by the unified marker effect above via wyckoffData state
       })
       .catch(() => {/* silently ignore wyckoff fetch errors */})
-  }, [wyckoffEnabled, symbol, tf, signals, buildFilteredMarkers])
+  }, [wyckoffEnabled, symbol, tf])
 
   return (
     <>
@@ -897,10 +894,10 @@ function ChartTab() {
         <button
           className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
           onClick={() => setWyckoffEnabled((v) => !v)}
-          title="Toggle Wyckoff overlay"
+          title="Toggle Wyckoff phase overlay (swing levels + spring/upthrust markers)"
           style={{ marginLeft: 8, fontSize: '0.78rem', letterSpacing: '0.02em' }}
         >
-          Wyckoff
+          W.Phase
         </button>
         <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
         {Object.entries(SIGNAL_CATEGORIES).map(([cat, def]) => (

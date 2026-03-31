@@ -285,5 +285,7 @@
   "onboarding.pinescript_link": "PineScript 내보내기",
   "onboarding.share_twitter": "X / Twitter에 공유",
   "onboarding.share_warning": "X/Twitter에 공개 게시됩니다. 계속하시겠습니까?",
-  "onboarding.skip": "나중에 설정"
+  "onboarding.skip": "나중에 설정",
+  "validating": "확인 중...",
+  "not_verified": "찾을 수 없음 — 직접 입력하세요"
 }

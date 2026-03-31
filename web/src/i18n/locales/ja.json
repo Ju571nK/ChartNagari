@@ -285,5 +285,7 @@
   "onboarding.pinescript_link": "PineScriptをエクスポート",
   "onboarding.share_twitter": "X / Twitterでシェア",
   "onboarding.share_warning": "X/Twitterに公開投稿されます。続けますか？",
-  "onboarding.skip": "後で設定"
+  "onboarding.skip": "後で設定",
+  "validating": "確認中...",
+  "not_verified": "見つかりません — 手動で入力してください"
 }

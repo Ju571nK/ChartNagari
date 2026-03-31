@@ -285,5 +285,7 @@
   "onboarding.pinescript_link": "Export PineScript",
   "onboarding.share_twitter": "Share on X / Twitter",
   "onboarding.share_warning": "This will open a public post on X/Twitter. Continue?",
-  "onboarding.skip": "Set up later"
+  "onboarding.skip": "Set up later",
+  "validating": "Validating...",
+  "not_verified": "Not found — enter manually"
 }

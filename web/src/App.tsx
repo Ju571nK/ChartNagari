@@ -187,6 +187,8 @@ function SymbolsTab() {
   const [newExchange, setNewExchange] = useState('')
   const [adding, setAdding] = useState(false)
   const [marketFilter, setMarketFilter] = useState('all')
+  const [validateStatus, setValidateStatus] = useState<'idle' | 'loading' | 'found' | 'not_found'>('idle')
+  const [validatedName, setValidatedName] = useState('')
 
   const markets = useMemo(() => {
     const seen = new Set<string>()
@@ -195,6 +197,18 @@ function SymbolsTab() {
       else if (s.exchange) seen.add(s.exchange.toUpperCase())
     })
     return ['all', ...Array.from(seen).sort()]
+  }, [symbols])
+
+  const marketCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: symbols.length }
+    symbols.forEach(s => {
+      if (s.type === 'crypto') counts['crypto'] = (counts['crypto'] ?? 0) + 1
+      else if (s.exchange) {
+        const key = s.exchange.toUpperCase()
+        counts[key] = (counts[key] ?? 0) + 1
+      }
+    })
+    return counts
   }, [symbols])
 
   const filteredSymbols = useMemo(() => {
@@ -211,6 +225,37 @@ function SymbolsTab() {
   }, [])
 
   useEffect(() => { reload() }, [reload])
+
+  // Debounced symbol validation against external APIs
+  useEffect(() => {
+    const sym = newSymbol.trim()
+    if (sym.length < 2) {
+      setValidateStatus('idle')
+      setValidatedName('')
+      return
+    }
+    setValidateStatus('loading')
+    const timer = setTimeout(async () => {
+      try {
+        const result = await apiFetch<{ found: boolean; type?: string; exchange?: string; name?: string }>(
+          `/symbols/validate?symbol=${encodeURIComponent(sym)}`
+        )
+        if (result.found && result.type && result.exchange !== undefined) {
+          setNewType(result.type as 'crypto' | 'stock')
+          setNewExchange(result.exchange)
+          setValidatedName(result.name ?? '')
+          setValidateStatus('found')
+        } else {
+          setValidateStatus('not_found')
+          setValidatedName('')
+        }
+      } catch {
+        setValidateStatus('not_found')
+        setValidatedName('')
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [newSymbol])
 
   const toggle = useCallback(async (sym: SymbolItem, enabled: boolean) => {
     try {
@@ -242,6 +287,8 @@ function SymbolsTab() {
       })
       setNewSymbol('')
       setNewExchange('')
+      setValidateStatus('idle')
+      setValidatedName('')
       reload()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('add_failed'))
@@ -265,6 +312,9 @@ function SymbolsTab() {
               onClick={() => setMarketFilter(m)}
             >
               {m === 'all' ? t('all') : m}
+              {marketCounts[m] !== undefined && (
+                <span style={{ marginLeft: 4, opacity: 0.6, fontSize: '0.8em' }}>({marketCounts[m]})</span>
+              )}
             </button>
           ))}
         </div>
@@ -296,20 +346,41 @@ function SymbolsTab() {
           <option value="stock">{t('stock')}</option>
           <option value="crypto">{t('crypto')}</option>
         </select>
-        <input
-          className="symbol-input"
-          placeholder={t('symbol_placeholder_nvda')}
-          value={newSymbol}
-          onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-        />
-        <input
-          className="symbol-input"
-          placeholder={t('exchange_placeholder')}
-          value={newExchange}
-          onChange={(e) => setNewExchange(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+          <input
+            className="symbol-input"
+            style={{ width: '100%' }}
+            placeholder={t('symbol_placeholder_nvda')}
+            value={newSymbol}
+            onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+          />
+          {validateStatus === 'loading' && (
+            <span className="item-meta" style={{ color: 'var(--muted)' }}>{t('validating')}</span>
+          )}
+          {validateStatus === 'found' && validatedName && (
+            <span className="item-meta" style={{ color: 'var(--safe)' }}>✓ {validatedName}</span>
+          )}
+          {validateStatus === 'not_found' && (
+            <span className="item-meta" style={{ color: 'var(--warning)' }}>{t('not_verified')}</span>
+          )}
+        </div>
+        {newType === 'crypto' ? (
+          <input
+            className="symbol-input"
+            value="binance"
+            readOnly
+            style={{ opacity: 0.5, cursor: 'default' }}
+          />
+        ) : (
+          <input
+            className="symbol-input"
+            placeholder={t('exchange_placeholder')}
+            value={newExchange}
+            onChange={(e) => setNewExchange(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+          />
+        )}
         <button className="run-btn" onClick={add} disabled={adding || !newSymbol.trim()}>
           {adding ? '...' : t('add')}
         </button>

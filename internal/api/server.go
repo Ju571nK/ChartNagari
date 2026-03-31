@@ -279,6 +279,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/status", s.getStatus)
 
 	// Watchlist symbols
+	mux.HandleFunc("GET /api/symbols/validate", s.validateSymbol)
 	mux.HandleFunc("GET /api/symbols", s.getSymbols)
 	mux.HandleFunc("POST /api/symbols", s.addSymbol)
 	mux.HandleFunc("PUT /api/symbols/{symbol}", s.updateSymbol)
@@ -1172,6 +1173,114 @@ func configWriteErrorMessage(err error) string {
 func jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v) //nolint:errcheck
+}
+
+// validateSymbol handles GET /api/symbols/validate?symbol=BTCUSDT
+// Checks Binance (crypto) then Yahoo Finance (stock) and returns type + exchange.
+func (s *Server) validateSymbol(w http.ResponseWriter, r *http.Request) {
+	symbol := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("symbol")))
+	if symbol == "" {
+		http.Error(w, "symbol query param required", http.StatusBadRequest)
+		return
+	}
+	type ValidateResult struct {
+		Found    bool   `json:"found"`
+		Type     string `json:"type,omitempty"`
+		Exchange string `json:"exchange,omitempty"`
+		Name     string `json:"name,omitempty"`
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if exch, name, ok := checkBinanceSymbol(ctx, symbol); ok {
+		jsonOK(w, ValidateResult{Found: true, Type: "crypto", Exchange: exch, Name: name})
+		return
+	}
+	if exch, name, ok := checkYahooSymbol(ctx, symbol); ok {
+		jsonOK(w, ValidateResult{Found: true, Type: "stock", Exchange: exch, Name: name})
+		return
+	}
+	jsonOK(w, ValidateResult{Found: false})
+}
+
+func checkBinanceSymbol(ctx context.Context, symbol string) (string, string, bool) {
+	url := "https://api.binance.com/api/v3/ticker/price?symbol=" + symbol
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", "", false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "", "", false
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Symbol string `json:"symbol"`
+		Price  string `json:"price"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Symbol == "" {
+		return "", "", false
+	}
+	return "binance", result.Symbol, true
+}
+
+func normalizeExchange(fullExchangeName string) string {
+	switch fullExchangeName {
+	case "NasdaqGS", "NasdaqGM", "NasdaqCM", "NASDAQ":
+		return "nasdaq"
+	case "NYSE", "NYQ":
+		return "nyse"
+	case "AMEX", "NYSEArca", "PCX":
+		return "amex"
+	case "KSC", "KOE":
+		return "kospi"
+	case "JPX", "OSA", "TYO":
+		return "tse"
+	case "JASDAQ":
+		return "jasdaq"
+	case "LSE":
+		return "lse"
+	default:
+		return strings.ToLower(fullExchangeName)
+	}
+}
+
+func checkYahooSymbol(ctx context.Context, symbol string) (string, string, bool) {
+	url := "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol + "?interval=1d&range=1d"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", "", false
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "", "", false
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Chart struct {
+			Result []struct {
+				Meta struct {
+					Symbol          string `json:"symbol"`
+					FullExchangeName string `json:"fullExchangeName"`
+					LongName        string `json:"longName"`
+					ShortName       string `json:"shortName"`
+				} `json:"meta"`
+			} `json:"result"`
+			Error interface{} `json:"error"`
+		} `json:"chart"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", false
+	}
+	if len(result.Chart.Result) == 0 || result.Chart.Error != nil {
+		return "", "", false
+	}
+	meta := result.Chart.Result[0].Meta
+	name := meta.LongName
+	if name == "" {
+		name = meta.ShortName
+	}
+	return normalizeExchange(meta.FullExchangeName), name, true
 }
 
 // exportPineScript handles GET /api/export/pinescript?rule=<name>&win_rate=<float>&avg_rr=<float>

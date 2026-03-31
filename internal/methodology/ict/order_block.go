@@ -2,6 +2,7 @@ package ict
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/Ju571nK/Chatter/internal/rule"
@@ -19,16 +20,34 @@ var _ rule.AnalysisRule = (*ICTOrderBlockRule)(nil)
 // Bearish OB: the last bullish candle immediately before an impulse downward move
 //   -> price returning to that candle's range -> SHORT
 //
-// Simplified: scan last 20 bars. Find bullish OB = last bearish candle where
-//   bars[i+1] is bullish and bars[i+2].close > bars[i].open (impulse).
-//   If current close within OB range -> LONG.
-//   Score = 1.0 for confirmed OB touch.
+// Enhancements:
+//   - Mitigation tracking: if price has already revisited and closed through the OB zone,
+//     the OB is considered "mitigated" and will not signal again.
+//   - Impulse strength filter: the impulse move (bars[i+1], bars[i+2]) must have a combined
+//     body size >= 1.5x ATR_14. Skipped if ATR_14 is not available.
 //
 // Requires >= 5 bars per TF.
 type ICTOrderBlockRule struct{}
 
 func (r *ICTOrderBlockRule) Name() string                 { return "ict_order_block" }
-func (r *ICTOrderBlockRule) RequiredIndicators() []string { return nil }
+func (r *ICTOrderBlockRule) RequiredIndicators() []string { return []string{"ATR_14"} }
+
+// isMitigated checks whether an OB zone has been mitigated by any bar between
+// the OB formation and the current bar.
+//
+// Bullish OB is mitigated if any bar's close < obLow (price closed below the zone).
+// Bearish OB is mitigated if any bar's close > obHigh (price closed above the zone).
+func isMitigated(bars []models.OHLCV, fromIdx, toIdx int, obLow, obHigh float64, dir string) bool {
+	for j := fromIdx; j <= toIdx; j++ {
+		if dir == "LONG" && bars[j].Close < obLow {
+			return true
+		}
+		if dir == "SHORT" && bars[j].Close > obHigh {
+			return true
+		}
+	}
+	return false
+}
 
 func (r *ICTOrderBlockRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
 	tfs := []string{"1W", "1D", "4H", "1H"}
@@ -46,6 +65,8 @@ func (r *ICTOrderBlockRule) Analyze(ctx models.AnalysisContext) (*models.Signal,
 		n := len(bars)
 		current := bars[n-1]
 
+		atr, hasATR := ctx.Indicators[tf+":ATR_14"]
+
 		// Scan the last 20 bars (excluding current bar)
 		start := n - 20
 		if start < 0 {
@@ -62,25 +83,51 @@ func (r *ICTOrderBlockRule) Analyze(ctx models.AnalysisContext) (*models.Signal,
 			b1 := bars[i+1]
 			b2 := bars[i+2]
 
+			candidateDir := ""
+			candidateLow := b0.Low
+			candidateHigh := b0.High
+
 			// Bullish OB: b0 bearish, b1 bullish, b2.close > b0.open (impulse up)
 			if b0.Close < b0.Open && b1.Close > b1.Open && b2.Close > b0.Open {
-				obLow = b0.Low
-				obHigh = b0.High
-				if current.Close >= obLow && current.Close <= obHigh {
-					dir = "LONG"
-					break
+				if current.Close >= candidateLow && current.Close <= candidateHigh {
+					candidateDir = "LONG"
 				}
 			}
 
 			// Bearish OB: b0 bullish, b1 bearish, b2.close < b0.open (impulse down)
-			if b0.Close > b0.Open && b1.Close < b1.Open && b2.Close < b0.Open {
-				obLow = b0.Low
-				obHigh = b0.High
-				if current.Close >= obLow && current.Close <= obHigh {
-					dir = "SHORT"
-					break
+			if candidateDir == "" && b0.Close > b0.Open && b1.Close < b1.Open && b2.Close < b0.Open {
+				if current.Close >= candidateLow && current.Close <= candidateHigh {
+					candidateDir = "SHORT"
 				}
 			}
+
+			if candidateDir == "" {
+				continue
+			}
+
+			// Impulse strength filter: combined body of b1+b2 must be >= 1.5x ATR
+			// Skip this filter if ATR is not available (allow signal through)
+			if hasATR && atr > 0 {
+				combinedBody := math.Abs(b1.Close-b1.Open) + math.Abs(b2.Close-b2.Open)
+				if combinedBody < 1.5*atr {
+					continue // impulse too weak
+				}
+			}
+
+			// Mitigation check: has the OB zone been revisited and closed through
+			// between formation (i+3) and the bar before current (n-2)?
+			mitigationStart := i + 3
+			mitigationEnd := n - 2
+			if mitigationStart <= mitigationEnd {
+				if isMitigated(bars, mitigationStart, mitigationEnd, candidateLow, candidateHigh, candidateDir) {
+					continue // OB already mitigated
+				}
+			}
+
+			obLow = candidateLow
+			obHigh = candidateHigh
+			dir = candidateDir
+			break
 		}
 
 		if dir == "" {

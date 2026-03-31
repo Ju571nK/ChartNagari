@@ -1,6 +1,7 @@
 package indicator
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -334,5 +335,157 @@ func TestRSI_AllLoss(t *testing.T) {
 	}
 	if !almostEqual(v, 0.0, floatTol) {
 		t.Fatalf("expected RSI=0 for all-loss series, got %f", v)
+	}
+}
+
+// ---------- Volume Profile tests ----------
+
+// makeVPBar builds a single OHLCV bar with explicit OHLCV fields.
+func makeVPBar(open, high, low, close, volume float64) models.OHLCV {
+	return models.OHLCV{
+		Symbol:    "TEST",
+		Timeframe: "1H",
+		OpenTime:  time.Now(),
+		Open:      open,
+		High:      high,
+		Low:       low,
+		Close:     close,
+		Volume:    volume,
+	}
+}
+
+// TestVolumeProfile_Basic verifies that POC lands in the price region carrying
+// the heaviest volume and that HVN / LVN slices have the expected lengths.
+func TestVolumeProfile_Basic(t *testing.T) {
+	// Ten bars: first 7 carry heavy volume clustered around 103-107; the last 3
+	// carry light volume at the extremes so we get clear LVN candidates.
+	candles := []models.OHLCV{
+		makeVPBar(100, 106, 99, 105, 100),  // light, wide range
+		makeVPBar(104, 107, 103, 106, 500), // heavy around 103-107
+		makeVPBar(105, 108, 104, 107, 500), // heavy around 104-108
+		makeVPBar(106, 107, 105, 106, 400), // heavy around 105-107
+		makeVPBar(103, 110, 100, 108, 100), // spread vol
+		makeVPBar(107, 109, 106, 108, 300), // vol around 106-109
+		makeVPBar(104, 107, 103, 106, 450), // heavy around 103-107
+		makeVPBar(100, 101, 99, 100, 10),   // light at the low end
+		makeVPBar(109, 110, 108, 110, 10),  // light at the high end
+		makeVPBar(100, 101, 99, 101, 10),   // light at the low end
+	}
+
+	poc, hvns, lvns, ok := volumeProfile(candles, 20)
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+
+	// POC should sit in the high-volume region 103-109.
+	if poc < 103 || poc > 109 {
+		t.Errorf("expected POC in [103, 109], got %.2f", poc)
+	}
+
+	// HVN: up to 3, all non-nil.
+	if len(hvns) == 0 {
+		t.Error("expected at least one HVN")
+	}
+	if len(hvns) > 3 {
+		t.Errorf("expected at most 3 HVNs, got %d", len(hvns))
+	}
+
+	// LVN: up to 3, all non-nil.
+	if len(lvns) == 0 {
+		t.Error("expected at least one LVN")
+	}
+	if len(lvns) > 3 {
+		t.Errorf("expected at most 3 LVNs, got %d", len(lvns))
+	}
+
+	t.Logf("POC=%.4f  HVNs=%v  LVNs=%v", poc, hvns, lvns)
+}
+
+// TestVolumeProfile_InsufficientData verifies that fewer than 10 bars returns ok=false.
+func TestVolumeProfile_InsufficientData(t *testing.T) {
+	tests := []struct {
+		name string
+		n    int
+	}{
+		{"zero bars", 0},
+		{"one bar", 1},
+		{"nine bars", 9}, // boundary: 9 < 10 must be false
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			candles := make([]models.OHLCV, tc.n)
+			for i := range candles {
+				candles[i] = makeVPBar(100, 105, 99, 102, 100)
+			}
+			_, _, _, ok := volumeProfile(candles, 20)
+			if ok {
+				t.Errorf("expected ok=false for %d candles", tc.n)
+			}
+		})
+	}
+
+	// Exactly 10 bars must succeed.
+	tenBars := make([]models.OHLCV, 10)
+	for i := range tenBars {
+		tenBars[i] = makeVPBar(100+float64(i), 101+float64(i), 99+float64(i), 100+float64(i), 100)
+	}
+	_, _, _, ok := volumeProfile(tenBars, 20)
+	if !ok {
+		t.Error("expected ok=true for exactly 10 candles")
+	}
+}
+
+// TestVolumeProfile_Integration calls Compute() and verifies VP_POC is present
+// and within the price range used to build the bars.
+func TestVolumeProfile_Integration(t *testing.T) {
+	// Build 12 bars with varying volume so the profile has meaningful structure.
+	candles := []models.OHLCV{
+		makeVPBar(100, 105, 99, 104, 100),
+		makeVPBar(101, 106, 100, 105, 200),
+		makeVPBar(102, 107, 101, 106, 300),
+		makeVPBar(103, 108, 102, 107, 200),
+		makeVPBar(104, 109, 103, 108, 100),
+		makeVPBar(105, 110, 104, 109, 150),
+		makeVPBar(103, 107, 102, 106, 400),
+		makeVPBar(104, 108, 103, 107, 350),
+		makeVPBar(100, 103, 99, 102, 50),
+		makeVPBar(108, 110, 107, 109, 50),
+		makeVPBar(101, 105, 100, 104, 180),
+		makeVPBar(102, 106, 101, 105, 220),
+	}
+
+	bars := map[string][]models.OHLCV{"1H": candles}
+	result := Compute(bars)
+
+	// VP_POC must be present.
+	poc, exists := result["1H:VP_POC"]
+	if !exists {
+		t.Fatal("expected 1H:VP_POC key in Compute() output")
+	}
+
+	// POC must be within the overall price range [99, 110].
+	if poc < 99 || poc > 110 {
+		t.Errorf("VP_POC=%.4f outside expected range [99, 110]", poc)
+	}
+
+	// Log all VP keys for visibility.
+	for k, v := range result {
+		if len(k) >= 7 && k[3:6] == "VP_" {
+			t.Logf("%s = %.4f", k, v)
+		}
+	}
+
+	// Any HVN/LVN keys that are present must also be within the price range.
+	for i := 1; i <= 3; i++ {
+		if v, ok := result[fmt.Sprintf("1H:VP_HVN_%d", i)]; ok {
+			if v < 99 || v > 110 {
+				t.Errorf("VP_HVN_%d=%.4f outside range [99, 110]", i, v)
+			}
+		}
+		if v, ok := result[fmt.Sprintf("1H:VP_LVN_%d", i)]; ok {
+			if v < 99 || v > 110 {
+				t.Errorf("VP_LVN_%d=%.4f outside range [99, 110]", i, v)
+			}
+		}
 	}
 }

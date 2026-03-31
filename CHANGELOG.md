@@ -14,6 +14,26 @@ Format:
 
 ---
 
+## [2.1.4.0] - 2026-03-31
+
+### Added
+- Signal quality scoring for liquidity sweeps: volume ratio, wick ratio, and reversal strength produce a 0.1-1.0 score instead of fixed 1.0
+- Sweep-vs-breakout classifier: 3+ confirmation bars after a sweep suppress false signals where price continues through the level
+- FVG relevance filter: gap size vs ATR, impulse candle strength, and unfilled duration score each Fair Value Gap
+- Volume profile indicator: 20-bin price distribution computes POC, HVN, and LVN levels per timeframe
+- Order block mitigation tracking: OB zones revisited and closed through are excluded from future signals
+- Order block impulse strength filter: requires 1.5x ATR combined body to qualify
+- Chart signal category filter: ICT / Wyckoff / SMC / TA toggle buttons with localStorage persistence
+- Community feedback improvements doc (`docs/community-feedback-improvements.md`)
+
+### Changed
+- Chart markers deduplicated per candle: same time + direction keeps only the highest-scoring signal
+- Chart marker opacity reflects quality score (HIGH >= 0.7, MED 0.4-0.7, LOW < 0.4)
+
+### Fixed
+- Wyckoff overlay useEffect overriding category filter by rebuilding markers from unfiltered signals
+- BacktestTab TypeScript error: `SymbolItem[]` type mismatch and unused `marketFilter` state
+
 ## [2.1.3.0] - 2026-03-28
 
 ### Added

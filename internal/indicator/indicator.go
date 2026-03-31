@@ -95,6 +95,17 @@ func Compute(bars map[string][]models.OHLCV) map[string]float64 {
 				result[prefix+k] = v
 			}
 		}
+
+		// Volume Profile (20 bins)
+		if poc, hvns, lvns, ok := volumeProfile(candles, 20); ok {
+			result[prefix+"VP_POC"] = poc
+			for j, h := range hvns {
+				result[fmt.Sprintf("%sVP_HVN_%d", prefix, j+1)] = h
+			}
+			for j, l := range lvns {
+				result[fmt.Sprintf("%sVP_LVN_%d", prefix, j+1)] = l
+			}
+		}
 	}
 
 	return result

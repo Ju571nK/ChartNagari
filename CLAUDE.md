@@ -24,6 +24,20 @@ Go backend + TypeScript/React frontend.
 - Do not commit `.env` or any file containing real API keys.
 - Update `CHANGELOG.md` with a brief entry under the appropriate version/date heading.
 
+## Agent Team
+
+This project uses a multi-agent team architecture. The `orchestrator` agent coordinates 4 specialists:
+
+- **go-backend** — Go code (cmd/, internal/)
+- **react-frontend** — React/TS code (web/src/)
+- **trading-analyst** — Trading rule design & tuning (internal/methodology/)
+- **release-engineer** — VERSION, CHANGELOG, PRs, CI
+
+For cross-domain tasks, spawn the orchestrator which will create a team and dispatch work.
+For single-domain tasks, spawn the specialist directly.
+
+Agent definitions: `.claude/agents/`
+
 ## gstack
 Use /browse from gstack for all web browsing.
 Never use mcp__claude-in-chrome__* tools.

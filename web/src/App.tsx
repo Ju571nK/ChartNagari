@@ -139,8 +139,65 @@ const RULE_ABBR: Record<string, string> = {
   smc_choch:                     'CHoCH',
 }
 
+// Signal category groups for chart filter UI
+const SIGNAL_CATEGORIES: Record<string, { label: string; rules: string[] }> = {
+  ict: {
+    label: 'ICT',
+    rules: ['ict_order_block', 'ict_fair_value_gap', 'ict_liquidity_sweep', 'ict_breaker_block', 'ict_kill_zone'],
+  },
+  wyckoff: {
+    label: 'Wyckoff',
+    rules: ['wyckoff_accumulation', 'wyckoff_distribution', 'wyckoff_spring', 'wyckoff_upthrust', 'wyckoff_volume_anomaly'],
+  },
+  smc: {
+    label: 'SMC',
+    rules: ['smc_bos', 'smc_choch'],
+  },
+  ta: {
+    label: 'TA',
+    rules: ['rsi_overbought_oversold', 'rsi_divergence', 'ema_cross', 'support_resistance_breakout', 'fibonacci_confluence', 'volume_spike'],
+  },
+}
+
+const CHART_FILTER_STORAGE_KEY = 'chartnagari_chart_signal_filter'
+
+function loadSignalFilter(): Set<string> {
+  try {
+    const stored = localStorage.getItem(CHART_FILTER_STORAGE_KEY)
+    if (stored) return new Set(JSON.parse(stored))
+  } catch { /* ignore */ }
+  // Default: all categories enabled
+  const all = new Set<string>()
+  for (const cat of Object.keys(SIGNAL_CATEGORIES)) all.add(cat)
+  return all
+}
+
+function saveSignalFilter(enabled: Set<string>) {
+  localStorage.setItem(CHART_FILTER_STORAGE_KEY, JSON.stringify([...enabled]))
+}
+
 function abbreviateRule(rule: string): string {
   return RULE_ABBR[rule] ?? rule.slice(0, 6).toUpperCase()
+}
+
+// ── signal quality helpers ────────────────────────────────────────────────────
+
+function scoreColor(score: number): string {
+  if (score >= 0.7) return 'var(--safe)'
+  if (score >= 0.4) return 'var(--warning)'
+  return 'var(--danger)'
+}
+
+function scoreLabel(score: number): string {
+  if (score >= 0.7) return 'HIGH'
+  if (score >= 0.4) return 'MED'
+  return 'LOW'
+}
+
+function scoreAlpha(score: number): number {
+  if (score >= 0.7) return 1.0
+  if (score >= 0.4) return 0.7
+  return 0.4
 }
 
 // ── rule descriptions ─────────────────────────────────────────────────────────
@@ -556,11 +613,13 @@ const PHASE_LABELS: Record<string, string> = {
 function ChartTab() {
   const { t } = useTranslation()
   const [symbol, setSymbol] = useState('')
-  const [symbols, setSymbols] = useState<string[]>([])
+  const [symbols, setSymbols] = useState<SymbolItem[]>([])
+  const [marketFilter, setMarketFilter] = useState('all')
   const [tf, setTf] = useState<TF>('1H')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [signals, setSignals] = useState<SignalBar[]>([])
+  const [enabledCategories, setEnabledCategories] = useState<Set<string>>(loadSignalFilter)
   const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
   const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -573,11 +632,38 @@ function ChartTab() {
   // Load enabled symbols for the selector
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
-      const enabled = items.filter((i) => i.enabled).map((i) => i.symbol)
+      const enabled = items.filter((i) => i.enabled)
       setSymbols(enabled)
-      if (enabled.length > 0) setSymbol(enabled[0])
+      if (enabled.length > 0) setSymbol(enabled[0].symbol)
     }).catch(() => {/* silently ignore */})
   }, [])
+
+  const markets = useMemo(() => {
+    const seen = new Set<string>()
+    symbols.forEach(s => {
+      if (s.type === 'crypto') seen.add('crypto')
+      else if (s.exchange) seen.add(s.exchange.toUpperCase())
+    })
+    return ['all', ...Array.from(seen).sort()]
+  }, [symbols])
+
+  const marketCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: symbols.length }
+    symbols.forEach(s => {
+      if (s.type === 'crypto') counts['crypto'] = (counts['crypto'] ?? 0) + 1
+      else if (s.exchange) {
+        const key = s.exchange.toUpperCase()
+        counts[key] = (counts[key] ?? 0) + 1
+      }
+    })
+    return counts
+  }, [symbols])
+
+  const filteredSymbols = useMemo(() => {
+    if (marketFilter === 'all') return symbols
+    if (marketFilter === 'crypto') return symbols.filter(s => s.type === 'crypto')
+    return symbols.filter(s => s.type === 'stock' && s.exchange.toUpperCase() === marketFilter)
+  }, [symbols, marketFilter])
 
   // Create the chart instance once on mount
   useEffect(() => {
@@ -664,21 +750,43 @@ function ChartTab() {
       })
       .then((sigs) => {
         setSignals(sigs)
-        if (!seriesRef.current) return
-        const markers = sigs
-          .filter((s) => s.direction !== 'NEUTRAL')
-          .map((s) => ({
-            time: s.time as UTCTimestamp,
-            position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
-            color: s.direction === 'LONG' ? '#8FCB9B' : 'rgba(143,128,115,0.9)',
-            shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
-            text: abbreviateRule(s.rule),
-          }))
-        createSeriesMarkers(seriesRef.current, markers)
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [symbol, tf])
+
+  // Rebuild chart markers when signals or category filter changes
+  useEffect(() => {
+    if (!seriesRef.current || signals.length === 0) return
+    // Build set of enabled rule names from enabled categories
+    const enabledRules = new Set<string>()
+    for (const [cat, def] of Object.entries(SIGNAL_CATEGORIES)) {
+      if (enabledCategories.has(cat)) {
+        for (const r of def.rules) enabledRules.add(r)
+      }
+    }
+    // Deduplicate: per candle+direction, keep highest-scoring signal
+    const bestByKey = new Map<string, SignalBar>()
+    for (const s of signals) {
+      if (s.direction === 'NEUTRAL') continue
+      if (!enabledRules.has(s.rule)) continue
+      const key = `${s.time}:${s.direction}`
+      const prev = bestByKey.get(key)
+      if (!prev || s.score > prev.score) {
+        bestByKey.set(key, s)
+      }
+    }
+    const markers = Array.from(bestByKey.values()).map((s) => ({
+      time: s.time as UTCTimestamp,
+      position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
+      color: s.direction === 'LONG'
+        ? `rgba(143,203,155,${scoreAlpha(s.score)})`
+        : `rgba(143,128,115,${scoreAlpha(s.score)})`,
+      shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
+      text: abbreviateRule(s.rule),
+    }))
+    createSeriesMarkers(seriesRef.current, markers)
+  }, [signals, enabledCategories])
 
   // Remove Wyckoff overlays when disabled or symbol/tf changes
   useEffect(() => {
@@ -739,7 +847,9 @@ function ChartTab() {
             .map((s) => ({
               time: s.time as UTCTimestamp,
               position: s.direction === 'LONG' ? ('belowBar' as const) : ('aboveBar' as const),
-              color: s.direction === 'LONG' ? '#8FCB9B' : 'rgba(143,128,115,0.9)',
+              color: s.direction === 'LONG'
+                ? `rgba(143,203,155,${scoreAlpha(s.score)})`
+                : `rgba(143,128,115,${scoreAlpha(s.score)})`,
               shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
               text: abbreviateRule(s.rule),
             }))
@@ -755,15 +865,31 @@ function ChartTab() {
   return (
     <>
       <div className="chart-controls">
+        {markets.length > 1 && (
+          <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            {markets.map(m => (
+              <button
+                key={m}
+                className={`tab-btn${marketFilter === m ? ' active' : ''}`}
+                onClick={() => setMarketFilter(m)}
+              >
+                {m === 'all' ? t('all') : m}
+                {marketCounts[m] !== undefined && (
+                  <span style={{ marginLeft: 4, opacity: 0.6, fontSize: '0.8em' }}>({marketCounts[m]})</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         <select
           className="chart-select"
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
         >
-          {symbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
-          {symbols.map((s) => (
-            <option key={s} value={s}>
-              {s}
+          {filteredSymbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
+          {filteredSymbols.map((i) => (
+            <option key={i.symbol} value={i.symbol}>
+              {i.symbol}
             </option>
           ))}
         </select>
@@ -786,6 +912,26 @@ function ChartTab() {
         >
           Wyckoff
         </button>
+        <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
+        {Object.entries(SIGNAL_CATEGORIES).map(([cat, def]) => (
+          <button
+            key={cat}
+            className={`tf-btn${enabledCategories.has(cat) ? ' active' : ''}`}
+            onClick={() => {
+              setEnabledCategories(prev => {
+                const next = new Set(prev)
+                if (next.has(cat)) next.delete(cat)
+                else next.add(cat)
+                saveSignalFilter(next)
+                return next
+              })
+            }}
+            style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
+            title={`${def.rules.map(r => RULE_ABBR[r] ?? r).join(', ')}`}
+          >
+            {def.label}
+          </button>
+        ))}
       </div>
       {wyckoffEnabled && wyckoffData && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -1850,7 +1996,18 @@ function HistoryTab() {
                   <td style={{ color: 'var(--muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {abbreviateRule(s.rule)}
                   </td>
-                  <td>{s.score.toFixed(1)}</td>
+                  <td>
+                    <span style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: scoreColor(s.score),
+                      marginRight: 4,
+                      verticalAlign: 'middle'
+                    }} />
+                    {s.score.toFixed(1)}
+                  </td>
                   <td style={{ color: 'var(--muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem' }}
                       title={s.ai_interpretation}>
                     {s.ai_interpretation ? s.ai_interpretation.slice(0, 80) + (s.ai_interpretation.length > 80 ? '…' : '') : '─'}
@@ -2734,7 +2891,19 @@ export function App() {
           <span className="ws-toast-dir" data-dir={liveSignal.direction}>{liveSignal.direction}</span>
           <strong>{liveSignal.symbol}</strong>
           <span>{liveSignal.rule}</span>
-          <span className="ws-toast-score">{liveSignal.score?.toFixed(1)}</span>
+          <span className="ws-toast-score">
+            {liveSignal.score?.toFixed(1)}
+            {liveSignal.score != null && (
+              <span style={{
+                color: scoreColor(liveSignal.score),
+                fontWeight: 600,
+                fontSize: '0.7rem',
+                marginLeft: 4
+              }}>
+                {scoreLabel(liveSignal.score)}
+              </span>
+            )}
+          </span>
           <span className="ws-toast-close">×</span>
         </div>
       )}

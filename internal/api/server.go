@@ -921,7 +921,7 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // removeSymbol handles DELETE /api/symbols/{symbol} — removes a symbol from watchlist.yaml.

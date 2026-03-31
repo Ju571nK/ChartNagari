@@ -1,4 +1,4 @@
-// Package engine provides the rule execution engine for Chart Analyzer.
+// Package engine provides the rule execution engine for Chart Nagari.
 // It loads rule configuration, registers AnalysisRule plugins, and produces
 // scored signals sorted by strength.
 package engine

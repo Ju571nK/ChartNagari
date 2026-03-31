@@ -1,4 +1,4 @@
-// Package models defines shared data structures used across the Chart Analyzer platform.
+// Package models defines shared data structures used across the Chart Nagari platform.
 package models
 
 import "time"

@@ -1,4 +1,4 @@
-// Package indicator provides technical indicator computations for the Chart Analyzer.
+// Package indicator provides technical indicator computations for the Chart Nagari.
 // All indicator functions are package-internal; only Compute is exported.
 // Indicator key format: "{TF}:{IndicatorName}" e.g. "1H:RSI_14", "4H:EMA_200".
 package indicator

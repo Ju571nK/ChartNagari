@@ -2644,7 +2644,7 @@ export function App() {
       <header className="header">
         <div className="header-top">
           <div>
-            <h1><span className="brand">Chart</span> Analyzer
+            <h1><span className="brand">Chart</span> Nagari
               <span className={`ws-indicator ${wsConnected ? 'ws-live' : 'ws-offline'}`}>
                 {wsConnected ? '● LIVE' : '○ --'}
               </span>

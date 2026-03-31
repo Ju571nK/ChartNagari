@@ -58,7 +58,7 @@ func main() {
 	log.Info().
 		Str("version", "0.8.0").
 		Str("env", cfg.Env).
-		Msg("Chart Analyzer server starting")
+		Msg("Chart Nagari server starting")
 
 	// ── SQLite 초기화 ────────────────────────────────────────────────
 	db, err := storage.New(cfg.DBPath)
@@ -364,7 +364,7 @@ func main() {
 		dataSource = "Tiingo"
 	}
 	startupMsg := fmt.Sprintf(
-		"🚀 <b>Chart Analyzer Started</b>\n\n"+
+		"🚀 <b>Chart Nagari Started</b>\n\n"+
 			"📊 Symbols: <code>%s</code>\n"+
 			"📋 Active rules: %d\n"+
 			"🔌 Data: %s\n"+
@@ -382,7 +382,7 @@ func main() {
 	<-ctx.Done()
 	log.Info().Msg("shutdown signal received — cleaning up...")
 	time.Sleep(500 * time.Millisecond)
-	log.Info().Msg("Chart Analyzer stopped")
+	log.Info().Msg("Chart Nagari stopped")
 }
 
 // toEngineConfig converts the app-level RulesConfig (list format from YAML)

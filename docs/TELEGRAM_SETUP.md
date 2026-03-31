@@ -1,6 +1,6 @@
 # Telegram 봇 토큰·채팅 ID 설정 가이드
 
-Chart Analyzer 프로젝트에서 알림을 받으려면 **Telegram Bot 토큰**과 **채팅 ID**가 필요합니다.  
+Chart Nagari 프로젝트에서 알림을 받으려면 **Telegram Bot 토큰**과 **채팅 ID**가 필요합니다.  
 Mac의 **Telegram Lite** (또는 공식 Telegram 앱)로 아래 순서대로 진행하면 됩니다.
 
 ---
@@ -17,7 +17,7 @@ Mac의 **Telegram Lite** (또는 공식 Telegram 앱)로 아래 순서대로 진
 
 - **봇 이름 (Name)**  
   - 사람에게 보이는 이름입니다.  
-  - 예: `Chart Analyzer Alerts`, `내 차트 알림봇` 등 자유롭게 정합니다.
+  - 예: `Chart Nagari Alerts`, `내 차트 알림봇` 등 자유롭게 정합니다.
 
 - **봇 사용자명 (Username)**  
   - 반드시 `bot`으로 끝나야 합니다.  

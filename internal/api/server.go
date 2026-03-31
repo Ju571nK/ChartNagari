@@ -1,4 +1,4 @@
-// Package api provides the HTTP REST API server for the Chart Analyzer settings UI.
+// Package api provides the HTTP REST API server for the Chart Nagari settings UI.
 package api
 
 import (

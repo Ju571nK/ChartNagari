@@ -20,6 +20,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/sequence"
+	"github.com/Ju571nK/Chatter/internal/wyckoff"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -301,6 +302,33 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 				Float64("bonus", m.Bonus).
 				Float64("new_score", signals[i].Score).
 				Msg("sequence bonus applied")
+		}
+	}
+
+	// Wyckoff phase context boost: if 1D bars show accumulation/markup,
+	// boost LONG signals by 20%; if distribution/markdown, boost SHORT signals.
+	if bars1D, ok := allBars["1D"]; ok && len(bars1D) >= 50 {
+		// wyckoff.Analyze expects oldest-first; allBars is DESC, so reverse
+		reversed := make([]models.OHLCV, len(bars1D))
+		for i, b := range bars1D {
+			reversed[len(bars1D)-1-i] = b
+		}
+		wa := wyckoff.Analyze(sym, "1D", reversed)
+		switch wa.Phase {
+		case wyckoff.PhaseAccumulation, wyckoff.PhaseMarkup:
+			for i := range signals {
+				if signals[i].Direction == "LONG" {
+					signals[i].Score *= 1.2
+				}
+			}
+			p.log.Debug().Str("symbol", sym).Str("phase", string(wa.Phase)).Msg("Wyckoff phase boost: LONG +20%")
+		case wyckoff.PhaseDistribution, wyckoff.PhaseMarkdown:
+			for i := range signals {
+				if signals[i].Direction == "SHORT" {
+					signals[i].Score *= 1.2
+				}
+			}
+			p.log.Debug().Str("symbol", sym).Str("phase", string(wa.Phase)).Msg("Wyckoff phase boost: SHORT +20%")
 		}
 	}
 

@@ -203,15 +203,15 @@ Reddit/커뮤니티 댓글에서 추출한 구현 개선 포인트 정리.
 | #   | 항목                            | Priority | Effort | 영향도                     | 상태 |
 | --- | ----------------------------- | -------- | ------ | ----------------------- | ---- |
 | 1   | Sweep Quality Score           | P1       | S      | 높음 — 가장 직접적인 노이즈 감소     | ✅ 완료 |
-| 9   | Top-Down HTF Context Filter   | P1       | M      | 높음 — 역추세 시그널 제거          | 미착수 |
+| 9   | Top-Down HTF Context Filter   | P1       | M      | 높음 — 역추세 시그널 제거          | ✅ 완료 |
 | 2   | FVG Relevance Filter          | P2       | S      | 중간 — FVG 정확도 향상         | ✅ 완료 |
 | 3   | Volume Profile Integration    | P2       | M      | 중간 — 전체 시그널 보강           | ✅ 완료 |
-| 10  | Signal Sequence Tracking      | P2       | L      | 높음 — 복합 패턴 진입점 신뢰도     | 미착수 |
+| 10  | Signal Sequence Tracking      | P2       | L      | 높음 — 복합 패턴 진입점 신뢰도     | ✅ 완료 |
 | 6   | Signal Log 품질 시각화         | P2       | XS     | 중간 — 품질 점수의 사용자 체감      | ✅ 완료 |
 | 4   | Sweep vs Breakout Classifier  | P3       | S      | 중간 — 위양성 감소              | ✅ 완료 |
 | 5   | OB Definition Standardization | P3       | M      | 낮음 — OB 자체가 주관적          | ✅ 완료 |
 | 7   | Chart 마커 품질 차별화          | P3       | XS     | 낮음 — 시각적 정보 밀도 개선        | ✅ 완료 |
 | 8   | 라이브 토스트 품질 레이블         | P3       | XS     | 낮음 — 실시간 알림의 정보 품질 향상   | ✅ 완료 |
-| 11  | Wyckoff Phase 컨텍스트 레이블   | P3       | M      | 중간 — Wyckoff를 필터로 활용     | 미착수 |
+| 11  | Wyckoff Phase 컨텍스트 레이블   | P3       | M      | 중간 — Wyckoff를 필터로 활용     | ✅ 완료 |
 
 

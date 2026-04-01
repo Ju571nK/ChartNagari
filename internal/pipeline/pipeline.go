@@ -279,6 +279,13 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
+	// HTF context filter: suppress lower-TF signals that contradict higher-TF trend
+	beforeHTF := len(signals)
+	signals = filterHTFContext(signals, indicators, allBars)
+	if filtered := beforeHTF - len(signals); filtered > 0 {
+		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("HTF context filter removed counter-trend signals")
+	}
+
 	// Paper trading: open new positions and check existing TP/SL.
 	if p.paperTrader != nil {
 		p.paperTrader.OnSignals(signals)
@@ -355,6 +362,66 @@ func filterMTFConsensus(signals []models.Signal, minTFs int) []models.Signal {
 	out := signals[:0]
 	for _, sig := range signals {
 		if sig.Direction == "NEUTRAL" || len(dirTFs[sig.Direction]) >= minTFs {
+			out = append(out, sig)
+		}
+	}
+	return out
+}
+
+// htfContext determines the higher-timeframe trend direction from EMA_50/EMA_200
+// and the current price position. Returns "LONG" (uptrend), "SHORT" (downtrend),
+// or "" (ranging/unknown — allow both directions).
+//
+// Logic:
+//   - EMA_50 > EMA_200 AND price > EMA_50 → uptrend → "LONG"
+//   - EMA_50 < EMA_200 AND price < EMA_50 → downtrend → "SHORT"
+//   - Otherwise → ranging or ambiguous → ""
+func htfContext(indicators map[string]float64, tf string, bars map[string][]models.OHLCV) string {
+	ema50, has50 := indicators[tf+":EMA_50"]
+	ema200, has200 := indicators[tf+":EMA_200"]
+	if !has50 || !has200 {
+		return "" // insufficient data
+	}
+
+	b, ok := bars[tf]
+	if !ok || len(b) == 0 {
+		return ""
+	}
+	price := b[0].Close // most recent bar (bars are in DESC order in pipeline)
+
+	if ema50 > ema200 && price > ema50 {
+		return "LONG"
+	}
+	if ema50 < ema200 && price < ema50 {
+		return "SHORT"
+	}
+	return "" // ranging
+}
+
+// filterHTFContext removes lower-timeframe (1H, 4H) signals that contradict
+// the higher-timeframe (1D, 1W) trend direction. If the HTF trend is clear
+// (LONG or SHORT), only LTF signals aligned with that direction pass through.
+// HTF signals (1D, 1W) and NEUTRAL signals are never filtered.
+// If no clear HTF trend is detected, all signals pass.
+func filterHTFContext(signals []models.Signal, indicators map[string]float64, bars map[string][]models.OHLCV) []models.Signal {
+	// Determine HTF trend: prefer 1D, fall back to 1W
+	trend := htfContext(indicators, "1D", bars)
+	if trend == "" {
+		trend = htfContext(indicators, "1W", bars)
+	}
+	if trend == "" {
+		return signals // ranging or no data — pass everything through
+	}
+
+	out := make([]models.Signal, 0, len(signals))
+	for _, sig := range signals {
+		// Always keep NEUTRAL, 1D, and 1W signals
+		if sig.Direction == "NEUTRAL" || sig.Timeframe == "1D" || sig.Timeframe == "1W" {
+			out = append(out, sig)
+			continue
+		}
+		// Keep LTF signals only if aligned with HTF trend
+		if sig.Direction == trend {
 			out = append(out, sig)
 		}
 	}

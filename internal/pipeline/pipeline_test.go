@@ -161,3 +161,118 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("default lookback should be 200, got %d", cfg.Lookback)
 	}
 }
+
+// ── HTF Context Filter tests ────────────────────────────────────────────────
+
+func TestHTFContext_Uptrend(t *testing.T) {
+	indicators := map[string]float64{
+		"1D:EMA_50":  150.0,
+		"1D:EMA_200": 130.0, // EMA_50 > EMA_200
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 160.0}}, // price > EMA_50
+	}
+	trend := htfContext(indicators, "1D", bars)
+	if trend != "LONG" {
+		t.Errorf("expected LONG uptrend, got %q", trend)
+	}
+}
+
+func TestHTFContext_Downtrend(t *testing.T) {
+	indicators := map[string]float64{
+		"1D:EMA_50":  120.0,
+		"1D:EMA_200": 140.0, // EMA_50 < EMA_200
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 110.0}}, // price < EMA_50
+	}
+	trend := htfContext(indicators, "1D", bars)
+	if trend != "SHORT" {
+		t.Errorf("expected SHORT downtrend, got %q", trend)
+	}
+}
+
+func TestHTFContext_Ranging(t *testing.T) {
+	indicators := map[string]float64{
+		"1D:EMA_50":  135.0,
+		"1D:EMA_200": 130.0, // EMA_50 > EMA_200
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 125.0}}, // but price < EMA_50 → ambiguous
+	}
+	trend := htfContext(indicators, "1D", bars)
+	if trend != "" {
+		t.Errorf("expected empty (ranging), got %q", trend)
+	}
+}
+
+func TestHTFContext_NoData(t *testing.T) {
+	indicators := map[string]float64{}
+	bars := map[string][]models.OHLCV{}
+	trend := htfContext(indicators, "1D", bars)
+	if trend != "" {
+		t.Errorf("expected empty (no data), got %q", trend)
+	}
+}
+
+func TestFilterHTFContext_UptrendFiltersShorts(t *testing.T) {
+	indicators := map[string]float64{
+		"1D:EMA_50": 150.0, "1D:EMA_200": 130.0,
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 160.0}},
+	}
+	signals := []models.Signal{
+		{Direction: "LONG", Timeframe: "1H", Rule: "ema_cross"},
+		{Direction: "SHORT", Timeframe: "1H", Rule: "rsi_overbought"},  // should be filtered
+		{Direction: "SHORT", Timeframe: "4H", Rule: "ict_order_block"}, // should be filtered
+		{Direction: "LONG", Timeframe: "4H", Rule: "ict_fair_value_gap"},
+		{Direction: "SHORT", Timeframe: "1D", Rule: "smc_choch"},       // HTF signal — kept
+		{Direction: "NEUTRAL", Timeframe: "1H", Rule: "test"},          // NEUTRAL — kept
+	}
+	result := filterHTFContext(signals, indicators, bars)
+	if len(result) != 4 {
+		t.Fatalf("expected 4 signals after filter, got %d: %+v", len(result), result)
+	}
+	for _, s := range result {
+		if (s.Timeframe == "1H" || s.Timeframe == "4H") && s.Direction == "SHORT" {
+			t.Errorf("SHORT LTF signal should have been filtered: %+v", s)
+		}
+	}
+}
+
+func TestFilterHTFContext_RangingKeepsAll(t *testing.T) {
+	indicators := map[string]float64{
+		"1D:EMA_50": 135.0, "1D:EMA_200": 130.0,
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 125.0}}, // ranging
+	}
+	signals := []models.Signal{
+		{Direction: "LONG", Timeframe: "1H"},
+		{Direction: "SHORT", Timeframe: "1H"},
+		{Direction: "SHORT", Timeframe: "4H"},
+	}
+	result := filterHTFContext(signals, indicators, bars)
+	if len(result) != 3 {
+		t.Errorf("ranging should keep all signals, got %d", len(result))
+	}
+}
+
+func TestFilterHTFContext_FallsBackToWeekly(t *testing.T) {
+	indicators := map[string]float64{
+		// No 1D EMAs, but 1W shows downtrend
+		"1W:EMA_50": 100.0, "1W:EMA_200": 120.0,
+	}
+	bars := map[string][]models.OHLCV{
+		"1W": {{Close: 90.0}}, // price < EMA_50 → downtrend
+	}
+	signals := []models.Signal{
+		{Direction: "LONG", Timeframe: "1H"},  // should be filtered
+		{Direction: "SHORT", Timeframe: "1H"}, // aligned — kept
+	}
+	result := filterHTFContext(signals, indicators, bars)
+	if len(result) != 1 || result[0].Direction != "SHORT" {
+		t.Errorf("expected only SHORT to survive 1W downtrend filter, got %+v", result)
+	}
+}

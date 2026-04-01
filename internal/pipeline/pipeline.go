@@ -19,6 +19,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/interpreter"
 	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/internal/notifier"
+	"github.com/Ju571nK/Chatter/internal/sequence"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -94,6 +95,8 @@ type Pipeline struct {
 	priceAlertWatcher PriceAlertWatcher // optional; set via SetPriceAlertWatcher
 	broadcaster       SignalBroadcaster  // optional; set via SetBroadcaster
 
+	seqTracker *sequence.Tracker // tracks signal sequences for bonus scoring
+
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
 }
@@ -118,6 +121,7 @@ func New(
 		symbols:      symbols,
 		timeframes:   timeframes,
 		log:          log,
+		seqTracker:   sequence.New(),
 		sigLastSaved: make(map[string]time.Time),
 	}
 }
@@ -284,6 +288,20 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	signals = filterHTFContext(signals, indicators, allBars)
 	if filtered := beforeHTF - len(signals); filtered > 0 {
 		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("HTF context filter removed counter-trend signals")
+	}
+
+	// Signal sequence tracking: record each signal and apply bonus for completed sequences
+	for i := range signals {
+		matches := p.seqTracker.Record(signals[i])
+		for _, m := range matches {
+			signals[i].Score *= (1.0 + m.Bonus)
+			p.log.Debug().
+				Str("symbol", sym).
+				Str("sequence", m.Name).
+				Float64("bonus", m.Bonus).
+				Float64("new_score", signals[i].Score).
+				Msg("sequence bonus applied")
+		}
 	}
 
 	// Paper trading: open new positions and check existing TP/SL.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/backtest"
+	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/storage"
 	"github.com/Ju571nK/Chatter/internal/history"
 	"github.com/Ju571nK/Chatter/internal/indicator"
@@ -176,6 +178,7 @@ type Server struct {
 	wsHub            WSHub                          // optional; set via WithHub
 	calendarStore    CalendarStore                  // optional; set via WithCalendarStore
 	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
+	demoEngine       *engine.RuleEngine             // optional; set via WithDemoEngine for /api/demo/scan
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
 	mu               sync.RWMutex
@@ -254,6 +257,11 @@ func (s *Server) WithCalendarStore(cs CalendarStore) {
 }
 
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
+// WithDemoEngine injects the rule engine for the demo scan endpoint.
+func (s *Server) WithDemoEngine(e *engine.RuleEngine) {
+	s.demoEngine = e
+}
+
 func (s *Server) WithSettingsFile(path string) {
 	s.settingsFile = path
 }
@@ -335,6 +343,11 @@ func (s *Server) Handler() http.Handler {
 	// Economic calendar
 	if s.calendarStore != nil {
 		mux.HandleFunc("GET /api/calendar", s.getCalendarEvents)
+	}
+
+	// Demo scan (no DB required — runs rule engine on sample data)
+	if s.demoEngine != nil {
+		mux.HandleFunc("GET /api/demo/scan", s.demoScan)
 	}
 
 	// Multi-analyst full analysis
@@ -1683,4 +1696,160 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// demoScan runs the rule engine on built-in sample data and returns signals.
+// No DB, no API key, no watchlist required. Used by the onboarding shadow mode
+// so visitors can see what ChartNagari does before adding their own symbols.
+//
+// GET /api/demo/scan?symbol=DEMO_BTC&timeframe=1D
+func (s *Server) demoScan(w http.ResponseWriter, r *http.Request) {
+	symbol := r.URL.Query().Get("symbol")
+	if symbol == "" {
+		symbol = "DEMO_BTC"
+	}
+	tf := r.URL.Query().Get("timeframe")
+	if tf == "" {
+		tf = "1D"
+	}
+
+	// Generate sample OHLCV data (100 bars of realistic BTC-like price action)
+	bars := generateDemoBars(symbol, tf, 100)
+
+	// Build analysis context with indicators
+	allBars := map[string][]models.OHLCV{tf: bars}
+	indicators := indicator.Compute(allBars)
+
+	ctx := models.AnalysisContext{
+		Symbol:     symbol,
+		Timeframes: allBars,
+		Indicators: indicators,
+	}
+
+	// Run rule engine
+	signals := s.demoEngine.Run(ctx)
+
+	// Convert bars to chart-friendly format
+	type chartBar struct {
+		Time   int64   `json:"time"`
+		Open   float64 `json:"open"`
+		High   float64 `json:"high"`
+		Low    float64 `json:"low"`
+		Close  float64 `json:"close"`
+		Volume float64 `json:"volume"`
+	}
+	chartBars := make([]chartBar, len(bars))
+	for i, b := range bars {
+		chartBars[i] = chartBar{
+			Time:   b.OpenTime.Unix(),
+			Open:   b.Open,
+			High:   b.High,
+			Low:    b.Low,
+			Close:  b.Close,
+			Volume: b.Volume,
+		}
+	}
+
+	resp := struct {
+		Symbol    string         `json:"symbol"`
+		Timeframe string         `json:"timeframe"`
+		Bars      []chartBar     `json:"bars"`
+		Signals   []models.Signal `json:"signals"`
+	}{
+		Symbol:    symbol,
+		Timeframe: tf,
+		Bars:      chartBars,
+		Signals:   signals,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// generateDemoBars creates realistic OHLCV sample data for demo purposes.
+// Simulates a Wyckoff-like accumulation → markup → distribution pattern.
+func generateDemoBars(symbol, timeframe string, count int) []models.OHLCV {
+	bars := make([]models.OHLCV, count)
+	baseTime := time.Now().AddDate(0, 0, -count)
+
+	var tfDuration time.Duration
+	switch timeframe {
+	case "1H":
+		tfDuration = time.Hour
+	case "4H":
+		tfDuration = 4 * time.Hour
+	case "1W":
+		tfDuration = 7 * 24 * time.Hour
+	default: // "1D"
+		tfDuration = 24 * time.Hour
+	}
+
+	// Start price and phases
+	price := 40000.0
+	baseVolume := 1000.0
+
+	// Simple deterministic pseudo-random using a seed
+	seed := uint64(42)
+	nextRand := func() float64 {
+		seed = seed*6364136223846793005 + 1442695040888963407
+		return float64(seed>>33) / float64(1<<31) // 0.0 to 1.0
+	}
+
+	for i := 0; i < count; i++ {
+		phase := float64(i) / float64(count)
+		var trend float64
+
+		// Wyckoff-like cycle: accumulation (0-0.25), markup (0.25-0.55), distribution (0.55-0.75), markdown (0.75-1.0)
+		switch {
+		case phase < 0.25:
+			// Accumulation: tight range, low volume, slight downward bias
+			trend = -0.001
+			baseVolume = 800
+		case phase < 0.55:
+			// Markup: strong uptrend, increasing volume
+			trend = 0.008
+			baseVolume = 1500
+		case phase < 0.75:
+			// Distribution: tight range at top, high volume
+			trend = 0.001
+			baseVolume = 2000
+		default:
+			// Markdown: downtrend, declining volume
+			trend = -0.006
+			baseVolume = 1200
+		}
+
+		// Add spring near end of accumulation (bar ~23)
+		if i == 23 {
+			trend = -0.02 // sharp dip
+		}
+		if i == 24 {
+			trend = 0.025 // strong recovery (spring reversal)
+		}
+
+		// Generate OHLCV
+		volatility := 0.015
+		change := trend + (nextRand()-0.5)*volatility
+		open := price
+		close := price * (1 + change)
+
+		high := math.Max(open, close) * (1 + nextRand()*0.008)
+		low := math.Min(open, close) * (1 - nextRand()*0.008)
+
+		vol := baseVolume * (0.7 + nextRand()*0.6)
+
+		bars[i] = models.OHLCV{
+			Symbol:    symbol,
+			Timeframe: timeframe,
+			OpenTime:  baseTime.Add(time.Duration(i) * tfDuration),
+			Open:      math.Round(open*100) / 100,
+			High:      math.Round(high*100) / 100,
+			Low:       math.Round(low*100) / 100,
+			Close:     math.Round(close*100) / 100,
+			Volume:    math.Round(vol),
+		}
+		price = close
+	}
+
+	return bars
 }

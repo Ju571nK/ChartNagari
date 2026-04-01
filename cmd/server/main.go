@@ -265,6 +265,7 @@ func main() {
 	apiSrv.WithPriceAlertStore(db)
 	apiSrv.WithHub(wsHub)
 	apiSrv.WithCalendarStore(db)
+	apiSrv.WithDemoEngine(eng)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

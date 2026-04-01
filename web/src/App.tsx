@@ -628,6 +628,8 @@ function ChartTab() {
   const volRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const swingHighLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
   const swingLowLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markersPluginRef = useRef<any>(null)
 
   // Load enabled symbols for the selector
   useEffect(() => {
@@ -713,6 +715,10 @@ function ChartTab() {
     window.addEventListener('resize', onResize)
     return () => {
       window.removeEventListener('resize', onResize)
+      if (markersPluginRef.current) {
+        markersPluginRef.current.detach()
+        markersPluginRef.current = null
+      }
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -725,6 +731,11 @@ function ChartTab() {
     if (!symbol || !seriesRef.current) return
     setLoading(true)
     setError('')
+    // Detach old markers plugin before loading new data
+    if (markersPluginRef.current) {
+      markersPluginRef.current.detach()
+      markersPluginRef.current = null
+    }
 
     apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`)
       .then((bars) => {
@@ -800,7 +811,12 @@ function ChartTab() {
     const allMarkers = [...signalMarkers, ...wyckoffMarkers].sort((a, b) =>
       (a.time as number) - (b.time as number)
     )
-    createSeriesMarkers(seriesRef.current, allMarkers)
+    // Reuse existing plugin instance or create new one; setMarkers replaces all markers
+    if (markersPluginRef.current) {
+      markersPluginRef.current.setMarkers(allMarkers)
+    } else {
+      markersPluginRef.current = createSeriesMarkers(seriesRef.current, allMarkers)
+    }
   }, [signals, enabledCategories, buildFilteredMarkers, wyckoffEnabled, wyckoffData])
 
   // Remove Wyckoff overlays when disabled or symbol/tf changes

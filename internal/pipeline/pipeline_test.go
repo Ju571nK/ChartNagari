@@ -11,6 +11,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
 	"github.com/Ju571nK/Chatter/internal/notifier"
+	"github.com/Ju571nK/Chatter/internal/wyckoff"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -230,7 +231,7 @@ func TestFilterHTFContext_UptrendFiltersShorts(t *testing.T) {
 		{Direction: "SHORT", Timeframe: "1D", Rule: "smc_choch"},       // HTF signal — kept
 		{Direction: "NEUTRAL", Timeframe: "1H", Rule: "test"},          // NEUTRAL — kept
 	}
-	result := filterHTFContext(signals, indicators, bars)
+	result := filterHTFContext(signals, indicators, bars, "")
 	if len(result) != 4 {
 		t.Fatalf("expected 4 signals after filter, got %d: %+v", len(result), result)
 	}
@@ -253,7 +254,7 @@ func TestFilterHTFContext_RangingKeepsAll(t *testing.T) {
 		{Direction: "SHORT", Timeframe: "1H"},
 		{Direction: "SHORT", Timeframe: "4H"},
 	}
-	result := filterHTFContext(signals, indicators, bars)
+	result := filterHTFContext(signals, indicators, bars, "")
 	if len(result) != 3 {
 		t.Errorf("ranging should keep all signals, got %d", len(result))
 	}
@@ -271,8 +272,63 @@ func TestFilterHTFContext_FallsBackToWeekly(t *testing.T) {
 		{Direction: "LONG", Timeframe: "1H"},  // should be filtered
 		{Direction: "SHORT", Timeframe: "1H"}, // aligned — kept
 	}
-	result := filterHTFContext(signals, indicators, bars)
+	result := filterHTFContext(signals, indicators, bars, "")
 	if len(result) != 1 || result[0].Direction != "SHORT" {
 		t.Errorf("expected only SHORT to survive 1W downtrend filter, got %+v", result)
+	}
+}
+
+func TestFilterHTFContext_WyckoffAccumulationOverridesBearishTrend(t *testing.T) {
+	// EMA says bearish, but Wyckoff accumulation should override → allow LONG through
+	indicators := map[string]float64{
+		"1D:EMA_50": 120.0, "1D:EMA_200": 140.0, // bearish
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 110.0}}, // price < EMA_50 → bearish
+	}
+	signals := []models.Signal{
+		{Direction: "LONG", Timeframe: "1H"},  // would be filtered without Wyckoff override
+		{Direction: "SHORT", Timeframe: "1H"}, // aligned with bearish — kept
+	}
+	// Without Wyckoff: only SHORT survives. With accumulation: both survive (ranging override).
+	result := filterHTFContext(signals, indicators, bars, wyckoff.PhaseAccumulation)
+	if len(result) != 2 {
+		t.Errorf("accumulation should override bearish trend → keep all signals, got %d: %+v", len(result), result)
+	}
+}
+
+func TestFilterHTFContext_WyckoffDistributionOverridesBullishTrend(t *testing.T) {
+	// EMA says bullish, but Wyckoff distribution should override → allow SHORT through
+	indicators := map[string]float64{
+		"1D:EMA_50": 150.0, "1D:EMA_200": 130.0, // bullish
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 160.0}}, // price > EMA_50 → bullish
+	}
+	signals := []models.Signal{
+		{Direction: "LONG", Timeframe: "1H"},  // aligned — kept
+		{Direction: "SHORT", Timeframe: "1H"}, // would be filtered without override
+	}
+	result := filterHTFContext(signals, indicators, bars, wyckoff.PhaseDistribution)
+	if len(result) != 2 {
+		t.Errorf("distribution should override bullish trend → keep all signals, got %d: %+v", len(result), result)
+	}
+}
+
+func TestFilterHTFContext_WyckoffNoOverrideWhenAligned(t *testing.T) {
+	// EMA says bullish, Wyckoff says markup — no conflict, keep filtering SHORT
+	indicators := map[string]float64{
+		"1D:EMA_50": 150.0, "1D:EMA_200": 130.0,
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 160.0}},
+	}
+	signals := []models.Signal{
+		{Direction: "LONG", Timeframe: "1H"},
+		{Direction: "SHORT", Timeframe: "1H"}, // should still be filtered (markup + bullish = keep filtering)
+	}
+	result := filterHTFContext(signals, indicators, bars, wyckoff.PhaseMarkup)
+	if len(result) != 1 || result[0].Direction != "LONG" {
+		t.Errorf("markup + bullish should still filter SHORT, got %+v", result)
 	}
 }

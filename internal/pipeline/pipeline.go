@@ -300,11 +300,25 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
-	// HTF context filter: suppress lower-TF signals that contradict higher-TF trend
+	// Detect Wyckoff phase early so it can inform the HTF context filter.
+	// During accumulation/markup, even if EMA trend is bearish, we want to allow
+	// LONG signals through (the Wyckoff phase overrides pure trend reading).
+	var wyckoffPhase wyckoff.Phase
+	if bars1D, ok := allBars["1D"]; ok && len(bars1D) >= 50 {
+		reversed := make([]models.OHLCV, len(bars1D))
+		for i, b := range bars1D {
+			reversed[len(bars1D)-1-i] = b
+		}
+		wa := wyckoff.Analyze(sym, "1D", reversed)
+		wyckoffPhase = wa.Phase
+	}
+
+	// HTF context filter: suppress lower-TF signals that contradict higher-TF trend.
+	// Wyckoff phase can override: accumulation/markup → allow LONG even if EMA says bearish.
 	beforeHTF := len(signals)
-	signals = filterHTFContext(signals, indicators, allBars)
+	signals = filterHTFContext(signals, indicators, allBars, wyckoffPhase)
 	if filtered := beforeHTF - len(signals); filtered > 0 {
-		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("HTF context filter removed counter-trend signals")
+		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Str("wyckoff_phase", string(wyckoffPhase)).Msg("HTF context filter removed counter-trend signals")
 	}
 
 	// Signal sequence tracking: record each signal and apply bonus for completed sequences
@@ -321,31 +335,22 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
-	// Wyckoff phase context boost: if 1D bars show accumulation/markup,
-	// boost LONG signals by 20%; if distribution/markdown, boost SHORT signals.
-	if bars1D, ok := allBars["1D"]; ok && len(bars1D) >= 50 {
-		// wyckoff.Analyze expects oldest-first; allBars is DESC, so reverse
-		reversed := make([]models.OHLCV, len(bars1D))
-		for i, b := range bars1D {
-			reversed[len(bars1D)-1-i] = b
-		}
-		wa := wyckoff.Analyze(sym, "1D", reversed)
-		switch wa.Phase {
-		case wyckoff.PhaseAccumulation, wyckoff.PhaseMarkup:
-			for i := range signals {
-				if signals[i].Direction == "LONG" {
-					signals[i].Score *= 1.2
-				}
+	// Wyckoff phase context boost: reuse the phase detected above for HTF filter.
+	switch wyckoffPhase {
+	case wyckoff.PhaseAccumulation, wyckoff.PhaseMarkup:
+		for i := range signals {
+			if signals[i].Direction == "LONG" {
+				signals[i].Score *= 1.2
 			}
-			p.log.Debug().Str("symbol", sym).Str("phase", string(wa.Phase)).Msg("Wyckoff phase boost: LONG +20%")
-		case wyckoff.PhaseDistribution, wyckoff.PhaseMarkdown:
-			for i := range signals {
-				if signals[i].Direction == "SHORT" {
-					signals[i].Score *= 1.2
-				}
-			}
-			p.log.Debug().Str("symbol", sym).Str("phase", string(wa.Phase)).Msg("Wyckoff phase boost: SHORT +20%")
 		}
+		p.log.Debug().Str("symbol", sym).Str("phase", string(wyckoffPhase)).Msg("Wyckoff phase boost: LONG +20%")
+	case wyckoff.PhaseDistribution, wyckoff.PhaseMarkdown:
+		for i := range signals {
+			if signals[i].Direction == "SHORT" {
+				signals[i].Score *= 1.2
+			}
+		}
+		p.log.Debug().Str("symbol", sym).Str("phase", string(wyckoffPhase)).Msg("Wyckoff phase boost: SHORT +20%")
 	}
 
 	// Paper trading: open new positions and check existing TP/SL.
@@ -465,14 +470,32 @@ func htfContext(indicators map[string]float64, tf string, bars map[string][]mode
 // (LONG or SHORT), only LTF signals aligned with that direction pass through.
 // HTF signals (1D, 1W) and NEUTRAL signals are never filtered.
 // If no clear HTF trend is detected, all signals pass.
-func filterHTFContext(signals []models.Signal, indicators map[string]float64, bars map[string][]models.OHLCV) []models.Signal {
+//
+// Wyckoff phase override: during accumulation/markup, even if EMA says bearish,
+// the HTF filter allows LONG signals through (trend overridden to ranging).
+// During distribution/markdown, SHORT signals are allowed even if EMA says bullish.
+func filterHTFContext(signals []models.Signal, indicators map[string]float64, bars map[string][]models.OHLCV, phase wyckoff.Phase) []models.Signal {
 	// Determine HTF trend: prefer 1D, fall back to 1W
 	trend := htfContext(indicators, "1D", bars)
 	if trend == "" {
 		trend = htfContext(indicators, "1W", bars)
 	}
+
+	// Wyckoff phase override: if phase contradicts or qualifies the EMA trend,
+	// relax the filter to allow aligned signals through.
+	switch phase {
+	case wyckoff.PhaseAccumulation, wyckoff.PhaseMarkup:
+		if trend == "SHORT" {
+			trend = "" // override: accumulation in a bearish EMA = early reversal, allow LONG
+		}
+	case wyckoff.PhaseDistribution, wyckoff.PhaseMarkdown:
+		if trend == "LONG" {
+			trend = "" // override: distribution in a bullish EMA = early reversal, allow SHORT
+		}
+	}
+
 	if trend == "" {
-		return signals // ranging or no data — pass everything through
+		return signals // ranging, no data, or Wyckoff override — pass everything through
 	}
 
 	out := make([]models.Signal, 0, len(signals))

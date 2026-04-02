@@ -31,6 +31,10 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
   const [step1Loading, setStep1Loading] = useState(false)
   const [step1Error, setStep1Error] = useState('')
 
+  // Demo mode state
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoSignals, setDemoSignals] = useState<Array<{rule: string; direction: string; score: number; timeframe: string}>>([])
+
   // Step 2 (scan): state
   const [scanLoading, setScanLoading] = useState(false)
   const [scanElapsed, setScanElapsed] = useState(0)
@@ -211,6 +215,23 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
     }
   }
 
+  // Demo: run rule engine on sample data without adding a symbol
+  const handleDemo = async () => {
+    setDemoLoading(true)
+    try {
+      const res = await fetch('/api/demo/scan?symbol=DEMO_BTC&timeframe=1D')
+      if (res.ok) {
+        const data = await res.json()
+        setDemoSignals(data.signals || [])
+        setScanSymbol('DEMO_BTC')
+        setStep1Done(true)
+        setStep2Done(true)
+        // Don't set ONBOARDING_DONE_KEY — user should still set up real symbols later
+      }
+    } catch { /* ignore */ }
+    finally { setDemoLoading(false) }
+  }
+
   const handleShareTwitter = () => {
     if (!window.confirm(t('onboarding.share_warning'))) return
     const text = t('onboarding.share_text')
@@ -329,7 +350,28 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
           {t('onboarding.complete_title', { symbol: targetSymbol })}
         </div>
 
-        {!llmUnavailable && scanResult ? (
+        {demoSignals.length > 0 ? (
+          <div className="ob-demo-signals">
+            <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 8 }}>
+              {t('onboarding.demo_signals_found', { count: demoSignals.length })}
+            </div>
+            {demoSignals.slice(0, 5).map((s, i) => (
+              <div key={i} className="ob-demo-signal-row">
+                <span style={{ color: s.direction === 'LONG' ? 'var(--safe)' : 'var(--danger)', fontWeight: 600, width: 48, display: 'inline-block' }}>
+                  {s.direction}
+                </span>
+                <span style={{ color: 'var(--muted)', width: 36, display: 'inline-block' }}>{s.timeframe}</span>
+                <span style={{ color: 'var(--text)' }}>{s.rule.replace(/_/g, ' ')}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '0.72rem' }}>{s.score.toFixed(1)}</span>
+              </div>
+            ))}
+            {demoSignals.length > 5 && (
+              <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 4 }}>
+                +{demoSignals.length - 5} more signals
+              </div>
+            )}
+          </div>
+        ) : !llmUnavailable && scanResult ? (
           <div className="ob-ai-card">
             <ProbBar label="BULL" pct={scanResult.bull_pct} color="var(--safe)" />
             <ProbBar label="BEAR" pct={scanResult.bear_pct} color="var(--danger)" />
@@ -406,6 +448,14 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
           </nav>
 
           <div className="ob-rail-footer">
+            <button
+              className="ob-skip-btn"
+              onClick={handleDemo}
+              disabled={demoLoading || step2Done}
+              style={{ marginBottom: 6, color: 'var(--mint)' }}
+            >
+              {demoLoading ? t('onboarding.demo_loading') : t('onboarding.try_demo')}
+            </button>
             <button className="ob-skip-btn" onClick={onClose}>
               {t('onboarding.skip')}
             </button>

@@ -286,6 +286,9 @@
   "onboarding.share_twitter": "X / Twitter에 공유",
   "onboarding.share_warning": "X/Twitter에 공개 게시됩니다. 계속하시겠습니까?",
   "onboarding.skip": "나중에 설정",
+  "onboarding.try_demo": "데모 보기",
+  "onboarding.demo_loading": "데모 로딩 중...",
+  "onboarding.demo_signals_found": "샘플 데이터에서 {{count}}개 시그널 감지",
   "validating": "확인 중...",
   "not_verified": "찾을 수 없음 — 직접 입력하세요"
 }

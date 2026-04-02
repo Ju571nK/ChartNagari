@@ -1059,6 +1059,26 @@ input:checked + .slider::before {
   border-radius: 4px;
 }
 
+.ob-demo-signals {
+  padding: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(143, 128, 115, 0.2);
+  border-radius: 4px;
+}
+
+.ob-demo-signal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(143, 128, 115, 0.1);
+}
+
+.ob-demo-signal-row:last-child {
+  border-bottom: none;
+}
+
 .ob-llm-note {
   font-size: 0.8rem;
   color: var(--muted);

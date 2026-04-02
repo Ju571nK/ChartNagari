@@ -286,6 +286,9 @@
   "onboarding.share_twitter": "Share on X / Twitter",
   "onboarding.share_warning": "This will open a public post on X/Twitter. Continue?",
   "onboarding.skip": "Set up later",
+  "onboarding.try_demo": "Try demo",
+  "onboarding.demo_loading": "Loading demo...",
+  "onboarding.demo_signals_found": "{{count}} signals detected on sample data",
   "validating": "Validating...",
   "not_verified": "Not found — enter manually"
 }

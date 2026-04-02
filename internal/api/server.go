@@ -1713,11 +1713,24 @@ func (s *Server) demoScan(w http.ResponseWriter, r *http.Request) {
 		tf = "1D"
 	}
 
-	// Generate sample OHLCV data (100 bars of realistic BTC-like price action)
-	bars := generateDemoBars(symbol, tf, 100)
-
-	// Build analysis context with indicators
-	allBars := map[string][]models.OHLCV{tf: bars}
+	// Generate sample OHLCV data across multiple timeframes for richer signal detection.
+	// Primary TF gets 100 bars; other TFs get proportional amounts.
+	allBars := map[string][]models.OHLCV{}
+	for _, demTF := range []string{"1W", "1D", "4H", "1H"} {
+		count := 100
+		switch demTF {
+		case "1W":
+			count = 50
+		case "1D":
+			count = 100
+		case "4H":
+			count = 200
+		case "1H":
+			count = 200
+		}
+		allBars[demTF] = generateDemoBars(symbol, demTF, count)
+	}
+	bars := allBars[tf]
 	indicators := indicator.Compute(allBars)
 
 	ctx := models.AnalysisContext{
@@ -1799,44 +1812,70 @@ func generateDemoBars(symbol, timeframe string, count int) []models.OHLCV {
 		phase := float64(i) / float64(count)
 		var trend float64
 
-		// Wyckoff-like cycle: accumulation (0-0.25), markup (0.25-0.55), distribution (0.55-0.75), markdown (0.75-1.0)
+		// Wyckoff-like cycle with more volatile swings to trigger ICT/Wyckoff rules
 		switch {
 		case phase < 0.25:
-			// Accumulation: tight range, low volume, slight downward bias
-			trend = -0.001
+			// Accumulation: range-bound, low volume
+			trend = -0.002 + math.Sin(float64(i)*0.5)*0.003
 			baseVolume = 800
 		case phase < 0.55:
-			// Markup: strong uptrend, increasing volume
-			trend = 0.008
-			baseVolume = 1500
+			// Markup: strong uptrend with pullbacks every ~8 bars
+			trend = 0.012
+			if i%8 == 0 {
+				trend = -0.008 // pullback creates swing lows
+			}
+			baseVolume = 1800
 		case phase < 0.75:
-			// Distribution: tight range at top, high volume
-			trend = 0.001
-			baseVolume = 2000
+			// Distribution: choppy at top with false breakouts
+			trend = 0.002 + math.Sin(float64(i)*0.8)*0.006
+			baseVolume = 2200
 		default:
-			// Markdown: downtrend, declining volume
-			trend = -0.006
-			baseVolume = 1200
+			// Markdown: strong downtrend with dead cat bounces
+			trend = -0.010
+			if i%7 == 0 {
+				trend = 0.006 // dead cat bounce
+			}
+			baseVolume = 1500
 		}
 
-		// Add spring near end of accumulation (bar ~23)
-		if i == 23 {
-			trend = -0.02 // sharp dip
+		// Spring: sharp dip below range then recovery (triggers liquidity sweep)
+		if i == int(float64(count)*0.23) {
+			trend = -0.035 // sharp dip below support
+			baseVolume = 3000
 		}
-		if i == 24 {
-			trend = 0.025 // strong recovery (spring reversal)
+		if i == int(float64(count)*0.24) {
+			trend = 0.04 // strong recovery with high volume
+			baseVolume = 3500
 		}
 
-		// Generate OHLCV
-		volatility := 0.015
+		// FVG event: gap up during markup (bar[i].high < bar[i+2].low needs big move)
+		if i == int(float64(count)*0.35) {
+			trend = 0.025 // strong bullish impulse creates gap
+			baseVolume = 2500
+		}
+
+		// Upthrust: spike above range then reversal (distribution phase)
+		if i == int(float64(count)*0.65) {
+			trend = 0.03
+			baseVolume = 2800
+		}
+		if i == int(float64(count)*0.66) {
+			trend = -0.035
+			baseVolume = 3000
+		}
+
+		// Generate OHLCV with wider wicks for more realistic candles
+		volatility := 0.02
 		change := trend + (nextRand()-0.5)*volatility
 		open := price
 		close := price * (1 + change)
 
-		high := math.Max(open, close) * (1 + nextRand()*0.008)
-		low := math.Min(open, close) * (1 - nextRand()*0.008)
+		wickUp := nextRand() * 0.015
+		wickDown := nextRand() * 0.015
+		high := math.Max(open, close) * (1 + wickUp)
+		low := math.Min(open, close) * (1 - wickDown)
 
-		vol := baseVolume * (0.7 + nextRand()*0.6)
+		vol := baseVolume * (0.6 + nextRand()*0.8)
 
 		bars[i] = models.OHLCV{
 			Symbol:    symbol,

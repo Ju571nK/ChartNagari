@@ -13,20 +13,6 @@
 ## Contribution Infrastructure
 
 
-## Onboarding & Discovery
-
-- **데모 모드 시작 화면 (shadow mode)**
-  **Priority:** P2
-  **What:** `GET /api/demo/scan` 엔드포인트가 안정화된 후, 심볼 입력 없이 샘플 데이터
-  차트를 보여주는 "shadow mode" 뷰를 추가. 최종 목표: GitHub 방문자가 클론/설치 없이
-  웹에서도 제품을 체험 가능.
-  **Why:** 설치 장벽이 높은 사용자(비개발자, 트레이더)가 제품 가치를 체험할 수 있는 유일한 경로.
-  스타 전환율 개선.
-  **Depends on:** `WithDemoEngine(*engine.RuleEngine)` 패턴으로 룰 엔진을 서버에 주입.
-  현재 `server.go`는 methodology 패키지를 임포트하지 않으므로 `cmd/server/main.go`에서
-  RuleEngine 빌드 + `Server.WithDemoEngine()` 주입 구현이 선행 필요.
-  **Gate:** `WithDemoEngine` 패턴 구현 후. 온보딩 PR (3단계 모달)과 별개 PR로 진행.
-
 ## Open Source Growth (Phase 2)
 
 - **Phase 2: YAML/Script-based Rule System**
@@ -60,3 +46,9 @@
 - **Phase 2: Wyckoff Phase Visualization + Backtest UI**
   **Completed:** v2.1.2.0 (2026-03-23)
   Wyckoff phase analyzer (`internal/wyckoff/`), API endpoint (`GET /api/wyckoff/{symbol}/{timeframe}`), ChartTab phase zone overlay with Spring/Upthrust markers, and BacktestTab candlestick trade chart all shipped.
+- **Signal Quality Scoring + Chart UI** — Completed v2.1.4.0 (2026-04-01)
+  Sweep quality score, FVG relevance filter, volume profile, OB mitigation, HTF context filter, signal sequence tracker, Wyckoff phase boost, chart category filter (ICT/Wyckoff/SMC/TA), marker dedup + opacity.
+- **DESIGN.md** — Completed v2.1.4.0 (2026-04-02)
+  Full design system documentation: 9 color tokens, component patterns, typography, spacing, motion, anti-patterns.
+- **Demo Mode (shadow mode)** — Completed v2.1.4.0 (2026-04-02)
+  `GET /api/demo/scan` endpoint + onboarding "Try demo" button. Multi-TF sample data with Wyckoff cycle patterns.

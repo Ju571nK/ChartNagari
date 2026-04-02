@@ -41,6 +41,11 @@ ChartNagari fills that gap:
 | Real-time Telegram / Discord alerts with cooldown | ✅ |
 | Optional AI interpretation (Anthropic, OpenAI, Groq, Gemini) | ✅ |
 | Multi-timeframe consensus scoring | ✅ |
+| Signal quality scoring (volume, wick ratio, reversal strength) | ✅ |
+| Top-down HTF context filter (suppress counter-trend signals) | ✅ |
+| Signal sequence tracking (sweep → displacement bonus) | ✅ |
+| Chart signal category filter (ICT / Wyckoff / SMC / TA toggle) | ✅ |
+| Demo mode (try signals on sample data, no setup required) | ✅ |
 | Backtest on historical data | ✅ |
 | Self-hosted, local-first, no cloud required | ✅ |
 | AI output language: `LLM_LANGUAGE: en \| ko \| ja` | ✅ |
@@ -54,15 +59,19 @@ ChartNagari fills that gap:
 
 ## Features
 
+- **30+ trading rules** — ICT (Order Blocks, FVG, Liquidity Sweeps, Breaker Blocks), Wyckoff (Spring, Upthrust, Accumulation/Distribution), SMC (BOS, CHoCH), General TA (RSI, EMA, volume), 14 candlestick patterns
 - **Multi-timeframe analysis** — 1W, 1D, 4H, 1H scanned in parallel
-- **ICT & Wyckoff signals** — order blocks, fair value gaps, liquidity sweeps, accumulation/distribution phases
-- **General TA rules** — RSI, MACD, moving average crossovers, volume analysis
-- **Multi-timeframe consensus** — signals are ranked by how many timeframes agree
+- **Signal quality scoring** — not all signals are equal. Sweeps scored by volume ratio, wick depth, reversal strength. FVGs scored by gap size vs ATR and impulse strength
+- **Top-down HTF context filter** — 1H/4H signals suppressed when they contradict the 1D/1W trend direction
+- **Signal sequence tracking** — sweep followed by displacement in same direction gets a bonus score. Multi-pattern detection
+- **Wyckoff phase boosting** — accumulation/markup boosts LONG signals, distribution/markdown boosts SHORT signals
+- **Chart category filter** — toggle ICT / Wyckoff / SMC / TA signal groups on/off with one click
+- **Demo mode** — try the signal engine on sample data without adding symbols or API keys
+- **Multi-timeframe consensus** — signals ranked by how many timeframes agree
 - **AI interpretation layer** — optional LLM commentary (Anthropic, OpenAI, Groq, Gemini)
 - **Telegram & Discord alerts** — configurable cooldown to prevent alert spam
 - **Backtest & paper trading** — validate rules on historical data before going live
 - **Web dashboard** — React frontend with guided first-run onboarding, Settings UI, and AI scenario card
-- **Frontend test suite** — Vitest + Testing Library covering all onboarding flows
 - **Multiple data sources** — Binance WebSocket (crypto, free), Tiingo (stocks, recommended), Yahoo Finance (fallback)
 - **Economic calendar** — US macro event tracker (FMP or Finnhub); pre-event Telegram alerts for high-impact releases
 

@@ -98,6 +98,8 @@ type Pipeline struct {
 
 	seqTracker *sequence.Tracker // tracks signal sequences for bonus scoring
 
+	profileHolder *appconfig.SymbolProfilesHolder // optional; set via SetSymbolProfiles
+
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
 }
@@ -151,6 +153,11 @@ func (p *Pipeline) SetBroadcaster(b SignalBroadcaster) {
 // SetAlertConfigHolder wires an optional live-updated alert configuration holder.
 func (p *Pipeline) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 	p.alertHolder = h
+}
+
+// SetSymbolProfiles wires an optional per-symbol profile holder for rule filtering.
+func (p *Pipeline) SetSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
+	p.profileHolder = h
 }
 
 // SetCryptoSymbols records which symbols are crypto (vs stock) for TP/SL multiplier selection.
@@ -249,6 +256,15 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		Indicators: indicators,
 	}
 	signals := p.eng.Run(analysisCtx)
+
+	// Profile filter: remove signals not allowed by the symbol's profile.
+	if p.profileHolder != nil {
+		beforeProfile := len(signals)
+		signals = filterByProfile(signals, p.profileHolder, sym)
+		if filtered := beforeProfile - len(signals); filtered > 0 {
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile filter removed disallowed signals")
+		}
+	}
 
 	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
 	// Determine TP/SL multipliers (crypto vs stock)

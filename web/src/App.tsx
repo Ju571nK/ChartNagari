@@ -234,6 +234,21 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   )
 }
 
+interface ProfileInfo {
+  name: string
+  allowed_methodologies: string[]
+  blocked_methodologies: string[]
+  allowed_rules: string[]
+  alert_limit_per_day: number
+  cooldown_hours: number
+  score_threshold: number
+}
+
+interface SymbolProfileData {
+  symbol: string
+  profile: string
+}
+
 function SymbolsTab() {
   const { t } = useTranslation()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
@@ -246,6 +261,9 @@ function SymbolsTab() {
   const [marketFilter, setMarketFilter] = useState('all')
   const [validateStatus, setValidateStatus] = useState<'idle' | 'loading' | 'found' | 'not_found'>('idle')
   const [validatedName, setValidatedName] = useState('')
+  const [profiles, setProfiles] = useState<ProfileInfo[]>([])
+  const [symbolProfiles, setSymbolProfiles] = useState<Record<string, string>>({})
+  const [profileUpdating, setProfileUpdating] = useState<string | null>(null)
 
   const markets = useMemo(() => {
     const seen = new Set<string>()
@@ -282,6 +300,41 @@ function SymbolsTab() {
   }, [])
 
   useEffect(() => { reload() }, [reload])
+
+  // Load available profiles
+  useEffect(() => {
+    apiFetch<ProfileInfo[]>('/profiles')
+      .then(setProfiles)
+      .catch(() => { /* profiles endpoint may not be available */ })
+  }, [])
+
+  // Load per-symbol profile assignments after symbols are loaded
+  useEffect(() => {
+    if (symbols.length === 0 || profiles.length === 0) return
+    Promise.all(
+      symbols.map(s =>
+        apiFetch<SymbolProfileData>(`/profiles/${encodeURIComponent(s.symbol)}`)
+          .then(data => ({ symbol: s.symbol, profile: data.profile }))
+          .catch(() => ({ symbol: s.symbol, profile: '' }))
+      )
+    ).then(results => {
+      const map: Record<string, string> = {}
+      results.forEach(r => { map[r.symbol] = r.profile })
+      setSymbolProfiles(map)
+    })
+  }, [symbols, profiles])
+
+  const changeProfile = useCallback(async (symbol: string, profile: string) => {
+    setProfileUpdating(symbol)
+    try {
+      await putJSON(`/profiles/${encodeURIComponent(symbol)}`, { profile })
+      setSymbolProfiles(prev => ({ ...prev, [symbol]: profile }))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('unknown_error'))
+    } finally {
+      setProfileUpdating(null)
+    }
+  }, [t])
 
   // Debounced symbol validation against external APIs
   useEffect(() => {
@@ -386,6 +439,20 @@ function SymbolsTab() {
             <div className="item-meta">{sym.exchange}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {profiles.length > 0 && (
+              <select
+                className="chart-select"
+                style={{ fontSize: '0.8rem', padding: '2px 6px', minWidth: 120 }}
+                value={symbolProfiles[sym.symbol] ?? ''}
+                onChange={(e) => changeProfile(sym.symbol, e.target.value)}
+                disabled={profileUpdating === sym.symbol}
+                title={t('profile')}
+              >
+                {profiles.map(p => (
+                  <option key={p.name} value={p.name}>{t(`profile_${p.name}`, p.name)}</option>
+                ))}
+              </select>
+            )}
             <Toggle checked={sym.enabled} onChange={(v) => toggle(sym, v)} />
             <button className="remove-btn" onClick={() => remove(sym)} title={t('delete')}>✕</button>
           </div>

@@ -1,0 +1,37 @@
+default_profile: large_cap_stock
+
+profiles:
+  crypto:
+    allowed_methodologies: [ict, smc, general_ta, candlestick]
+    blocked_methodologies: [wyckoff]
+    alert_limit_per_day: 3
+    cooldown_hours: 6
+    score_threshold: 12.0
+
+  large_cap_stock:
+    allowed_methodologies: [wyckoff, general_ta, candlestick]
+    allowed_rules: [ict_order_block, ict_liquidity_sweep, ict_kill_zone, smc_bos]
+    alert_limit_per_day: 2
+    cooldown_hours: 8
+    score_threshold: 10.0
+
+  small_cap_stock:
+    allowed_methodologies: [candlestick, general_ta]
+    allowed_rules: [volume_spike, rsi_overbought_oversold, support_resistance_breakout,
+                    bullish_engulfing, bearish_engulfing, hammer, shooting_star,
+                    morning_star, evening_star]
+    alert_limit_per_day: 1
+    cooldown_hours: 12
+    score_threshold: 15.0
+
+symbol_overrides:
+  BTCUSDT: { profile: crypto }
+  ETHUSDT: { profile: crypto }
+  SPY: { profile: large_cap_stock }
+  TSLA: { profile: large_cap_stock }
+  BABA: { profile: large_cap_stock }
+  PLTR: { profile: large_cap_stock }
+  IBRX: { profile: small_cap_stock }
+  BSEM: { profile: small_cap_stock }
+  CAPR: { profile: small_cap_stock }
+  ATAI: { profile: small_cap_stock }

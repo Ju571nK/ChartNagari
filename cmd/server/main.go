@@ -163,6 +163,18 @@ func main() {
 	// ── AlertConfig 홀더 ──────────────────────────────────────────────
 	alertHolder := appconfig.NewAlertConfigHolder(cfg.Alert)
 
+	// ── Symbol Profiles 홀더 ──────────────────────────────────────────
+	profilesCfg, err := appconfig.LoadSymbolProfiles("config/symbol_profiles.yaml")
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to load symbol_profiles.yaml — using defaults")
+		profilesCfg = appconfig.SymbolProfilesConfig{}
+	}
+	profileHolder := appconfig.NewSymbolProfilesHolder(profilesCfg)
+	log.Info().
+		Int("profiles", len(profilesCfg.Profiles)).
+		Int("overrides", len(profilesCfg.SymbolOverrides)).
+		Msg("symbol profiles loaded")
+
 	// ── 알림 시스템 ───────────────────────────────────────────────────
 	notifCfg := notifier.Config{
 		ScoreThreshold: cfg.Rules.Scoring.Thresholds["strong"],
@@ -216,6 +228,7 @@ func main() {
 		pipe.SetPriceAlertWatcher(priceWatcher)
 		pipe.SetBroadcaster(wsHub)
 		pipe.SetAlertConfigHolder(alertHolder)
+		pipe.SetSymbolProfiles(profileHolder)
 		pipe.SetCryptoSymbols(cryptoSymbols)
 		go pipe.Run(ctx)
 		log.Info().
@@ -266,6 +279,7 @@ func main() {
 	apiSrv.WithHub(wsHub)
 	apiSrv.WithCalendarStore(db)
 	apiSrv.WithDemoEngine(eng)
+	apiSrv.WithSymbolProfiles(profileHolder)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

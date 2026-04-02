@@ -179,6 +179,7 @@ type Server struct {
 	calendarStore    CalendarStore                  // optional; set via WithCalendarStore
 	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
 	demoEngine       *engine.RuleEngine             // optional; set via WithDemoEngine for /api/demo/scan
+	profileHolder    *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
 	startTime        time.Time                      // server start timestamp for uptime
 	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
 	mu               sync.RWMutex
@@ -254,6 +255,11 @@ func (s *Server) WithHub(h WSHub) {
 
 func (s *Server) WithCalendarStore(cs CalendarStore) {
 	s.calendarStore = cs
+}
+
+// WithSymbolProfiles wires the per-symbol profile holder to the server.
+func (s *Server) WithSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
+	s.profileHolder = h
 }
 
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
@@ -338,6 +344,13 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/price-alerts", s.listPriceAlerts)
 		mux.HandleFunc("POST /api/price-alerts", s.createPriceAlert)
 		mux.HandleFunc("DELETE /api/price-alerts/{id}", s.deletePriceAlert)
+	}
+
+	// Symbol profiles
+	if s.profileHolder != nil {
+		mux.HandleFunc("GET /api/profiles", s.getProfiles)
+		mux.HandleFunc("GET /api/profiles/{symbol}", s.getSymbolProfile)
+		mux.HandleFunc("PUT /api/profiles/{symbol}", s.updateSymbolProfile)
 	}
 
 	// Economic calendar
@@ -1162,6 +1175,94 @@ func (s *Server) writeRulesLocked(rc appconfig.RulesConfig) error {
 		return fmt.Errorf("failed to marshal rules: %w", err)
 	}
 	return os.WriteFile(s.configDir+"/rules.yaml", data, 0o644)
+}
+
+// ── symbol profile handlers ──────────────────────────────────────────────────
+
+// ProfileItem is the JSON representation of a profile.
+type ProfileItem struct {
+	Name                 string   `json:"name"`
+	AllowedMethodologies []string `json:"allowed_methodologies"`
+	BlockedMethodologies []string `json:"blocked_methodologies"`
+	AllowedRules         []string `json:"allowed_rules"`
+	AlertLimitPerDay     int      `json:"alert_limit_per_day"`
+	CooldownHours        int      `json:"cooldown_hours"`
+	ScoreThreshold       float64  `json:"score_threshold"`
+}
+
+// SymbolProfileResponse is the response for GET /api/profiles/{symbol}.
+type SymbolProfileResponse struct {
+	Symbol  string      `json:"symbol"`
+	Profile string      `json:"profile"`
+	Detail  ProfileItem `json:"detail"`
+}
+
+func (s *Server) getProfiles(w http.ResponseWriter, _ *http.Request) {
+	cfg := s.profileHolder.Get()
+	items := make([]ProfileItem, 0, len(cfg.Profiles))
+	for name, p := range cfg.Profiles {
+		items = append(items, ProfileItem{
+			Name:                 name,
+			AllowedMethodologies: p.AllowedMethodologies,
+			BlockedMethodologies: p.BlockedMethodologies,
+			AllowedRules:         p.AllowedRules,
+			AlertLimitPerDay:     p.AlertLimitPerDay,
+			CooldownHours:        p.CooldownHours,
+			ScoreThreshold:       p.ScoreThreshold,
+		})
+	}
+	jsonOK(w, items)
+}
+
+func (s *Server) getSymbolProfile(w http.ResponseWriter, r *http.Request) {
+	symbol := r.PathValue("symbol")
+	profileName := s.profileHolder.GetProfileName(symbol)
+	profile := s.profileHolder.GetProfile(symbol)
+	jsonOK(w, SymbolProfileResponse{
+		Symbol:  symbol,
+		Profile: profileName,
+		Detail: ProfileItem{
+			Name:                 profileName,
+			AllowedMethodologies: profile.AllowedMethodologies,
+			BlockedMethodologies: profile.BlockedMethodologies,
+			AllowedRules:         profile.AllowedRules,
+			AlertLimitPerDay:     profile.AlertLimitPerDay,
+			CooldownHours:        profile.CooldownHours,
+			ScoreThreshold:       profile.ScoreThreshold,
+		},
+	})
+}
+
+func (s *Server) updateSymbolProfile(w http.ResponseWriter, r *http.Request) {
+	symbol := r.PathValue("symbol")
+
+	var body struct {
+		Profile string `json:"profile"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate that the profile exists.
+	cfg := s.profileHolder.Get()
+	if _, ok := cfg.Profiles[body.Profile]; !ok {
+		http.Error(w, fmt.Sprintf("unknown profile: %s", body.Profile), http.StatusBadRequest)
+		return
+	}
+
+	s.profileHolder.SetSymbolProfile(symbol, body.Profile)
+
+	// Persist to disk.
+	updatedCfg := s.profileHolder.Get()
+	if err := appconfig.SaveSymbolProfiles(s.configDir+"/symbol_profiles.yaml", updatedCfg); err != nil {
+		log.Warn().Err(err).Str("symbol", symbol).Msg("failed to persist symbol profile change")
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Info().Str("symbol", symbol).Str("profile", body.Profile).Msg("symbol profile updated")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── utilities ─────────────────────────────────────────────────────────────────

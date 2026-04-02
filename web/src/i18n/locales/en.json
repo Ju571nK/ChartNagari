@@ -290,5 +290,12 @@
   "onboarding.demo_loading": "Loading demo...",
   "onboarding.demo_signals_found": "{{count}} signals detected on sample data",
   "validating": "Validating...",
-  "not_verified": "Not found — enter manually"
+  "not_verified": "Not found — enter manually",
+  "profile": "Signal Profile",
+  "profile_crypto": "Crypto",
+  "profile_large_cap_stock": "Large Cap Stock",
+  "profile_small_cap_stock": "Small Cap Stock",
+  "signal_profile": "Signal Profile",
+  "profile_updated": "Profile updated",
+  "profile_update_failed": "Profile update failed"
 }

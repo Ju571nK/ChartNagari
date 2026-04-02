@@ -278,6 +278,38 @@ func TestFilterHTFContext_FallsBackToWeekly(t *testing.T) {
 	}
 }
 
+func TestHTFContext_ADXLowMeansRanging(t *testing.T) {
+	// EMA says bullish but ADX < 20 → should return ranging
+	indicators := map[string]float64{
+		"1D:EMA_50":  150.0,
+		"1D:EMA_200": 130.0,
+		"1D:ADX_14":  15.0, // weak trend
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 160.0}},
+	}
+	trend := htfContext(indicators, "1D", bars)
+	if trend != "" {
+		t.Errorf("expected ranging (ADX < 20), got %q", trend)
+	}
+}
+
+func TestHTFContext_ADXHighKeepsTrend(t *testing.T) {
+	// EMA says bullish and ADX > 20 → should return LONG
+	indicators := map[string]float64{
+		"1D:EMA_50":  150.0,
+		"1D:EMA_200": 130.0,
+		"1D:ADX_14":  30.0, // strong trend
+	}
+	bars := map[string][]models.OHLCV{
+		"1D": {{Close: 160.0}},
+	}
+	trend := htfContext(indicators, "1D", bars)
+	if trend != "LONG" {
+		t.Errorf("expected LONG (ADX > 20 + bullish EMA), got %q", trend)
+	}
+}
+
 func TestFilterHTFContext_WyckoffAccumulationOverridesBearishTrend(t *testing.T) {
 	// EMA says bearish, but Wyckoff accumulation should override → allow LONG through
 	indicators := map[string]float64{

@@ -435,14 +435,16 @@ func filterMTFConsensus(signals []models.Signal, minTFs int) []models.Signal {
 	return out
 }
 
-// htfContext determines the higher-timeframe trend direction from EMA_50/EMA_200
-// and the current price position. Returns "LONG" (uptrend), "SHORT" (downtrend),
-// or "" (ranging/unknown — allow both directions).
+// htfContext determines the higher-timeframe trend direction from EMA_50/EMA_200,
+// current price position, and ADX trend strength.
 //
-// Logic:
-//   - EMA_50 > EMA_200 AND price > EMA_50 → uptrend → "LONG"
-//   - EMA_50 < EMA_200 AND price < EMA_50 → downtrend → "SHORT"
-//   - Otherwise → ranging or ambiguous → ""
+// Returns "LONG" (uptrend), "SHORT" (downtrend), or "" (ranging/unknown).
+//
+// ADX integration:
+//   - ADX < 20 → ranging regardless of EMA position (weak/no trend)
+//   - ADX >= 20 → use EMA_50 vs EMA_200 + price position for direction
+//
+// Without ADX data, falls back to pure EMA logic.
 func htfContext(indicators map[string]float64, tf string, bars map[string][]models.OHLCV) string {
 	ema50, has50 := indicators[tf+":EMA_50"]
 	ema200, has200 := indicators[tf+":EMA_200"]
@@ -455,6 +457,11 @@ func htfContext(indicators map[string]float64, tf string, bars map[string][]mode
 		return ""
 	}
 	price := b[0].Close // most recent bar (bars are in DESC order in pipeline)
+
+	// ADX check: if trend strength is weak, classify as ranging
+	if adxVal, hasADX := indicators[tf+":ADX_14"]; hasADX && adxVal < 20 {
+		return "" // ADX below 20 = no meaningful trend
+	}
 
 	if ema50 > ema200 && price > ema50 {
 		return "LONG"

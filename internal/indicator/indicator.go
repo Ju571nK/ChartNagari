@@ -85,6 +85,11 @@ func Compute(bars map[string][]models.OHLCV) map[string]float64 {
 			result[prefix+"ATR_14"] = v
 		}
 
+		// ADX 14 (trend strength 0-100)
+		if v, ok := adx(highs, lows, closes, 14); ok {
+			result[prefix+"ADX_14"] = v
+		}
+
 		// Swing High / Low (lookback=5)
 		if sh, sl, ok := swingHighLow(candles, 5); ok {
 			result[prefix+"SWING_HIGH"] = sh

@@ -1252,7 +1252,8 @@ function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
 function BacktestTab() {
   const { t } = useTranslation()
-  const [symbols, setSymbols] = useState<string[]>([])
+  const [symbols, setSymbols] = useState<SymbolItem[]>([])
+  const [marketFilter, setMarketFilter] = useState('all')
   const [rules, setRules] = useState<string[]>([])
   const [symbol, setSymbol] = useState('')
   const [tf, setTf] = useState<TF>('1H')
@@ -1271,15 +1272,42 @@ function BacktestTab() {
 
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
-      const enabled = items.filter((i) => i.enabled).map((i) => i.symbol)
+      const enabled = items.filter((i) => i.enabled)
       setSymbols(enabled)
-      if (enabled.length > 0) setSymbol(enabled[0])
+      if (enabled.length > 0) setSymbol(enabled[0].symbol)
     }).catch(() => {/* silently ignore */})
 
     apiFetch<RuleItem[]>('/rules').then((items) => {
       setRules(items.filter((r) => r.enabled).map((r) => r.name))
     }).catch(() => {/* silently ignore */})
   }, [])
+
+  const btMarkets = useMemo(() => {
+    const seen = new Set<string>()
+    symbols.forEach(s => {
+      if (s.type === 'crypto') seen.add('crypto')
+      else if (s.exchange) seen.add(s.exchange.toUpperCase())
+    })
+    return ['all', ...Array.from(seen).sort()]
+  }, [symbols])
+
+  const btMarketCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: symbols.length }
+    symbols.forEach(s => {
+      if (s.type === 'crypto') counts['crypto'] = (counts['crypto'] ?? 0) + 1
+      else if (s.exchange) {
+        const key = s.exchange.toUpperCase()
+        counts[key] = (counts[key] ?? 0) + 1
+      }
+    })
+    return counts
+  }, [symbols])
+
+  const btFilteredSymbols = useMemo(() => {
+    if (marketFilter === 'all') return symbols
+    if (marketFilter === 'crypto') return symbols.filter(s => s.type === 'crypto')
+    return symbols.filter(s => s.type === 'stock' && s.exchange.toUpperCase() === marketFilter)
+  }, [symbols, marketFilter])
 
   const run = useCallback(async () => {
     if (!symbol) return
@@ -1441,6 +1469,22 @@ function BacktestTab() {
   return (
     <>
       <p className="section-title">{t('backtest_settings')}</p>
+      {btMarkets.length > 1 && (
+        <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+          {btMarkets.map(m => (
+            <button
+              key={m}
+              className={`tab-btn${marketFilter === m ? ' active' : ''}`}
+              onClick={() => setMarketFilter(m)}
+            >
+              {m === 'all' ? t('all') : m}
+              {btMarketCounts[m] !== undefined && (
+                <span style={{ marginLeft: 4, opacity: 0.6, fontSize: '0.8em' }}>({btMarketCounts[m]})</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="backtest-controls">
         <select
           className="chart-select"
@@ -1448,8 +1492,8 @@ function BacktestTab() {
           onChange={(e) => setSymbol(e.target.value)}
           disabled={loading}
         >
-          {symbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
-          {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
+          {btFilteredSymbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
+          {btFilteredSymbols.map((s) => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
         </select>
 
         <div className="tf-group">

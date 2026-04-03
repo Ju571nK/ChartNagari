@@ -16,6 +16,9 @@ type Signal struct {
 	EntryPrice float64 `json:"entry_price"` // 신호 발생 시 기준가 (최신 종가)
 	TP         float64 `json:"tp"`          // Take Profit = Entry ± ATR×2.0
 	SL         float64 `json:"sl"`          // Stop Loss  = Entry ∓ ATR×1.0
+	// Zone represents a price range for visual overlay (FVG gap, OB zone, etc.)
+	ZoneLow  float64 `json:"zone_low,omitempty"`  // lower bound of the signal zone
+	ZoneHigh float64 `json:"zone_high,omitempty"` // upper bound of the signal zone
 	CreatedAt        time.Time `json:"created_at"`
 }
 

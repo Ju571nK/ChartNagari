@@ -187,6 +187,22 @@ func (db *DB) migrate() error {
 		}
 	}
 
+	// Migrate existing DB: add zone_low / zone_high columns for chart overlays
+	if _, err := db.conn.Exec(
+		`ALTER TABLE signals ADD COLUMN zone_low REAL NOT NULL DEFAULT 0`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("signals zone_low migration failed: %w", err)
+		}
+	}
+	if _, err := db.conn.Exec(
+		`ALTER TABLE signals ADD COLUMN zone_high REAL NOT NULL DEFAULT 0`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("signals zone_high migration failed: %w", err)
+		}
+	}
+
 	return nil
 }
 

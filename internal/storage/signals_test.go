@@ -30,6 +30,8 @@ func TestSaveAndGetSignal_WithAIInterpretation(t *testing.T) {
 		Score:            8.5,
 		Message:          "OB 진입 신호",
 		AIInterpretation: "1. 시장구조: 상승 추세\n2. 진입근거: OB 재진입\n3. 위험요인: 전저점 이탈\n4. 결론: LONG",
+		ZoneLow:          62000.0,
+		ZoneHigh:         63500.0,
 		CreatedAt:        time.Now().UTC().Truncate(time.Second),
 	}
 
@@ -54,5 +56,11 @@ func TestSaveAndGetSignal_WithAIInterpretation(t *testing.T) {
 	}
 	if got.Score != sig.Score {
 		t.Errorf("Score: want %v, got %v", sig.Score, got.Score)
+	}
+	if got.ZoneLow != sig.ZoneLow {
+		t.Errorf("ZoneLow: want %v, got %v", sig.ZoneLow, got.ZoneLow)
+	}
+	if got.ZoneHigh != sig.ZoneHigh {
+		t.Errorf("ZoneHigh: want %v, got %v", sig.ZoneHigh, got.ZoneHigh)
 	}
 }

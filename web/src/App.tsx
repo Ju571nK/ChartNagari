@@ -36,6 +36,8 @@ interface SignalBar {
   score: number
   message: string
   ai_interpretation: string
+  zone_low?: number
+  zone_high?: number
 }
 
 interface SymbolItem {
@@ -174,6 +176,22 @@ function loadSignalFilter(): Set<string> {
 
 function saveSignalFilter(enabled: Set<string>) {
   localStorage.setItem(CHART_FILTER_STORAGE_KEY, JSON.stringify([...enabled]))
+}
+
+const CHART_OVERLAY_STORAGE_KEY = 'chartnagari_chart_overlays'
+
+type OverlayType = 'fvg' | 'ob' | 'zones'
+
+function loadOverlayToggles(): Set<OverlayType> {
+  try {
+    const stored = localStorage.getItem(CHART_OVERLAY_STORAGE_KEY)
+    if (stored) return new Set(JSON.parse(stored) as OverlayType[])
+  } catch { /* ignore */ }
+  return new Set<OverlayType>()
+}
+
+function saveOverlayToggles(enabled: Set<OverlayType>) {
+  localStorage.setItem(CHART_OVERLAY_STORAGE_KEY, JSON.stringify([...enabled]))
 }
 
 function abbreviateRule(rule: string): string {
@@ -689,6 +707,7 @@ function ChartTab() {
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(loadSignalFilter)
   const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
   const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
+  const [enabledOverlays, setEnabledOverlays] = useState<Set<OverlayType>>(loadOverlayToggles)
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -697,6 +716,8 @@ function ChartTab() {
   const swingLowLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const markersPluginRef = useRef<any>(null)
+  type PriceLineRef = ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>
+  const overlayLinesRef = useRef<PriceLineRef[]>([])
 
   // Load enabled symbols for the selector
   useEffect(() => {
@@ -786,6 +807,7 @@ function ChartTab() {
         markersPluginRef.current.detach()
         markersPluginRef.current = null
       }
+      overlayLinesRef.current = []
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -803,6 +825,11 @@ function ChartTab() {
       markersPluginRef.current.detach()
       markersPluginRef.current = null
     }
+    // Remove overlay price lines before loading new data
+    for (const line of overlayLinesRef.current) {
+      try { seriesRef.current.removePriceLine(line) } catch { /* already removed */ }
+    }
+    overlayLinesRef.current = []
 
     apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`)
       .then((bars) => {
@@ -932,6 +959,98 @@ function ChartTab() {
       .catch(() => {/* silently ignore wyckoff fetch errors */})
   }, [wyckoffEnabled, symbol, tf])
 
+  // Overlay price lines effect: FVG / OB zones from signals, Wyckoff phase zones
+  useEffect(() => {
+    if (!seriesRef.current) return
+
+    // Remove previous overlay lines
+    for (const line of overlayLinesRef.current) {
+      try { seriesRef.current.removePriceLine(line) } catch { /* already removed */ }
+    }
+    overlayLinesRef.current = []
+
+    const lines: PriceLineRef[] = []
+
+    // FVG zone overlays
+    if (enabledOverlays.has('fvg')) {
+      for (const s of signals) {
+        if (s.rule !== 'ict_fair_value_gap') continue
+        if (!s.zone_low || !s.zone_high || s.zone_low === 0 || s.zone_high === 0) continue
+        lines.push(seriesRef.current.createPriceLine({
+          price: s.zone_low,
+          color: 'rgba(143,203,155,0.15)',
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: false,
+          title: 'FVG',
+        }))
+        lines.push(seriesRef.current.createPriceLine({
+          price: s.zone_high,
+          color: 'rgba(143,203,155,0.15)',
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: false,
+          title: '',
+        }))
+      }
+    }
+
+    // OB zone overlays
+    if (enabledOverlays.has('ob')) {
+      for (const s of signals) {
+        if (s.rule !== 'ict_order_block') continue
+        if (!s.zone_low || !s.zone_high || s.zone_low === 0 || s.zone_high === 0) continue
+        lines.push(seriesRef.current.createPriceLine({
+          price: s.zone_low,
+          color: 'rgba(91,146,121,0.15)',
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: false,
+          title: 'OB',
+        }))
+        lines.push(seriesRef.current.createPriceLine({
+          price: s.zone_high,
+          color: 'rgba(91,146,121,0.15)',
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: false,
+          title: '',
+        }))
+      }
+    }
+
+    // Wyckoff phase zone overlays
+    if (enabledOverlays.has('zones') && wyckoffData?.phase_zones) {
+      const phaseColors: Record<string, string> = {
+        accumulation: 'rgba(34,197,94,0.1)',
+        markup:       'rgba(143,203,155,0.1)',
+        distribution: 'rgba(245,158,11,0.1)',
+        markdown:     'rgba(239,68,68,0.1)',
+      }
+      for (const zone of wyckoffData.phase_zones) {
+        const color = phaseColors[zone.phase] ?? 'rgba(143,128,115,0.1)'
+        lines.push(seriesRef.current.createPriceLine({
+          price: zone.price_low,
+          color,
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: false,
+          title: zone.phase.slice(0, 3).toUpperCase(),
+        }))
+        lines.push(seriesRef.current.createPriceLine({
+          price: zone.price_high,
+          color,
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: false,
+          title: '',
+        }))
+      }
+    }
+
+    overlayLinesRef.current = lines
+  }, [signals, enabledOverlays, wyckoffData])
+
   return (
     <>
       <div className="chart-controls">
@@ -1000,6 +1119,26 @@ function ChartTab() {
             title={`${def.rules.map(r => RULE_ABBR[r] ?? r).join(', ')}`}
           >
             {def.label}
+          </button>
+        ))}
+        <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
+        {(['fvg', 'ob', 'zones'] as OverlayType[]).map((ov) => (
+          <button
+            key={ov}
+            className={`tf-btn${enabledOverlays.has(ov) ? ' active' : ''}`}
+            onClick={() => {
+              setEnabledOverlays(prev => {
+                const next = new Set(prev)
+                if (next.has(ov)) next.delete(ov)
+                else next.add(ov)
+                saveOverlayToggles(next)
+                return next
+              })
+            }}
+            style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
+            title={ov === 'fvg' ? 'Fair Value Gap zone overlay' : ov === 'ob' ? 'Order Block zone overlay' : 'Wyckoff phase zone overlay'}
+          >
+            {t(`overlay_${ov}`)}
           </button>
         ))}
       </div>

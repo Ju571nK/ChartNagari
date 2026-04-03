@@ -10,8 +10,8 @@ import (
 // SaveSignal persists a generated signal to the database.
 func (db *DB) SaveSignal(sig models.Signal) error {
 	_, err := db.conn.Exec(`
-		INSERT INTO signals (symbol, timeframe, rule, direction, score, message, ai_interpretation, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO signals (symbol, timeframe, rule, direction, score, message, ai_interpretation, zone_low, zone_high, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sig.Symbol,
 		sig.Timeframe,
 		sig.Rule,
@@ -19,6 +19,8 @@ func (db *DB) SaveSignal(sig models.Signal) error {
 		sig.Score,
 		sig.Message,
 		sig.AIInterpretation,
+		sig.ZoneLow,
+		sig.ZoneHigh,
 		sig.CreatedAt.Unix(),
 	)
 	if err != nil {
@@ -41,7 +43,7 @@ func (db *DB) GetSignalsByDate(symbol string, date time.Time) ([]models.Signal, 
 	end := start.AddDate(0, 0, 1)
 
 	rows, err := db.conn.Query(`
-		SELECT symbol, timeframe, rule, direction, score, message, ai_interpretation, created_at
+		SELECT symbol, timeframe, rule, direction, score, message, ai_interpretation, zone_low, zone_high, created_at
 		FROM signals
 		WHERE symbol = ? AND created_at >= ? AND created_at < ?
 		ORDER BY created_at DESC`,
@@ -57,7 +59,7 @@ func (db *DB) GetSignalsByDate(symbol string, date time.Time) ([]models.Signal, 
 		var s models.Signal
 		var createdAtUnix int64
 		if err := rows.Scan(
-			&s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &createdAtUnix,
+			&s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &s.ZoneLow, &s.ZoneHigh, &createdAtUnix,
 		); err != nil {
 			return nil, err
 		}
@@ -71,7 +73,7 @@ func (db *DB) GetSignalsByDate(symbol string, date time.Time) ([]models.Signal, 
 // symbol="ALL" → all symbols. direction="ALL" → all directions.
 func (db *DB) GetSignalsFiltered(symbol, direction string, limit int) ([]models.Signal, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, symbol, timeframe, rule, direction, score, message, ai_interpretation, created_at
+		SELECT id, symbol, timeframe, rule, direction, score, message, ai_interpretation, zone_low, zone_high, created_at
 		FROM signals
 		WHERE (? = 'ALL' OR symbol = ?)
 		  AND (? = 'ALL' OR direction = ?)
@@ -90,7 +92,7 @@ func (db *DB) GetSignalsFiltered(symbol, direction string, limit int) ([]models.
 		var id int64
 		var createdAtUnix int64
 		if err := rows.Scan(
-			&id, &s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &createdAtUnix,
+			&id, &s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &s.ZoneLow, &s.ZoneHigh, &createdAtUnix,
 		); err != nil {
 			return nil, err
 		}
@@ -103,7 +105,7 @@ func (db *DB) GetSignalsFiltered(symbol, direction string, limit int) ([]models.
 // GetSignals retrieves the N most recent signals for a given symbol.
 func (db *DB) GetSignals(symbol string, limit int) ([]models.Signal, error) {
 	rows, err := db.conn.Query(`
-		SELECT symbol, timeframe, rule, direction, score, message, ai_interpretation, created_at
+		SELECT symbol, timeframe, rule, direction, score, message, ai_interpretation, zone_low, zone_high, created_at
 		FROM signals
 		WHERE symbol = ?
 		ORDER BY created_at DESC
@@ -120,7 +122,7 @@ func (db *DB) GetSignals(symbol string, limit int) ([]models.Signal, error) {
 		var s models.Signal
 		var createdAtUnix int64
 		if err := rows.Scan(
-			&s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &createdAtUnix,
+			&s.Symbol, &s.Timeframe, &s.Rule, &s.Direction, &s.Score, &s.Message, &s.AIInterpretation, &s.ZoneLow, &s.ZoneHigh, &createdAtUnix,
 		); err != nil {
 			return nil, err
 		}

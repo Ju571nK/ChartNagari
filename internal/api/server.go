@@ -80,6 +80,8 @@ type SignalBar struct {
 	Score            float64 `json:"score"`
 	Message          string  `json:"message"`
 	AIInterpretation string  `json:"ai_interpretation"`
+	ZoneLow          float64 `json:"zone_low,omitempty"`
+	ZoneHigh         float64 `json:"zone_high,omitempty"`
 }
 
 // AggregatedRuleStat aggregates per-rule backtest stats across multiple symbols.
@@ -613,6 +615,8 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 			Score:            sig.Score,
 			Message:          sig.Message,
 			AIInterpretation: sig.AIInterpretation,
+			ZoneLow:          sig.ZoneLow,
+			ZoneHigh:         sig.ZoneHigh,
 		}
 	}
 	jsonOK(w, result)
@@ -690,6 +694,8 @@ func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {
 			Score:            sig.Score,
 			Message:          sig.Message,
 			AIInterpretation: sig.AIInterpretation,
+			ZoneLow:          sig.ZoneLow,
+			ZoneHigh:         sig.ZoneHigh,
 		}
 	}
 	jsonOK(w, result)

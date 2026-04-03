@@ -297,5 +297,8 @@
   "profile_small_cap_stock": "小型株",
   "signal_profile": "シグナルプロファイル",
   "profile_updated": "プロファイルが更新されました",
-  "profile_update_failed": "プロファイル更新失敗"
+  "profile_update_failed": "プロファイル更新失敗",
+  "overlay_fvg": "FVG",
+  "overlay_ob": "OB",
+  "overlay_zones": "Zones"
 }

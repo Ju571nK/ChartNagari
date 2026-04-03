@@ -297,5 +297,8 @@
   "profile_small_cap_stock": "소형주",
   "signal_profile": "시그널 프로파일",
   "profile_updated": "프로파일이 변경되었습니다",
-  "profile_update_failed": "프로파일 변경 실패"
+  "profile_update_failed": "프로파일 변경 실패",
+  "overlay_fvg": "FVG",
+  "overlay_ob": "OB",
+  "overlay_zones": "Zones"
 }

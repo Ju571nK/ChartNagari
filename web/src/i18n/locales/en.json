@@ -297,5 +297,8 @@
   "profile_small_cap_stock": "Small Cap Stock",
   "signal_profile": "Signal Profile",
   "profile_updated": "Profile updated",
-  "profile_update_failed": "Profile update failed"
+  "profile_update_failed": "Profile update failed",
+  "overlay_fvg": "FVG",
+  "overlay_ob": "OB",
+  "overlay_zones": "Zones"
 }

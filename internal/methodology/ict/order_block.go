@@ -145,6 +145,8 @@ func (r *ICTOrderBlockRule) Analyze(ctx models.AnalysisContext) (*models.Signal,
 				Direction: dir,
 				Score:     rawScore,
 				Message:   fmt.Sprintf("[%s] ICT Order Block 감지 → %s (OB Zone: %.4f-%.4f)", tf, dir, obLow, obHigh),
+				ZoneLow:   obLow,
+				ZoneHigh:  obHigh,
 				CreatedAt: time.Now(),
 			}
 		}

@@ -175,6 +175,8 @@ func (r *ICTFairValueGapRule) Analyze(ctx models.AnalysisContext) (*models.Signa
 				Direction: dir,
 				Score:     rawScore,
 				Message:   fmt.Sprintf("[%s] ICT FVG 진입 → %s (Gap: %.4f-%.4f, 품질: %.0f%%)", tf, dir, gapLow, gapHigh, rawScore*100),
+				ZoneLow:   gapLow,
+				ZoneHigh:  gapHigh,
 				CreatedAt: time.Now(),
 			}
 		}

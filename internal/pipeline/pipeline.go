@@ -353,6 +353,9 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		p.log.Debug().Str("symbol", sym).Str("phase", string(wyckoffPhase)).Msg("Wyckoff phase boost: SHORT +20%")
 	}
 
+	// Volume Profile boost: adjust scores based on proximity to HVN/LVN/POC levels.
+	applyVolumeProfileBoost(signals, indicators)
+
 	// Paper trading: open new positions and check existing TP/SL.
 	if p.paperTrader != nil {
 		p.paperTrader.OnSignals(signals)

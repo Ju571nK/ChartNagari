@@ -4,6 +4,7 @@
 package backtest
 
 import (
+	"math"
 	"time"
 
 	"github.com/Ju571nK/Chatter/internal/engine"
@@ -27,14 +28,25 @@ type TradeOutcome struct {
 	PnLPct     float64   `json:"pnl_pct"` // 수익률 %
 }
 
+// RegimeStats holds aggregated performance metrics for a single volatility regime.
+type RegimeStats struct {
+	Regime       string  `json:"regime"`          // "LOW_VOL", "NORMAL", "HIGH_VOL"
+	Trades       int     `json:"trades"`
+	WinRate      float64 `json:"win_rate"`
+	AvgRR        float64 `json:"avg_rr"`
+	ProfitFactor float64 `json:"profit_factor"`
+	TotalReturn  float64 `json:"total_return_pct"`
+}
+
 // BacktestResult holds the full output of a backtest run.
 type BacktestResult struct {
-	Symbol    string         `json:"symbol"`
-	Timeframe string         `json:"timeframe"`
-	Bars      int            `json:"bars"`
-	Trades    int            `json:"trades"`
-	Stats     Stats          `json:"stats"`
-	Outcomes  []TradeOutcome `json:"outcomes"`
+	Symbol      string         `json:"symbol"`
+	Timeframe   string         `json:"timeframe"`
+	Bars        int            `json:"bars"`
+	Trades      int            `json:"trades"`
+	Stats       Stats          `json:"stats"`
+	Outcomes    []TradeOutcome `json:"outcomes"`
+	RegimeStats []RegimeStats  `json:"regime_stats,omitempty"`
 }
 
 // Config controls the simulation parameters.
@@ -208,6 +220,7 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 
 	result.Trades = len(result.Outcomes)
 	result.Stats = ComputeStats(result.Outcomes)
+	result.RegimeStats = computeRegimeStats(result.Outcomes, bars)
 	return result
 }
 
@@ -219,4 +232,130 @@ func buildContext(symbol, timeframe string, bars []models.OHLCV) models.Analysis
 		Timeframes: tfs,
 		Indicators: indicator.Compute(tfs),
 	}
+}
+
+// ── ATR percentile regime classification ─────────────────────────────────────
+
+const (
+	atrPeriod     = 14
+	atrHistoryLen = 90
+	lowVolPct     = 25.0
+	highVolPct    = 75.0
+)
+
+// btATRPercentile computes the percentile rank (0-100) of the ATR at the given
+// bar index within bars (ascending order). It mirrors the logic in
+// internal/pipeline/regime.go but is local to avoid circular imports.
+//
+// Returns -1 when there is insufficient data.
+func btATRPercentile(bars []models.OHLCV, barIdx int) float64 {
+	// We need atrHistoryLen bars ending at barIdx (inclusive).
+	if barIdx < atrHistoryLen-1 {
+		return -1
+	}
+	window := bars[barIdx-atrHistoryLen+1 : barIdx+1] // ascending, length = atrHistoryLen
+
+	if atrHistoryLen < atrPeriod+1 {
+		return -1
+	}
+
+	tr := func(i int) float64 {
+		hl := window[i].High - window[i].Low
+		hc := math.Abs(window[i].High - window[i-1].Close)
+		lc := math.Abs(window[i].Low - window[i-1].Close)
+		return math.Max(hl, math.Max(hc, lc))
+	}
+
+	// Seed: simple average of the first atrPeriod true ranges.
+	var seed float64
+	for i := 1; i <= atrPeriod; i++ {
+		seed += tr(i)
+	}
+	seed /= float64(atrPeriod)
+
+	numATR := atrHistoryLen - atrPeriod
+	if numATR <= 0 {
+		return -1
+	}
+	atrHistory := make([]float64, 0, numATR)
+	cur := seed
+	atrHistory = append(atrHistory, cur)
+	for i := atrPeriod + 1; i < atrHistoryLen; i++ {
+		cur = (cur*float64(atrPeriod-1) + tr(i)) / float64(atrPeriod)
+		atrHistory = append(atrHistory, cur)
+	}
+
+	currentATR := atrHistory[len(atrHistory)-1]
+
+	count := 0
+	for _, v := range atrHistory {
+		if v <= currentATR {
+			count++
+		}
+	}
+	return float64(count) / float64(len(atrHistory)) * 100.0
+}
+
+// classifyRegime returns "LOW_VOL", "NORMAL", or "HIGH_VOL" for a given
+// ATR percentile value. Returns "" when percentile is invalid (< 0).
+func classifyRegime(pct float64) string {
+	if pct < 0 {
+		return ""
+	}
+	if pct < lowVolPct {
+		return "LOW_VOL"
+	}
+	if pct > highVolPct {
+		return "HIGH_VOL"
+	}
+	return "NORMAL"
+}
+
+// computeRegimeStats classifies each trade outcome by ATR percentile regime
+// at its entry time and computes per-regime statistics.
+func computeRegimeStats(outcomes []TradeOutcome, bars []models.OHLCV) []RegimeStats {
+	if len(outcomes) == 0 || len(bars) == 0 {
+		return nil
+	}
+
+	// Build a time-to-index lookup for fast bar matching.
+	timeIdx := make(map[time.Time]int, len(bars))
+	for i, b := range bars {
+		timeIdx[b.OpenTime] = i
+	}
+
+	// Group outcomes by regime.
+	groups := map[string][]TradeOutcome{}
+	for _, o := range outcomes {
+		idx, ok := timeIdx[o.EntryTime]
+		if !ok {
+			continue
+		}
+		pct := btATRPercentile(bars, idx)
+		regime := classifyRegime(pct)
+		if regime == "" {
+			continue
+		}
+		groups[regime] = append(groups[regime], o)
+	}
+
+	// Compute stats for each regime.
+	order := []string{"LOW_VOL", "NORMAL", "HIGH_VOL"}
+	var result []RegimeStats
+	for _, regime := range order {
+		trades := groups[regime]
+		if len(trades) == 0 {
+			continue
+		}
+		s := ComputeStats(trades)
+		result = append(result, RegimeStats{
+			Regime:       regime,
+			Trades:       len(trades),
+			WinRate:      s.WinRate,
+			AvgRR:        s.AvgRR,
+			ProfitFactor: s.ProfitFactor,
+			TotalReturn:  s.TotalReturnPct,
+		})
+	}
+	return result
 }

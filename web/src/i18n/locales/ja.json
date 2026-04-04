@@ -313,5 +313,13 @@
   "atr_ema_period": "EMA期間",
   "rising_slope_bonus": "上昇スロープボーナス",
   "tuning_save": "変更を保存",
-  "tuning_saved": "設定を保存しました"
+  "tuning_saved": "設定を保存しました",
+  "regime_performance": "レジーム別パフォーマンス",
+  "regime_low_vol": "低ボラティリティ",
+  "regime_normal": "通常",
+  "regime_high_vol": "高ボラティリティ",
+  "regime_trades": "トレード数",
+  "regime_avg_rr": "平均R:R",
+  "regime_pf": "PF",
+  "regime_return": "リターン"
 }

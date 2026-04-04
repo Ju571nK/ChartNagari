@@ -313,5 +313,13 @@
   "atr_ema_period": "EMA Period",
   "rising_slope_bonus": "Rising Slope Bonus",
   "tuning_save": "Save Changes",
-  "tuning_saved": "Settings saved"
+  "tuning_saved": "Settings saved",
+  "regime_performance": "Regime Performance",
+  "regime_low_vol": "Low Volatility",
+  "regime_normal": "Normal",
+  "regime_high_vol": "High Volatility",
+  "regime_trades": "Trades",
+  "regime_avg_rr": "Avg R:R",
+  "regime_pf": "PF",
+  "regime_return": "Return"
 }

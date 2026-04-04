@@ -313,5 +313,13 @@
   "atr_ema_period": "EMA 기간",
   "rising_slope_bonus": "상승 기울기 보너스",
   "tuning_save": "변경사항 저장",
-  "tuning_saved": "설정 저장됨"
+  "tuning_saved": "설정 저장됨",
+  "regime_performance": "레짐별 성과",
+  "regime_low_vol": "저변동성",
+  "regime_normal": "보통",
+  "regime_high_vol": "고변동성",
+  "regime_trades": "거래 수",
+  "regime_avg_rr": "평균 R:R",
+  "regime_pf": "PF",
+  "regime_return": "수익률"
 }

@@ -1228,6 +1228,15 @@ interface TradeOutcome {
   pnl_pct: number
 }
 
+interface RegimeStats {
+  regime: string
+  trades: number
+  win_rate: number
+  avg_rr: number
+  profit_factor: number
+  total_return_pct: number
+}
+
 interface BacktestResult {
   symbol: string
   timeframe: string
@@ -1235,6 +1244,7 @@ interface BacktestResult {
   trades: number
   stats: BacktestStats
   outcomes: TradeOutcome[]
+  regime_stats?: RegimeStats[]
 }
 
 interface RuleStats {
@@ -1668,6 +1678,50 @@ function BacktestTab() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {result.regime_stats && result.regime_stats.length > 0 && (
+            <>
+              <p className="section-title" style={{ marginTop: 24 }}>{t('regime_performance')}</p>
+              <div className="backtest-table-wrap">
+                <table className="backtest-table">
+                  <thead>
+                    <tr>
+                      <th>{t('regime_performance')}</th>
+                      <th>{t('regime_trades')}</th>
+                      <th>{t('win_rate')}</th>
+                      <th>{t('regime_avg_rr')}</th>
+                      <th>{t('regime_pf')}</th>
+                      <th>{t('regime_return')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.regime_stats.map((rs) => {
+                      const regimeLabel = rs.regime === 'LOW_VOL' ? t('regime_low_vol')
+                        : rs.regime === 'HIGH_VOL' ? t('regime_high_vol')
+                        : t('regime_normal')
+                      const regimeColor = rs.regime === 'LOW_VOL' ? 'var(--warning)'
+                        : rs.regime === 'HIGH_VOL' ? 'var(--safe, var(--mint))'
+                        : 'var(--text)'
+                      return (
+                        <tr key={rs.regime}>
+                          <td style={{ color: regimeColor, fontWeight: 600 }}>{regimeLabel}</td>
+                          <td>{rs.trades}</td>
+                          <td style={{ color: rs.win_rate >= 0.45 ? 'var(--mint)' : 'var(--muted)', fontWeight: 600 }}>
+                            {(rs.win_rate * 100).toFixed(1)}%
+                          </td>
+                          <td>{rs.avg_rr.toFixed(2)}</td>
+                          <td>{rs.profit_factor.toFixed(2)}</td>
+                          <td className={rs.total_return_pct >= 0 ? 'pnl-win' : 'pnl-loss'}>
+                            {fmtPct(rs.total_return_pct)}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

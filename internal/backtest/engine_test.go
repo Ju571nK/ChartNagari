@@ -283,3 +283,110 @@ func TestCalcMaxDrawdown(t *testing.T) {
 		t.Errorf("MaxDrawdown: want %f, got %f", expected, mdd)
 	}
 }
+
+// Test 11: RegimeStats populated on result with enough bars.
+func TestRun_RegimeStatsPresent(t *testing.T) {
+	cfg := Config{WarmupBars: 14, MaxExitBars: 5, TPATRMultiplier: 2.0, SLATRMultiplier: 1.0}
+	eng := New(
+		[]rule.AnalysisRule{&alwaysLongRule{score: 1.0}},
+		engCfgFor("always_long"),
+		cfg,
+	)
+
+	// Create 250 bars — more than enough for warmup + ATR history (90 bars).
+	bars := makeBars(250, 100.0, 1.0)
+
+	// Inject some High-Vol bars early on to diversify regimes: widen spread dramatically
+	// for bars 100–130 so that trades entering around those bars see elevated ATR.
+	for i := 100; i < 130; i++ {
+		bars[i].High = 110.0
+		bars[i].Low = 90.0
+	}
+
+	result := eng.Run("TEST", "1H", "", bars)
+	if result.Trades == 0 {
+		t.Fatal("expected trades with 250 bars")
+	}
+
+	// RegimeStats must be non-nil.
+	if result.RegimeStats == nil {
+		t.Fatal("expected non-nil RegimeStats")
+	}
+
+	// Total trades across regimes should equal total outcomes (minus any unclassified).
+	totalRegime := 0
+	for _, rs := range result.RegimeStats {
+		totalRegime += rs.Trades
+		// Each regime must have a valid label.
+		if rs.Regime != "LOW_VOL" && rs.Regime != "NORMAL" && rs.Regime != "HIGH_VOL" {
+			t.Errorf("unexpected regime label: %q", rs.Regime)
+		}
+		// WinRate should be 0-1.
+		if rs.WinRate < 0 || rs.WinRate > 1 {
+			t.Errorf("regime %s: invalid win rate %f", rs.Regime, rs.WinRate)
+		}
+	}
+	if totalRegime == 0 {
+		t.Error("expected at least some trades classified into regimes")
+	}
+}
+
+// Test 12: classifyRegime boundaries.
+func TestClassifyRegime(t *testing.T) {
+	tests := []struct {
+		pct  float64
+		want string
+	}{
+		{-1, ""},
+		{0, "LOW_VOL"},
+		{24.9, "LOW_VOL"},
+		{25, "NORMAL"},
+		{50, "NORMAL"},
+		{75, "NORMAL"},
+		{75.1, "HIGH_VOL"},
+		{100, "HIGH_VOL"},
+	}
+	for _, tt := range tests {
+		got := classifyRegime(tt.pct)
+		if got != tt.want {
+			t.Errorf("classifyRegime(%v) = %q, want %q", tt.pct, got, tt.want)
+		}
+	}
+}
+
+// Test 13: btATRPercentile returns -1 with insufficient bars.
+func TestBTATRPercentile_InsufficientBars(t *testing.T) {
+	bars := makeBars(50, 100.0, 1.0)
+	// barIdx = 50 is out of range, barIdx = 10 means only 11 bars available, < 90
+	pct := btATRPercentile(bars, 10)
+	if pct != -1 {
+		t.Errorf("expected -1 for insufficient bars, got %f", pct)
+	}
+}
+
+// Test 14: btATRPercentile returns valid percentile with sufficient bars.
+func TestBTATRPercentile_ValidRange(t *testing.T) {
+	bars := makeBars(100, 100.0, 1.0)
+	pct := btATRPercentile(bars, 99)
+	if pct < 0 || pct > 100 {
+		t.Errorf("expected percentile 0-100, got %f", pct)
+	}
+}
+
+// Test 15: computeRegimeStats returns nil for empty outcomes.
+func TestComputeRegimeStats_Empty(t *testing.T) {
+	bars := makeBars(100, 100.0, 1.0)
+	rs := computeRegimeStats(nil, bars)
+	if rs != nil {
+		t.Error("expected nil regime stats for empty outcomes")
+	}
+}
+
+// Test 16: RegimeStats backward compatibility — empty result has no regime_stats.
+func TestRun_EmptyBars_NoRegimeStats(t *testing.T) {
+	eng := New(nil, engine.RuleConfig{}, DefaultConfig())
+	result := eng.Run("TEST", "1H", "", nil)
+	if result.RegimeStats != nil {
+		t.Error("expected nil RegimeStats for empty bars")
+	}
+}

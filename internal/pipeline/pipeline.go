@@ -367,6 +367,13 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	// Volume Profile boost: adjust scores based on proximity to HVN/LVN/POC levels.
 	applyVolumeProfileBoost(signals, indicators)
 
+	// Volatility regime scoring: adjust scores based on ATR percentile classification.
+	if p.tuningHolder != nil {
+		tc := p.tuningHolder.Get()
+		applyVolatilityRegime(signals, allBars, indicators, tc.VolatilityRegime)
+		applyATRSlopeBonus(signals, allBars, indicators, tc.ATRSlope)
+	}
+
 	// Paper trading: open new positions and check existing TP/SL.
 	if p.paperTrader != nil {
 		p.paperTrader.OnSignals(signals)

@@ -72,7 +72,7 @@ ehthumbs.db
 # .cursor/
 
 # Claude Code (폴더 전체 미추적)
-.claude/
+.claude/settings.local.json
 # ↑ .claude/agents/, .claude/settings.local.json 등 모두 포함
 # 전역 팀 config는 ~/.claude/teams/ChartAnalysis-dev/ 에 저장됨
 
@@ -82,8 +82,16 @@ config/settings.yaml
 # ─── 기타 ───
 # Local overrides for config (if any)
 config/*.local.yaml
+*.gif
 *.local.yaml
 docs/research/
 docs/community-posts.md
 docs/best-of-algotrading-pr.md
 .gstack/
+.box/
+docs/research/
+docs/skills/
+docs/*.svg
+docs/*.png
+docs/*.html
+docs/*.md

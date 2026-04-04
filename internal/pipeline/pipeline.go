@@ -99,6 +99,7 @@ type Pipeline struct {
 	seqTracker *sequence.Tracker // tracks signal sequences for bonus scoring
 
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via SetSymbolProfiles
+	tuningHolder  *appconfig.SignalTuningHolder  // optional; set via SetSignalTuningHolder
 
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
@@ -158,6 +159,11 @@ func (p *Pipeline) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 // SetSymbolProfiles wires an optional per-symbol profile holder for rule filtering.
 func (p *Pipeline) SetSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	p.profileHolder = h
+}
+
+// SetSignalTuningHolder wires an optional live-updated signal tuning configuration holder.
+func (p *Pipeline) SetSignalTuningHolder(h *appconfig.SignalTuningHolder) {
+	p.tuningHolder = h
 }
 
 // SetCryptoSymbols records which symbols are crypto (vs stock) for TP/SL multiplier selection.
@@ -313,10 +319,15 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		wyckoffPhase = wa.Phase
 	}
 
-	// HTF context filter: suppress lower-TF signals that contradict higher-TF trend.
+	// HTF context filter: penalize (or suppress) lower-TF signals that contradict higher-TF trend.
+	// Penalty percentage is controlled by signal tuning config (0=pass all, 100=full suppress).
 	// Wyckoff phase can override: accumulation/markup → allow LONG even if EMA says bearish.
+	htfPenaltyPct := 100 // legacy default: full suppress
+	if p.tuningHolder != nil {
+		htfPenaltyPct = p.tuningHolder.Get().HTFFilter.CounterTrendPenaltyPct
+	}
 	beforeHTF := len(signals)
-	signals = filterHTFContext(signals, indicators, allBars, wyckoffPhase)
+	signals = penalizeHTFContext(signals, indicators, allBars, wyckoffPhase, htfPenaltyPct)
 	if filtered := beforeHTF - len(signals); filtered > 0 {
 		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Str("wyckoff_phase", string(wyckoffPhase)).Msg("HTF context filter removed counter-trend signals")
 	}
@@ -475,16 +486,25 @@ func htfContext(indicators map[string]float64, tf string, bars map[string][]mode
 	return "" // ranging
 }
 
-// filterHTFContext removes lower-timeframe (1H, 4H) signals that contradict
-// the higher-timeframe (1D, 1W) trend direction. If the HTF trend is clear
-// (LONG or SHORT), only LTF signals aligned with that direction pass through.
-// HTF signals (1D, 1W) and NEUTRAL signals are never filtered.
+// penalizeHTFContext penalizes (or removes) lower-timeframe (1H, 4H) signals
+// that contradict the higher-timeframe (1D, 1W) trend direction.
+//
+// penaltyPct controls behavior:
+//   - 0   = no penalty (all signals pass through unchanged)
+//   - 100 = full suppress (counter-trend signals removed entirely, legacy behavior)
+//   - 50  = reduce counter-trend signal scores by 50%
+//
+// HTF signals (1D, 1W) and NEUTRAL signals are never penalized.
 // If no clear HTF trend is detected, all signals pass.
 //
 // Wyckoff phase override: during accumulation/markup, even if EMA says bearish,
-// the HTF filter allows LONG signals through (trend overridden to ranging).
+// the filter allows LONG signals through (trend overridden to ranging).
 // During distribution/markdown, SHORT signals are allowed even if EMA says bullish.
-func filterHTFContext(signals []models.Signal, indicators map[string]float64, bars map[string][]models.OHLCV, phase wyckoff.Phase) []models.Signal {
+func penalizeHTFContext(signals []models.Signal, indicators map[string]float64, bars map[string][]models.OHLCV, phase wyckoff.Phase, penaltyPct int) []models.Signal {
+	if penaltyPct == 0 {
+		return signals // no penalty — pass all signals through
+	}
+
 	// Determine HTF trend: prefer 1D, fall back to 1W
 	trend := htfContext(indicators, "1D", bars)
 	if trend == "" {
@@ -510,17 +530,30 @@ func filterHTFContext(signals []models.Signal, indicators map[string]float64, ba
 
 	out := make([]models.Signal, 0, len(signals))
 	for _, sig := range signals {
-		// Always keep NEUTRAL, 1D, and 1W signals
+		// Always keep NEUTRAL, 1D, and 1W signals unchanged
 		if sig.Direction == "NEUTRAL" || sig.Timeframe == "1D" || sig.Timeframe == "1W" {
 			out = append(out, sig)
 			continue
 		}
-		// Keep LTF signals only if aligned with HTF trend
+		// Aligned with HTF trend → keep unchanged
 		if sig.Direction == trend {
 			out = append(out, sig)
+			continue
 		}
+		// Counter-trend LTF signal: apply penalty
+		if penaltyPct >= 100 {
+			continue // full suppress — remove signal entirely
+		}
+		sig.Score *= (1.0 - float64(penaltyPct)/100.0)
+		out = append(out, sig)
 	}
 	return out
+}
+
+// filterHTFContext is the legacy wrapper that fully suppresses counter-trend signals.
+// It is kept for backward compatibility with tests.
+func filterHTFContext(signals []models.Signal, indicators map[string]float64, bars map[string][]models.OHLCV, phase wyckoff.Phase) []models.Signal {
+	return penalizeHTFContext(signals, indicators, bars, phase, 100)
 }
 
 // enrichSignalLevels fills sig.EntryPrice, sig.TP, and sig.SL using ATR(14).

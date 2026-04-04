@@ -300,5 +300,18 @@
   "profile_update_failed": "プロファイル更新失敗",
   "overlay_fvg": "FVG",
   "overlay_ob": "OB",
-  "overlay_zones": "Zones"
+  "overlay_zones": "Zones",
+  "signal_tuning": "シグナルチューニング",
+  "htf_penalty": "HTF逆トレンドペナルティ",
+  "htf_penalty_hint": "0% = 全シグナル通過、100% = 逆トレンド完全除去。50% = スコア50%減少。",
+  "volatility_regime": "ボラティリティレジーム",
+  "low_vol_percentile": "低ボラティリティパーセンタイル",
+  "high_vol_percentile": "高ボラティリティパーセンタイル",
+  "low_vol_penalty": "低ボラティリティスコアペナルティ",
+  "high_vol_bonus": "高ボラティリティスコアボーナス",
+  "atr_slope": "ATRスロープ",
+  "atr_ema_period": "EMA期間",
+  "rising_slope_bonus": "上昇スロープボーナス",
+  "tuning_save": "変更を保存",
+  "tuning_saved": "設定を保存しました"
 }

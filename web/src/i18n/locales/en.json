@@ -300,5 +300,18 @@
   "profile_update_failed": "Profile update failed",
   "overlay_fvg": "FVG",
   "overlay_ob": "OB",
-  "overlay_zones": "Zones"
+  "overlay_zones": "Zones",
+  "signal_tuning": "Signal Tuning",
+  "htf_penalty": "HTF Counter-Trend Penalty",
+  "htf_penalty_hint": "0% = pass all signals, 100% = full suppress (remove counter-trend). 50% = reduce score by half.",
+  "volatility_regime": "Volatility Regime",
+  "low_vol_percentile": "Low Vol Percentile",
+  "high_vol_percentile": "High Vol Percentile",
+  "low_vol_penalty": "Low Vol Score Penalty",
+  "high_vol_bonus": "High Vol Score Bonus",
+  "atr_slope": "ATR Slope",
+  "atr_ema_period": "EMA Period",
+  "rising_slope_bonus": "Rising Slope Bonus",
+  "tuning_save": "Save Changes",
+  "tuning_saved": "Settings saved"
 }

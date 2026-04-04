@@ -2167,6 +2167,227 @@ function AlertTab() {
         {saved && <span className="save-success">{t('saved')}</span>}
         {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
       </div>
+
+      <SignalTuningSection />
+    </>
+  )
+}
+
+// ── Signal Tuning Section ─────────────────────────────────────────────────────
+
+interface SignalTuningConfig {
+  htf_filter: { counter_trend_penalty_pct: number }
+  volatility_regime: {
+    low_vol_percentile: number
+    high_vol_percentile: number
+    low_vol_penalty_pct: number
+    high_vol_bonus_pct: number
+  }
+  atr_slope: {
+    ema_period: number
+    rising_bonus_pct: number
+  }
+}
+
+function SignalTuningSection() {
+  const { t } = useTranslation()
+  const [config, setConfig] = useState<SignalTuningConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    apiFetch<SignalTuningConfig>('/signal-tuning')
+      .then(setConfig)
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  const save = useCallback(async () => {
+    if (!config) return
+    setSaving(true)
+    setError('')
+    try {
+      await putJSON('/signal-tuning', config)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('save_failed'))
+    } finally {
+      setSaving(false)
+    }
+  }, [config, t])
+
+  if (!config && !error) return <p className="loading">{t('loading')}</p>
+  if (error && !config) return <p className="error-msg">{t('error')}: {error}</p>
+  if (!config) return null
+
+  const sectionBorder = { borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '1rem', marginBottom: '1.5rem' }
+
+  return (
+    <>
+      <p className="section-title" style={{ marginTop: 28 }}>{t('signal_tuning')}</p>
+
+      {/* HTF Counter-Trend Penalty */}
+      <div style={sectionBorder}>
+        <div className="report-field" style={{ alignItems: 'center' }}>
+          <span className="field-label">{t('htf_penalty')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={config.htf_filter.counter_trend_penalty_pct}
+              onChange={(e) => setConfig({
+                ...config,
+                htf_filter: { ...config.htf_filter, counter_trend_penalty_pct: parseInt(e.target.value) }
+              })}
+              style={{ flex: 1, accentColor: 'var(--green)' }}
+            />
+            <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.82rem' }}>
+              {config.htf_filter.counter_trend_penalty_pct}%
+            </span>
+          </div>
+        </div>
+        <p className="item-meta">{t('htf_penalty_hint')}</p>
+      </div>
+
+      {/* Volatility Regime */}
+      <div style={sectionBorder}>
+        <h3 style={{
+          fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: 'var(--accent)', marginBottom: '0.75rem',
+        }}>
+          {t('volatility_regime')}
+        </h3>
+
+        <div className="report-field">
+          <span className="field-label">{t('low_vol_percentile')}</span>
+          <input
+            className="chart-select"
+            type="number"
+            min={0}
+            max={100}
+            value={config.volatility_regime.low_vol_percentile}
+            onChange={(e) => setConfig({
+              ...config,
+              volatility_regime: { ...config.volatility_regime, low_vol_percentile: parseInt(e.target.value) || 0 }
+            })}
+            style={{ width: 80 }}
+          />
+        </div>
+
+        <div className="report-field">
+          <span className="field-label">{t('high_vol_percentile')}</span>
+          <input
+            className="chart-select"
+            type="number"
+            min={0}
+            max={100}
+            value={config.volatility_regime.high_vol_percentile}
+            onChange={(e) => setConfig({
+              ...config,
+              volatility_regime: { ...config.volatility_regime, high_vol_percentile: parseInt(e.target.value) || 0 }
+            })}
+            style={{ width: 80 }}
+          />
+        </div>
+
+        <div className="report-field" style={{ alignItems: 'center' }}>
+          <span className="field-label">{t('low_vol_penalty')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={config.volatility_regime.low_vol_penalty_pct}
+              onChange={(e) => setConfig({
+                ...config,
+                volatility_regime: { ...config.volatility_regime, low_vol_penalty_pct: parseInt(e.target.value) }
+              })}
+              style={{ flex: 1, accentColor: 'var(--green)' }}
+            />
+            <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.82rem' }}>
+              {config.volatility_regime.low_vol_penalty_pct}%
+            </span>
+          </div>
+        </div>
+
+        <div className="report-field" style={{ alignItems: 'center' }}>
+          <span className="field-label">{t('high_vol_bonus')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={config.volatility_regime.high_vol_bonus_pct}
+              onChange={(e) => setConfig({
+                ...config,
+                volatility_regime: { ...config.volatility_regime, high_vol_bonus_pct: parseInt(e.target.value) }
+              })}
+              style={{ flex: 1, accentColor: 'var(--green)' }}
+            />
+            <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.82rem' }}>
+              {config.volatility_regime.high_vol_bonus_pct}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ATR Slope */}
+      <div style={sectionBorder}>
+        <h3 style={{
+          fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: 'var(--accent)', marginBottom: '0.75rem',
+        }}>
+          {t('atr_slope')}
+        </h3>
+
+        <div className="report-field">
+          <span className="field-label">{t('atr_ema_period')}</span>
+          <input
+            className="chart-select"
+            type="number"
+            min={1}
+            max={200}
+            value={config.atr_slope.ema_period}
+            onChange={(e) => setConfig({
+              ...config,
+              atr_slope: { ...config.atr_slope, ema_period: parseInt(e.target.value) || 1 }
+            })}
+            style={{ width: 80 }}
+          />
+        </div>
+
+        <div className="report-field" style={{ alignItems: 'center' }}>
+          <span className="field-label">{t('rising_slope_bonus')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={config.atr_slope.rising_bonus_pct}
+              onChange={(e) => setConfig({
+                ...config,
+                atr_slope: { ...config.atr_slope, rising_bonus_pct: parseInt(e.target.value) }
+              })}
+              style={{ flex: 1, accentColor: 'var(--green)' }}
+            />
+            <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.82rem' }}>
+              {config.atr_slope.rising_bonus_pct}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button className="tab-btn" onClick={save} disabled={saving}
+          style={{ borderColor: 'var(--green)', color: 'var(--text)', padding: '6px 20px' }}
+        >
+          {saving ? t('saving') : t('tuning_save')}
+        </button>
+        {saved && <span className="save-success">{t('tuning_saved')}</span>}
+        {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
+      </div>
     </>
   )
 }

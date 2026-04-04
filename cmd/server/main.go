@@ -166,6 +166,19 @@ func main() {
 	// ── AlertConfig 홀더 ──────────────────────────────────────────────
 	alertHolder := appconfig.NewAlertConfigHolder(cfg.Alert)
 
+	// ── Signal Tuning 홀더 ────────────────────────────────────────────
+	tuningCfg, err := appconfig.LoadSignalTuning("config/signal_tuning.yaml")
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to load signal_tuning.yaml — using defaults")
+		tuningCfg = appconfig.DefaultSignalTuning()
+	}
+	tuningHolder := appconfig.NewSignalTuningHolder(tuningCfg)
+	log.Info().
+		Int("htf_penalty", tuningCfg.HTFFilter.CounterTrendPenaltyPct).
+		Int("low_vol_pctl", tuningCfg.VolatilityRegime.LowVolPercentile).
+		Int("high_vol_pctl", tuningCfg.VolatilityRegime.HighVolPercentile).
+		Msg("signal tuning config loaded")
+
 	// ── Symbol Profiles 홀더 ──────────────────────────────────────────
 	profilesCfg, err := appconfig.LoadSymbolProfiles("config/symbol_profiles.yaml")
 	if err != nil {
@@ -232,6 +245,7 @@ func main() {
 		pipe.SetBroadcaster(wsHub)
 		pipe.SetAlertConfigHolder(alertHolder)
 		pipe.SetSymbolProfiles(profileHolder)
+		pipe.SetSignalTuningHolder(tuningHolder)
 		pipe.SetCryptoSymbols(cryptoSymbols)
 		go pipe.Run(ctx)
 		log.Info().
@@ -283,6 +297,7 @@ func main() {
 	apiSrv.WithCalendarStore(db)
 	apiSrv.WithDemoEngine(eng)
 	apiSrv.WithSymbolProfiles(profileHolder)
+	apiSrv.WithSignalTuningHolder(tuningHolder)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

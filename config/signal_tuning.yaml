@@ -1,0 +1,21 @@
+# Signal Tuning Configuration
+# Adjustable via Settings UI at /api/signal-tuning
+
+htf_filter:
+  # 0 = no penalty (pass all), 100 = full suppress (current behavior)
+  # Recommended: 50 (reduce score by 50% instead of removing)
+  counter_trend_penalty_pct: 50
+
+volatility_regime:
+  # ATR percentile thresholds (against 90-bar history)
+  low_vol_percentile: 25
+  high_vol_percentile: 75
+  # Score adjustments per regime
+  low_vol_penalty_pct: 20    # reduce score by 20% in low-vol
+  high_vol_bonus_pct: 15     # increase score by 15% in high-vol
+
+atr_slope:
+  # EMA period for ATR slope detection
+  ema_period: 20
+  # Rising slope bonus (volatility expanding)
+  rising_bonus_pct: 10

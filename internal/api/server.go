@@ -181,10 +181,11 @@ type Server struct {
 	calendarStore    CalendarStore                  // optional; set via WithCalendarStore
 	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
 	demoEngine       *engine.RuleEngine             // optional; set via WithDemoEngine for /api/demo/scan
-	profileHolder    *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
-	startTime        time.Time                      // server start timestamp for uptime
-	dataSources      []string                       // active data sources (e.g. ["Binance","Tiingo"])
-	mu               sync.RWMutex
+	profileHolder       *appconfig.SymbolProfilesHolder    // optional; set via WithSymbolProfiles
+	signalTuningHolder  *appconfig.SignalTuningHolder      // optional; set via WithSignalTuningHolder
+	startTime           time.Time                          // server start timestamp for uptime
+	dataSources         []string                           // active data sources (e.g. ["Binance","Tiingo"])
+	mu                  sync.RWMutex
 }
 
 // New creates a Server.
@@ -260,6 +261,10 @@ func (s *Server) WithCalendarStore(cs CalendarStore) {
 }
 
 // WithSymbolProfiles wires the per-symbol profile holder to the server.
+func (s *Server) WithSignalTuningHolder(h *appconfig.SignalTuningHolder) {
+	s.signalTuningHolder = h
+}
+
 func (s *Server) WithSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	s.profileHolder = h
 }
@@ -331,6 +336,10 @@ func (s *Server) Handler() http.Handler {
 	// Alert config
 	mux.HandleFunc("GET /api/alert/config", s.getAlertConfig)
 	mux.HandleFunc("PUT /api/alert/config", s.updateAlertConfig)
+
+	// Signal tuning config
+	mux.HandleFunc("GET /api/signal-tuning", s.getSignalTuning)
+	mux.HandleFunc("PUT /api/signal-tuning", s.updateSignalTuning)
 
 	// settings.yaml config (only when settingsFile is set)
 	if s.settingsFile != "" {
@@ -1123,6 +1132,60 @@ func (s *Server) updateAlertConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.alertHolder != nil {
 		s.alertHolder.Set(cfg)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// signalTuningFile returns the path to signal_tuning.yaml.
+func (s *Server) signalTuningFile() string { return s.configDir + "/signal_tuning.yaml" }
+
+// getSignalTuning handles GET /api/signal-tuning.
+func (s *Server) getSignalTuning(w http.ResponseWriter, _ *http.Request) {
+	if s.signalTuningHolder == nil {
+		jsonOK(w, appconfig.DefaultSignalTuning())
+		return
+	}
+	jsonOK(w, s.signalTuningHolder.Get())
+}
+
+// updateSignalTuning handles PUT /api/signal-tuning.
+func (s *Server) updateSignalTuning(w http.ResponseWriter, r *http.Request) {
+	var cfg appconfig.SignalTuningConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	// Validate ranges
+	if cfg.HTFFilter.CounterTrendPenaltyPct < 0 || cfg.HTFFilter.CounterTrendPenaltyPct > 100 {
+		http.Error(w, "counter_trend_penalty_pct must be 0-100", http.StatusBadRequest)
+		return
+	}
+	if cfg.VolatilityRegime.LowVolPercentile < 0 || cfg.VolatilityRegime.LowVolPercentile > 100 ||
+		cfg.VolatilityRegime.HighVolPercentile < 0 || cfg.VolatilityRegime.HighVolPercentile > 100 {
+		http.Error(w, "percentile values must be 0-100", http.StatusBadRequest)
+		return
+	}
+	if cfg.VolatilityRegime.LowVolPenaltyPct < 0 || cfg.VolatilityRegime.LowVolPenaltyPct > 100 ||
+		cfg.VolatilityRegime.HighVolBonusPct < 0 || cfg.VolatilityRegime.HighVolBonusPct > 100 {
+		http.Error(w, "penalty/bonus values must be 0-100", http.StatusBadRequest)
+		return
+	}
+	if cfg.ATRSlope.EMAPeriod < 1 {
+		http.Error(w, "ema_period must be >= 1", http.StatusBadRequest)
+		return
+	}
+	if cfg.ATRSlope.RisingBonusPct < 0 || cfg.ATRSlope.RisingBonusPct > 100 {
+		http.Error(w, "rising_bonus_pct must be 0-100", http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := appconfig.SaveSignalTuning(s.signalTuningFile(), cfg); err != nil {
+		http.Error(w, configWriteErrorMessage(err), http.StatusInternalServerError)
+		return
+	}
+	if s.signalTuningHolder != nil {
+		s.signalTuningHolder.Set(cfg)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

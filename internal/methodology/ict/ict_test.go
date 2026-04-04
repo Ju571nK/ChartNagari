@@ -855,3 +855,206 @@ func TestKillZone_Outside(t *testing.T) {
 		t.Errorf("expected nil outside kill zones, got %+v", sig)
 	}
 }
+
+// ── OTE (Optimal Trade Entry) ────────────────────────────────────────────────
+
+// TestOTE_Bullish: swing low → swing high impulse, pullback into 0.618–0.786 → LONG
+func TestOTE_Bullish(t *testing.T) {
+	rule := &ICTOTERule{}
+	ctx := makeCtx("AAPL")
+
+	// Build bars with swing low at 100 then swing high at 200.
+	// Fib 0.618 retracement from high: 200 - 0.618*100 = 138.2
+	// Fib 0.786 retracement from high: 200 - 0.786*100 = 121.4
+	// OTE zone: [121.4, 138.2]
+	// Current bar close = 130 → inside zone → LONG
+	bars := []models.OHLCV{
+		makeBar(105, 108, 100, 103), // swing low: low=100
+		makeBar(103, 115, 102, 113),
+		makeBar(113, 130, 112, 128),
+		makeBar(128, 150, 127, 148),
+		makeBar(148, 170, 147, 168),
+		makeBar(168, 200, 167, 195), // swing high: high=200
+		makeBar(195, 198, 140, 145), // pullback starts
+		makeBar(145, 150, 128, 130), // current: close=130 in [121.4, 138.2]
+	}
+	ctx.Timeframes["1H"] = bars
+
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected LONG signal, got nil")
+	}
+	if sig.Direction != "LONG" {
+		t.Errorf("expected LONG, got %s", sig.Direction)
+	}
+	if sig.Rule != "ict_ote" {
+		t.Errorf("wrong rule: %s", sig.Rule)
+	}
+	if sig.Score != 1.0 {
+		t.Errorf("expected score 1.0, got %f", sig.Score)
+	}
+}
+
+// TestOTE_Bearish: swing high → swing low impulse, pullback into 0.618–0.786 → SHORT
+func TestOTE_Bearish(t *testing.T) {
+	rule := &ICTOTERule{}
+	ctx := makeCtx("AAPL")
+
+	// Swing high at 200 comes BEFORE swing low at 100.
+	// Fib 0.618 retracement from low: 100 + 0.618*100 = 161.8
+	// Fib 0.786 retracement from low: 100 + 0.786*100 = 178.6
+	// OTE zone: [161.8, 178.6]
+	// Current bar close = 170 → inside zone → SHORT
+	bars := []models.OHLCV{
+		makeBar(195, 200, 190, 192), // swing high: high=200
+		makeBar(192, 193, 170, 172),
+		makeBar(172, 175, 140, 142),
+		makeBar(142, 145, 110, 112),
+		makeBar(112, 115, 100, 103), // swing low: low=100
+		makeBar(103, 140, 102, 138), // pullback starts
+		makeBar(138, 175, 137, 170), // current: close=170 in [161.8, 178.6]
+	}
+	ctx.Timeframes["1H"] = bars
+
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected SHORT signal, got nil")
+	}
+	if sig.Direction != "SHORT" {
+		t.Errorf("expected SHORT, got %s", sig.Direction)
+	}
+}
+
+// TestOTE_NoSignal: pullback outside 0.618–0.786 zone → nil
+func TestOTE_NoSignal(t *testing.T) {
+	rule := &ICTOTERule{}
+	ctx := makeCtx("AAPL")
+
+	// Same setup as bullish but close=150 which is above 138.2 (outside OTE zone)
+	bars := []models.OHLCV{
+		makeBar(105, 108, 100, 103), // swing low: low=100
+		makeBar(103, 115, 102, 113),
+		makeBar(113, 130, 112, 128),
+		makeBar(128, 150, 127, 148),
+		makeBar(148, 170, 147, 168),
+		makeBar(168, 200, 167, 195), // swing high: high=200
+		makeBar(195, 198, 148, 150), // current: close=150, above 138.2 → outside OTE
+	}
+	ctx.Timeframes["1H"] = bars
+
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig != nil {
+		t.Errorf("expected nil, got %+v", sig)
+	}
+}
+
+// ── AMD Session Structure ────────────────────────────────────────────────────
+
+// makeBarAtTime creates a bar with a specific open time (UTC).
+func makeBarAtTime(hour int, open, high, low, close float64) models.OHLCV {
+	return models.OHLCV{
+		Symbol:    "TEST",
+		Timeframe: "1H",
+		OpenTime:  time.Date(2026, 4, 3, hour, 0, 0, 0, time.UTC),
+		Open:      open,
+		High:      high,
+		Low:       low,
+		Close:     close,
+		Volume:    1000,
+	}
+}
+
+// TestAMD_BullishManipulation: London breaches Asia low → NY session → LONG
+func TestAMD_BullishManipulation(t *testing.T) {
+	rule := &ICTAMDSessionRule{}
+	ctx := makeCtx("BTCUSDT")
+
+	// Asia (00:00-07:00): range [100, 110]
+	// London (08:00-11:00): bar dips below 100 (low=97) then closes back at 101
+	// NY (13:00+): current bar
+	bars := []models.OHLCV{
+		makeBarAtTime(1, 105, 110, 102, 107), // Asia bar 1
+		makeBarAtTime(3, 107, 109, 100, 104), // Asia bar 2: low=100
+		makeBarAtTime(5, 104, 108, 101, 106), // Asia bar 3
+		makeBarAtTime(9, 103, 107, 97, 101),  // London: low=97 < asiaLow=100, close=101 >= 100 → breach
+		makeBarAtTime(14, 102, 112, 101, 110), // NY: current bar
+	}
+	ctx.Timeframes["1H"] = bars
+
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected LONG signal, got nil")
+	}
+	if sig.Direction != "LONG" {
+		t.Errorf("expected LONG, got %s", sig.Direction)
+	}
+	if sig.Rule != "ict_amd_session" {
+		t.Errorf("wrong rule: %s", sig.Rule)
+	}
+}
+
+// TestAMD_BearishManipulation: London breaches Asia high → NY session → SHORT
+func TestAMD_BearishManipulation(t *testing.T) {
+	rule := &ICTAMDSessionRule{}
+	ctx := makeCtx("BTCUSDT")
+
+	// Asia: range [100, 110]
+	// London: bar breaks above 110 (high=114) then closes back at 109
+	// NY: current bar
+	bars := []models.OHLCV{
+		makeBarAtTime(1, 105, 110, 102, 107), // Asia bar 1: high=110
+		makeBarAtTime(3, 107, 109, 100, 104), // Asia bar 2
+		makeBarAtTime(5, 104, 108, 101, 106), // Asia bar 3
+		makeBarAtTime(9, 108, 114, 106, 109), // London: high=114 > asiaHigh=110, close=109 <= 110 → breach
+		makeBarAtTime(14, 108, 109, 98, 100), // NY: current bar
+	}
+	ctx.Timeframes["1H"] = bars
+
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected SHORT signal, got nil")
+	}
+	if sig.Direction != "SHORT" {
+		t.Errorf("expected SHORT, got %s", sig.Direction)
+	}
+}
+
+// TestAMD_NoManipulation: no breach in London → nil
+func TestAMD_NoManipulation(t *testing.T) {
+	rule := &ICTAMDSessionRule{}
+	ctx := makeCtx("BTCUSDT")
+
+	// Asia: range [100, 110]
+	// London: stays within range
+	// NY: current bar
+	bars := []models.OHLCV{
+		makeBarAtTime(1, 105, 110, 102, 107), // Asia bar 1
+		makeBarAtTime(3, 107, 109, 100, 104), // Asia bar 2
+		makeBarAtTime(9, 104, 108, 101, 106), // London: no breach (stays within [100,110])
+		makeBarAtTime(14, 106, 112, 104, 110), // NY: current bar
+	}
+	ctx.Timeframes["1H"] = bars
+
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig != nil {
+		t.Errorf("expected nil, got %+v", sig)
+	}
+}

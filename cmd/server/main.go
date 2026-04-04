@@ -119,12 +119,15 @@ func main() {
 		&general_ta.SupportResistanceBreakoutRule{},
 		&general_ta.FibonacciConfluenceRule{},
 		&general_ta.VolumeSpikeRule{},
+		&general_ta.VSAEffortCandleRule{},
 		// ICT
 		&ict.ICTOrderBlockRule{},
 		&ict.ICTFairValueGapRule{},
 		&ict.ICTLiquiditySweepRule{},
 		&ict.ICTBreakerBlockRule{},
 		ict.NewICTKillZoneRule(),
+		&ict.ICTOTERule{},
+		&ict.ICTAMDSessionRule{},
 		// Wyckoff
 		&wyckoff.WyckoffAccumulationRule{},
 		&wyckoff.WyckoffDistributionRule{},

@@ -50,6 +50,12 @@ rules:
       spike_multiplier: 2.0
       strength: 2.0
 
+  - name: vsa_effort_candle
+    enabled: true
+    methodology: general_ta
+    params:
+      strength: 3.5
+
   # ── ICT 방법론 ───────────────────────────────────────────────────────
   - name: ict_order_block
     enabled: true           # Phase 1-8 구현 완료
@@ -88,6 +94,18 @@ rules:
         london:  { start: "08:00", end: "11:00", weight: 1.5 }
         new_york: { start: "13:00", end: "16:00", weight: 1.5 }
       strength: 3.0
+
+  - name: ict_ote
+    enabled: true
+    methodology: ict
+    params:
+      strength: 4.5
+
+  - name: ict_amd_session
+    enabled: true
+    methodology: ict
+    params:
+      strength: 5.0
 
   # ── Wyckoff 방법론 ───────────────────────────────────────────────────
   - name: wyckoff_accumulation

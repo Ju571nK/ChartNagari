@@ -97,3 +97,4 @@ docs/*.html
 docs/*.md
 !docs/market-research.md
 !docs/community-feedback-improvements.md
+!docs/community-posts.md

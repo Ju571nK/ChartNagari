@@ -14,6 +14,38 @@ Format:
 
 ---
 
+## [2.2.0.0] - 2026-04-07
+
+### Added
+- **3 new trading rules:** ICT Optimal Trade Entry (0.618-0.786 Fib zone), VSA Effort Candle (Stopping Volume, No Demand, No Supply), ICT AMD Session Structure (Asia-London-NY manipulation detection). Total rules: 33
+- **ADX trend strength indicator** integrated into HTF context filter for continuous trending/ranging classification
+- **ATR percentile regime classification** — signals tagged as LOW_VOL/NORMAL/HIGH_VOL based on 90-bar ATR history
+- **ATR slope transition detector** — rising ATR EMA triggers volatility expansion bonus
+- **Volume Profile signal integration** — HVN/LVN/POC proximity adjusts scores for sweep, FVG, and OB signals
+- **Per-symbol signal profiles** — crypto/large_cap/small_cap presets with different rule sets per symbol
+- **Signal Tuning UI** in Settings — configurable HTF penalty, vol regime thresholds, ATR slope parameters
+- **Chart overlay toggles** — FVG zones, Order Block zones, Wyckoff phase zones as dotted price line pairs
+- **Backtest regime performance breakdown** — per-rule stats split by LOW_VOL/NORMAL/HIGH_VOL at entry time
+- **BacktestTab market filter** — crypto/stock/exchange toggle buttons
+- **Demo mode improvements** — multi-TF sample data with Wyckoff cycle, 5+ signals
+- **Signal CSV export** — `GET /api/signals/export?format=csv` with 12 columns
+- **DB backup/restore** — download SQLite, upload replacement with .bak safety backup
+- **Settings export/import** — bundle all config YAMLs as JSON
+- **Data Management section** in Settings tab with backup/restore/export/import UI
+- **DESIGN.md** — full design system documentation
+- **Market research** — Koventium competitive analysis
+
+### Changed
+- **HTF filter: score reduction instead of binary suppress** — configurable 0-100% penalty (default 50%) instead of removing counter-trend signals entirely
+- **Wyckoff phase overrides HTF filter** — accumulation in bearish EMA allows LONG through at reduced score
+- **Wyckoff phase detection moved earlier in pipeline** — reused by both HTF filter and phase boost (no duplicate computation)
+- **restart.sh** — quick/frontend/backend/full modes for faster development workflow
+
+### Fixed
+- Chart marker plugin reuse prevents stale markers on filter toggle
+- Unified marker effect prevents Wyckoff overlay from overriding category filter
+- Wyckoff overlay button renamed to "W.Phase" to avoid duplicate labels
+
 ## [2.1.4.0] - 2026-03-31
 
 ### Added

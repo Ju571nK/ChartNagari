@@ -301,6 +301,7 @@
   "overlay_fvg": "FVG",
   "overlay_ob": "OB",
   "overlay_zones": "Zones",
+  "overlay_vix": "VIX",
   "signal_tuning": "Signal Tuning",
   "htf_penalty": "HTF Counter-Trend Penalty",
   "htf_penalty_hint": "0% = pass all signals, 100% = full suppress (remove counter-trend). 50% = reduce score by half.",

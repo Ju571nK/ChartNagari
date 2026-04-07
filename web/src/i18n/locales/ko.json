@@ -301,6 +301,7 @@
   "overlay_fvg": "FVG",
   "overlay_ob": "OB",
   "overlay_zones": "Zones",
+  "overlay_vix": "VIX",
   "signal_tuning": "시그널 튜닝",
   "htf_penalty": "HTF 역추세 패널티",
   "htf_penalty_hint": "0% = 모든 시그널 통과, 100% = 역추세 완전 제거. 50% = 점수 50% 감소.",

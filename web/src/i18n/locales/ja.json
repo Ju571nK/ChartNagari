@@ -301,6 +301,7 @@
   "overlay_fvg": "FVG",
   "overlay_ob": "OB",
   "overlay_zones": "Zones",
+  "overlay_vix": "VIX",
   "signal_tuning": "シグナルチューニング",
   "htf_penalty": "HTF逆トレンドペナルティ",
   "htf_penalty_hint": "0% = 全シグナル通過、100% = 逆トレンド完全除去。50% = スコア50%減少。",

@@ -207,7 +207,7 @@ function saveSignalFilter(enabled: Set<string>) {
 
 const CHART_OVERLAY_STORAGE_KEY = 'chartnagari_chart_overlays'
 
-type OverlayType = 'fvg' | 'ob' | 'zones'
+type OverlayType = 'fvg' | 'ob' | 'zones' | 'vix'
 
 function loadOverlayToggles(): Set<OverlayType> {
   try {
@@ -802,6 +802,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const vixSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const swingHighLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
   const swingLowLineRef = useRef<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -898,6 +899,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
         markersPluginRef.current = null
       }
       overlayLinesRef.current = []
+      vixSeriesRef.current = null
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -1141,6 +1143,43 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
     overlayLinesRef.current = lines
   }, [signals, enabledOverlays, wyckoffData])
 
+  // VIX overlay: load and display as a separate line series on chart bottom 20%
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    // Remove existing VIX series whenever toggled off or dependencies change
+    if (vixSeriesRef.current) {
+      try { chart.removeSeries(vixSeriesRef.current) } catch { /* already removed */ }
+      vixSeriesRef.current = null
+    }
+
+    if (!enabledOverlays.has('vix')) return
+
+    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent('^VIX')}/1D?limit=200`)
+      .then((bars) => {
+        if (!chartRef.current || !enabledOverlays.has('vix')) return
+        const vixSeries = chartRef.current.addSeries(LineSeries, {
+          color: '#94a3b8',
+          lineWidth: 1,
+          priceScaleId: 'vix',
+          priceFormat: { type: 'price', precision: 1, minMove: 0.1 },
+        })
+        chartRef.current.priceScale('vix').applyOptions({
+          scaleMargins: { top: 0.8, bottom: 0.0 },
+          borderVisible: false,
+        })
+        vixSeries.setData(
+          bars.map((b) => ({
+            time: b.time as UTCTimestamp,
+            value: b.close,
+          }))
+        )
+        vixSeriesRef.current = vixSeries
+      })
+      .catch(() => { /* VIX not collected — silently ignore */ })
+  }, [enabledOverlays, symbol, tf])
+
   return (
     <>
       <div className="chart-controls">
@@ -1233,6 +1272,22 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
                 {t(`overlay_${ov}`)}
               </button>
             ))}
+            <button
+              className={`tf-btn${enabledOverlays.has('vix') ? ' active' : ''}`}
+              onClick={() => {
+                setEnabledOverlays(prev => {
+                  const next = new Set(prev)
+                  if (next.has('vix')) next.delete('vix')
+                  else next.add('vix')
+                  saveOverlayToggles(next)
+                  return next
+                })
+              }}
+              style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
+              title="VIX volatility index overlay"
+            >
+              {t('overlay_vix')}
+            </button>
           </>
         )}
       </div>

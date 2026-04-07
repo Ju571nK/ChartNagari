@@ -14,6 +14,17 @@ Format:
 
 ---
 
+## [2.2.2.0] - 2026-04-07
+
+### Added
+- **VIX data collection** — ^VIX index collected via Yahoo Finance (1D, indices section in watchlist)
+- **Coiled market detection** — realized vol vs VIX comparison detects compressed markets (breakout imminent)
+- **Realized volatility indicator** — 20-period annualized log-return volatility
+- **VIX Status widget** — Status tab shows current VIX, 20d average, realized vol, ratio, coiled status
+- **Chart VIX overlay** — toggle VIX as LineSeries in bottom 20% of chart pane
+- **Coiled Market settings** — enable/disable, ratio threshold, bonus % in Signal Tuning
+- **Signal DB infra** — htf_trend and atr_percentile recorded on every signal (foundation for auto-calibration)
+
 ## [2.2.1.0] - 2026-04-07
 
 ### Added

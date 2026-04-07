@@ -14,6 +14,25 @@ Format:
 
 ---
 
+## [2.2.1.0] - 2026-04-07
+
+### Added
+- **Forward return tracking** — auto-compute 5/10/20/40 day returns for historical signals
+- **Beginner/Expert mode** — Settings toggle simplifies UI for new users (hides overlays, tuning, scores)
+- **Wyckoff relative strength** — accumulation scoring compares symbol vs SPY benchmark
+- **Backtest equity curve** — cumulative return chart (LineSeries, starting capital 10000)
+- **Filter impact report** — shows signal count reduction at each pipeline filter stage
+- **Continuous gradient HTF penalty** — smooth formula `base * (1 - scaling * atr_pct)` replaces 3-bucket
+- **Regime-dependent HTF penalty** — LOW_VOL 70%, NORMAL 50%, HIGH_VOL 30% (configurable)
+- **Signal CSV export** — `GET /api/signals/export` with 12 columns
+- **DB backup/restore** — download/upload SQLite with .bak safety backup
+- **Settings export/import** — portable config bundle as JSON
+- **Data Management section** in Settings tab
+- **Market research doc** — Koventium competitive analysis
+
+### Changed
+- HTF penalty supports both gradient mode (default) and legacy 3-bucket mode via Settings toggle
+
 ## [2.2.0.0] - 2026-04-07
 
 ### Added

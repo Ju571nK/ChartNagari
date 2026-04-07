@@ -2,26 +2,29 @@
 
 ## 개요
 
-두 이슈 모두 "지금 구현 불가"로 분류되었으나, 인프라를 먼저 구축하고 데이터가 쌓이면 자동으로 활성화되는 접근이 가능하다.
+두 이슈 모두 "인프라 먼저" 접근으로 구현. 데이터가 쌓이면 자동 활성화.
 
 ---
 
 ## Issue #22: 실현 vs 내재 변동성 비교
 
 ### 목적
-실현 변동성(ATR 기반)과 내재 변동성(옵션 시장)을 비교하여 "coiled" 시장(급격한 레짐 전환 임박)을 감지.
+실현 변동성(ATR 기반)과 내재 변동성(VIX)을 비교하여 "coiled" 시장(급격한 레짐 전환 임박)을 감지.
 
 ### 핵심 인사이트
 - 실현 vol << 내재 vol → 시장이 눌려있고 곧 터진다
 - 이 상태에서 시그널이 발생하면 신뢰도가 높다 (큰 움직임 예상)
+- VIX (CBOE Volatility Index)를 시장 전체 내재 변동성 프록시로 사용
 
-### 구현 전략: VIX를 프록시로 사용
+---
 
-개별 종목의 implied volatility는 옵션 체인 데이터가 필요하지만, **시장 전체의 내재 변동성인 VIX**는 Yahoo Finance에서 `^VIX` 심볼로 무료 수집 가능.
+### Phase 1: VIX 데이터 수집 + 기본 UI (Backend + Frontend)
 
-#### Phase 1: VIX 데이터 수집 (인프라)
+**Effort:** S | **시기:** 즉시
 
-**watchlist.yaml 확장:**
+#### Backend
+
+**config/watchlist.yaml 확장:**
 ```yaml
 symbols:
     crypto:
@@ -35,64 +38,158 @@ symbols:
 ```
 
 **internal/config/config.go:**
-- `EnabledIndexSymbols()` 메서드 추가 (EnabledCryptoSymbols, EnabledStockSymbols 패턴)
+- `EnabledIndexSymbols() []string` 메서드 추가
+- watchlist 파싱에 `indices` 섹션 추가
 
 **cmd/server/main.go:**
-- indices 섹션의 심볼을 Yahoo 수집기에 추가
-- VIX는 시그널 분석 대상이 아님 → 파이프라인에서 제외 (수집만)
+- indices 심볼을 Yahoo 수집기에 추가 (crypto/stock과 동일 패턴)
+- indices는 파이프라인 분석 대상에서 **제외** (수집만)
 
-**주의사항:**
-- Yahoo Finance에서 `^VIX`는 URL 인코딩 필요 (`%5EVIX`)
-- Yahoo 수집기의 `strings.ToUpper()` 처리 확인 필요
-- `^VIX`는 1H 데이터 불가 → 1D만 수집
+**internal/collector/yahoo.go:**
+- `^VIX` → URL 인코딩 처리 확인 (`%5EVIX`)
+- 1D 타임프레임만 수집 (VIX는 인트라데이 의미 없음)
 
-#### Phase 2: Realized vs VIX 비교 로직
+**API 엔드포인트:**
+- `GET /api/vix/current` → 최신 VIX 값 + 20일 평균 + 트렌드 방향 반환
+
+#### Frontend
+
+**Status 탭에 VIX 위젯 추가:**
+```
+Market Volatility
+─────────────────────────
+VIX:          18.5  ↓
+20d Average:  21.3
+Status:       Normal
+
+[VIX 수집이 비활성이면 이 섹션 숨김]
+```
+
+- VIX < 15: `--safe` "Low" 
+- VIX 15-25: `--text` "Normal"
+- VIX 25-35: `--warning` "Elevated"
+- VIX > 35: `--danger` "High"
+
+**Settings 탭:**
+- "Market Indices" 섹션에 VIX 수집 토글 (watchlist.yaml의 indices.enabled 연동)
+
+**i18n (en/ko/ja):**
+- `market_volatility`, `vix_current`, `vix_average`, `vix_low`, `vix_normal`, `vix_elevated`, `vix_high`
+
+---
+
+### Phase 2: Coiled 감지 + 시그널 보너스 + UI (Backend + Frontend)
+
+**Effort:** S | **시기:** Phase 1 완료 후
+
+#### Backend
+
+**internal/indicator/realized_vol.go (신규):**
+```go
+// realizedVol computes annualized realized volatility from close prices.
+// Uses log returns over N periods, annualized by √252.
+func realizedVol(closes []float64, period int) (float64, bool)
+```
 
 **internal/indicator/indicator.go:**
-```
-{TF}:REALIZED_VOL_20 = 20일 실현 변동성 (close-to-close 표준편차 × √252)
-```
-이미 ATR이 있지만, 전통적 realized vol은 log return의 표준편차.
+- `{TF}:REALIZED_VOL_20` 인디케이터 추가
 
 **internal/pipeline/regime.go에 추가:**
 ```go
-func isMarketCoiled(indicators map[string]float64, vixBars []models.OHLCV) bool {
-    realizedVol := indicators["1D:REALIZED_VOL_20"]
-    currentVIX := vixBars[0].Close  // 최신 VIX 값
-    
-    // VIX는 연율화된 % (예: 18.5 = 18.5%)
-    // Realized vol도 연율화
-    // Coiled = realized < VIX * 0.7 (30% 이상 괴리)
-    return realizedVol < currentVIX * 0.7
+// CoiledState detects when realized vol is significantly below implied vol (VIX).
+type CoiledState struct {
+    IsCoiled    bool
+    RealizedVol float64
+    ImpliedVol  float64  // VIX value
+    Ratio       float64  // realized / implied (< 0.7 = coiled)
 }
+
+func detectCoiledMarket(indicators map[string]float64, db OHLCVReader) CoiledState
 ```
 
 **파이프라인 통합:**
-- Coiled 상태 감지 시 모든 시그널에 +10% 보너스
-- Signal Tuning UI에 "Coiled market bonus" 슬라이더 추가
-- VIX 데이터 없으면 자동 skip (기존 동작 유지)
+- Coiled 상태 감지 시 모든 시그널에 보너스 적용
+- 보너스 비율은 signal_tuning.yaml에서 설정
 
-#### Phase 3: 프론트엔드 (선택)
+**config/signal_tuning.yaml 확장:**
+```yaml
+coiled_market:
+    enabled: true
+    ratio_threshold: 0.7    # realized/implied < 0.7 → coiled
+    bonus_pct: 10           # coiled 시 시그널 보너스 %
+```
 
-- Status 탭에 VIX 현재 값 + Coiled 상태 표시
-- Chart 탭에 VIX 오버레이 옵션 (별도 pane)
+**internal/config/signal_tuning.go:**
+```go
+type CoiledMarketConfig struct {
+    Enabled        bool `yaml:"enabled" json:"enabled"`
+    RatioThreshold int  `yaml:"ratio_threshold" json:"ratio_threshold"` // 0-100, represents 0.0-1.0
+    BonusPct       int  `yaml:"bonus_pct" json:"bonus_pct"`
+}
+```
 
-### 의존성
-- Yahoo Finance에서 ^VIX 수집 가능 확인 필요 (테스트)
-- watchlist.yaml에 indices 섹션 추가
-- 크립토에는 VIX 대안 필요 (BVOL 또는 skip)
+**API 확장:**
+- `GET /api/vix/current` → CoiledState도 포함
 
-### Effort 추정
-- Phase 1 (VIX 수집): S — yaml 파싱 + Yahoo 수집기에 심볼 추가
-- Phase 2 (비교 로직): S — indicator + pipeline 함수 추가
-- Phase 3 (프론트): M — Status 탭 + Chart 오버레이
-- 전체: M
+#### Frontend
 
-### 리스크
+**Status 탭 VIX 위젯 확장:**
+```
+Market Volatility
+─────────────────────────
+VIX (Implied):    18.5  ↓
+Realized (20d):   12.3
+Ratio:            0.66  ⚡ COILED
+Status:           Coiled — breakout likely
+
+[Coiled 상태면 --warning 배경 + 번개 아이콘]
+[Normal이면 기본 배경]
+```
+
+**Signal Tuning 섹션에 추가:**
+```
+Coiled Market
+─────────────────────────
+☑ Enable coiled detection
+Ratio threshold    [====|======] 0.70
+Coiled bonus       [====|======] 10%
+```
+
+**Chart 탭 (선택):**
+- VIX를 별도 pane에 라인 차트로 표시 (오버레이 토글 "VIX")
+
+**i18n 추가:**
+- `coiled_market`, `coiled_detected`, `ratio_threshold`, `coiled_bonus`, `realized_vol`, `implied_vol`, `breakout_likely`
+
+---
+
+### Phase 3: Chart VIX 오버레이 (Frontend)
+
+**Effort:** S | **시기:** Phase 2 완료 후 (선택)
+
+#### Frontend
+
+**Chart 탭 오버레이 토글에 "VIX" 버튼 추가:**
+- 기존 FVG/OB/Zones 토글 옆에 배치
+- 별도 pane (차트 하단, 볼륨 히스토그램 옆)에 VIX 라인 차트
+- lightweight-charts의 별도 price scale에 렌더링
+- 색상: `--slate` (#94a3b8)
+- Coiled 구간 하이라이트 (배경색 변경)
+
+**API:**
+- `GET /api/ohlcv/^VIX/1D?limit=200` — 기존 OHLCV 엔드포인트 재사용
+
+**i18n:**
+- `overlay_vix`: "VIX" / "VIX" / "VIX"
+
+---
+
+### #22 리스크
 - Yahoo Finance ^VIX API 안정성 (rate limit, 데이터 지연)
 - VIX는 S&P 500 기반이므로 개별 주식의 IV와 다를 수 있음
-- 크립토에는 VIX 대안이 없음 (Bitcoin Volatility Index가 있지만 무료 API 부재)
+- 크립토에는 VIX 대안이 없음 (BVOL은 무료 API 부재) → 크립토는 coiled 감지 skip
 
+---
 ---
 
 ## Issue #32: Auto-calibrate HTF Penalty
@@ -100,39 +197,66 @@ func isMarketCoiled(indicators map[string]float64, vixBars []models.OHLCV) bool 
 ### 목적
 백테스트 결과에서 각 ATR 퍼센타일 버킷의 counter-trend 시그널 성과를 분석하여 최적 패널티를 자동 설정.
 
-### 핵심 인사이트
-- 현재 gradient 공식 (`base * (1 - scaling * atr_pct)`)의 파라미터가 수동 설정
-- 충분한 데이터가 있으면 각 버킷의 실제 성과에서 최적값을 역산 가능
-
 ### 전제 조건
 - 버킷당 최소 50개 counter-trend 시그널 (통계적 유의성)
-- 10개 종목 × 하루 2개 시그널 × 365일 = ~7,300 시그널/년
-- Counter-trend 비율 ~30% → 연 ~2,200개
-- 10 ATR 분위수(decile) → 버킷당 ~220개/년
-- **최소 1년, 권장 2년** 데이터 필요
+- **최소 1년, 권장 2년** 시그널 히스토리
+- Forward return tracking (#23) 구현 완료 ✅
+- HTF 방향 + ATR 퍼센타일이 시그널에 저장되어야 함 → Phase 1에서 추가
 
-### 구현 전략
+---
 
-#### Phase 1: 데이터 충분성 체크 (인프라)
+### Phase 1: DB 인프라 + 데이터 기록 (Backend)
+
+**Effort:** XS | **시기:** 즉시
+
+#### Backend
+
+**internal/storage/db.go — signals 테이블 마이그레이션:**
+```sql
+ALTER TABLE signals ADD COLUMN htf_trend TEXT DEFAULT '';
+ALTER TABLE signals ADD COLUMN atr_percentile REAL DEFAULT -1;
+```
+
+**internal/storage/signals.go:**
+- SaveSignal에 htf_trend, atr_percentile 컬럼 포함
+- GetSignals 등 조회 메서드에도 반영
+
+**pkg/models/signal.go:**
+```go
+HTFTrend      string  `json:"htf_trend,omitempty"`      // "LONG", "SHORT", ""
+ATRPercentile float64 `json:"atr_percentile,omitempty"` // 0-100, -1 if unknown
+```
+
+**internal/pipeline/pipeline.go:**
+- 시그널 저장 시 현재 HTF 트렌드 방향과 ATR 퍼센타일을 Signal에 기록
+- 이미 `wyckoffPhase`와 `htfPenaltyPct` 계산 시점에서 값을 알고 있으므로 채우기만 하면 됨
+
+#### Frontend
+
+없음 (데이터 기록만, 사용자에게 보이지 않음)
+
+---
+
+### Phase 2: 캘리브레이션 로직 + API (Backend)
+
+**Effort:** M | **시기:** 6개월 후 (시그널 히스토리 축적)
+
+#### Backend
 
 **internal/backtest/calibrate.go (신규):**
 ```go
 type CalibrationResult struct {
-    Bucket          int     // ATR percentile bucket (0-9 for deciles)
-    CounterTrendN   int     // number of counter-trend signals in this bucket
-    AvgReturn       float64 // average return of counter-trend signals
-    OptimalPenalty  int     // 0-100, penalty that maximizes total return
-    Confidence      string  // "insufficient" | "low" | "medium" | "high"
+    Bucket          int     `json:"bucket"`           // ATR percentile decile (0-9)
+    BucketRange     string  `json:"bucket_range"`     // "0-10%", "10-20%", ...
+    CounterTrendN   int     `json:"counter_trend_n"`  // 시그널 수
+    AvgReturn5d     float64 `json:"avg_return_5d"`    // 평균 5일 수익률
+    AvgReturn20d    float64 `json:"avg_return_20d"`   // 평균 20일 수익률
+    CurrentPenalty  int     `json:"current_penalty"`  // 현재 gradient 공식의 값
+    OptimalPenalty  int     `json:"optimal_penalty"`  // 추천 값
+    Confidence      string  `json:"confidence"`       // "insufficient" | "low" | "medium" | "high"
 }
 
-func CalibrateHTFPenalty(db storage.DB) ([]CalibrationResult, error) {
-    // 1. 모든 시그널 조회 (created_at, direction, score, forward_return_5d)
-    // 2. 각 시그널의 entry 시점 ATR percentile 계산
-    // 3. Counter-trend 시그널만 필터 (HTF 방향과 반대)
-    // 4. Decile 버킷별 그룹화
-    // 5. 각 버킷의 forward return 분석
-    // 6. OptimalPenalty 계산: return > 0이면 penalty 낮춤, return < 0이면 높임
-}
+func CalibrateHTFPenalty(db CalibrationDB) ([]CalibrationResult, error)
 ```
 
 **Confidence 기준:**
@@ -141,82 +265,155 @@ func CalibrateHTFPenalty(db storage.DB) ([]CalibrationResult, error) {
 - 50 ≤ N < 100 → "medium"
 - N ≥ 100 → "high"
 
-#### Phase 2: API + UI
-
-**API:**
-- `GET /api/calibrate/htf-penalty` → CalibrationResult 배열 반환
-- `POST /api/calibrate/htf-penalty/apply` → 결과를 signal_tuning.yaml에 적용
-
-**Settings UI:**
+**OptimalPenalty 계산 로직:**
 ```
-Auto-Calibration
-────────────────────────────────
-[Run Calibration]
-
-Bucket 0-10%:  N=12  insufficient data
-Bucket 10-20%: N=8   insufficient data
-Bucket 20-30%: N=45  low confidence → penalty 65%
-...
-Bucket 90-100%: N=38  low confidence → penalty 18%
-
-[Apply Recommended] [Keep Current]
+avg_return_5d > 0  → penalty를 낮춤 (counter-trend이 수익성 있음)
+avg_return_5d < 0  → penalty를 높임 (counter-trend이 손실)
+avg_return_5d ≈ 0  → 현재 gradient 값 유지
 ```
 
-- 데이터 부족 버킷은 회색으로 표시
-- "high" confidence 버킷만 자동 적용 권장
-- "Apply Recommended" → confidence가 medium 이상인 버킷만 적용
-
-#### Phase 3: 자동 실행 (장기)
-
-- 매주 일요일 자동 캘리브레이션 실행
-- 결과가 이전과 크게 다르면 Telegram 알림
-- 사용자 승인 후 적용
-
-### 의존성
-- #23 Forward Return Tracking이 이미 구현됨 (forward_return_5d 필요)
-- 충분한 시그널 히스토리 (최소 1년)
-- HTF 방향 정보가 시그널에 저장되어 있어야 함 → 현재 미저장, 추가 필요
-
-### 새로운 DB 필드 필요
-signals 테이블에 추가:
-```sql
-ALTER TABLE signals ADD COLUMN htf_trend TEXT DEFAULT '';  -- "LONG", "SHORT", ""
-ALTER TABLE signals ADD COLUMN atr_percentile REAL DEFAULT -1;
-```
-파이프라인에서 시그널 저장 시 같이 기록.
-
-### Effort 추정
-- Phase 1 (캘리브레이션 로직): M
-- Phase 2 (API + UI): M
-- Phase 3 (자동 실행): S
-- DB 필드 추가: XS
-- 전체: L
-
-### 리스크
-- 샘플 사이즈 부족으로 과적합 (overfitting) 위험
-- 시장 레짐 자체가 변하면 과거 캘리브레이션이 미래에 유효하지 않을 수 있음
-- Counter-trend 정의가 현재 HTF filter에 의존 → HTF filter 변경 시 재캘리브레이션 필요
+**API 엔드포인트:**
+- `GET /api/calibrate/htf-penalty` → CalibrationResult[] 반환
+- `POST /api/calibrate/htf-penalty/apply` → 추천값을 signal_tuning.yaml에 적용
 
 ---
 
-## 구현 순서 권장
+### Phase 3: 캘리브레이션 UI (Frontend)
+
+**Effort:** M | **시기:** Phase 2와 동시
+
+#### Frontend
+
+**Settings 탭 Signal Tuning 섹션에 추가:**
+```
+Auto-Calibration
+────────────────────────────────────────────────────────
+[Run Calibration]
+
+Bucket    Signals  5d Return  Current  Recommended  Confidence
+0-10%        12       —         50%        —         insufficient
+10-20%        8       —         47%        —         insufficient
+20-30%       45     -1.2%       44%       55%        low
+30-40%       62     -0.8%       41%       48%        medium
+40-50%       78     +0.3%       38%       32%        medium
+50-60%       85     +0.5%       35%       28%        medium
+60-70%       91     +0.8%       32%       22%        medium
+70-80%       67     +1.4%       29%       15%        medium
+80-90%       38     +2.1%       26%        8%        low
+90-100%      22     +1.8%       23%        5%        insufficient
+
+[Apply Recommended]  [Keep Current]
+────────────────────────────────────────────────────────
+```
+
+**디자인:**
+- 테이블: 기존 backtest-table 스타일 재사용
+- Confidence 색상: insufficient = `--muted` 0.4, low = `--warning`, medium = `--safe`, high = `--mint`
+- "Apply Recommended" 버튼: medium/high confidence 버킷만 적용
+- insufficient 행은 회색 + 이탤릭
+- "Run Calibration" 클릭 시 로딩 스피너
+- 데이터 부족 시 안내 메시지: "Need at least 6 months of signal history for calibration. Current: N signals (X months)."
+
+**Settings 탭 VIX 관련 UI (from #22)와 나란히 배치:**
+```
+Signal Tuning
+├── HTF Counter-Trend Penalty (기존)
+│   ├── Gradient mode toggle + sliders
+│   └── Per-regime sliders (legacy mode)
+├── Auto-Calibration (신규, #32)
+│   ├── Run Calibration button
+│   ├── Results table
+│   └── Apply/Keep buttons
+├── Coiled Market (신규, #22)
+│   ├── Enable toggle
+│   ├── Ratio threshold slider
+│   └── Bonus % slider
+├── Volatility Regime (기존)
+└── ATR Slope (기존)
+```
+
+**i18n (en/ko/ja):**
+- `auto_calibration`: "Auto-Calibration" / "자동 캘리브레이션" / "自動キャリブレーション"
+- `run_calibration`: "Run Calibration" / "캘리브레이션 실행" / "キャリブレーション実行"
+- `apply_recommended`: "Apply Recommended" / "추천값 적용" / "推奨値を適用"
+- `keep_current`: "Keep Current" / "현재값 유지" / "現在値を維持"
+- `insufficient_data`: "Insufficient data" / "데이터 부족" / "データ不足"
+- `calibration_hint`: "Need at least 6 months of signal history" / "최소 6개월의 시그널 히스토리 필요" / "最低6ヶ月のシグナル履歴が必要"
+- `confidence`: "Confidence" / "신뢰도" / "信頼度"
+- `recommended`: "Recommended" / "추천" / "推奨"
+
+---
+
+### Phase 4: 자동 실행 (Backend, 장기)
+
+**Effort:** S | **시기:** 1년 후
+
+#### Backend
+
+**internal/pipeline/pipeline.go 또는 신규 scheduler:**
+- 매주 일요일 UTC 00:00에 자동 캘리브레이션 실행
+- 결과가 이전 대비 10% 이상 변동 시 Telegram/Discord 알림
+- 자동 적용은 하지 않음 → 알림만, 사용자가 Settings UI에서 확인 후 적용
+
+**config/signal_tuning.yaml:**
+```yaml
+auto_calibration:
+    enabled: false          # 사용자가 Settings에서 활성화
+    schedule: "weekly"      # weekly | monthly
+    auto_apply: false       # true면 자동 적용, false면 알림만
+    min_confidence: "medium" # 자동 적용 시 최소 confidence
+```
+
+#### Frontend
+
+**Settings 탭 Auto-Calibration 섹션에 추가:**
+```
+☑ Auto-run weekly
+☐ Auto-apply (medium+ confidence only)
+Last run: 2026-10-05 — 8/10 buckets calibrated
+```
+
+---
+
+## 전체 구현 순서
 
 ```
-#22 Phase 1 (VIX 수집) ──→ #22 Phase 2 (비교 로직) ──→ #22 Phase 3 (UI)
-                                                              │
-#32 DB 필드 추가 ──→ (데이터 축적 대기) ──→ #32 Phase 1 ──→ #32 Phase 2
+즉시:
+  #22 Phase 1 (VIX 수집 + Status UI)
+  #32 Phase 1 (DB 필드 추가)
+       ↓
+1주 후:
+  #22 Phase 2 (Coiled 감지 + Signal Tuning UI)
+       ↓
+2주 후:
+  #22 Phase 3 (Chart VIX 오버레이) [선택]
+       ↓
+6개월 후 (시그널 축적):
+  #32 Phase 2 (캘리브레이션 로직 + API)
+  #32 Phase 3 (캘리브레이션 UI)
+       ↓
+1년 후:
+  #32 Phase 4 (자동 실행 + 알림)
 ```
 
-**즉시 구현 가능:** #22 Phase 1+2, #32 DB 필드 추가
-**데이터 축적 후:** #32 Phase 1+2+3
-**선택:** #22 Phase 3 (프론트엔드)
+## Effort 총정리
 
-## 타임라인
+| Phase | Issue | Backend | Frontend | Effort | 시기 |
+|-------|-------|---------|----------|--------|------|
+| #22-P1 | VIX 수집 + Status UI | watchlist 확장, Yahoo 수집, API | Status 탭 VIX 위젯, Settings 토글 | S | 즉시 |
+| #22-P2 | Coiled 감지 + Tuning UI | realized_vol, coiled 로직, pipeline | Signal Tuning coiled 섹션 | S | 1주 후 |
+| #22-P3 | Chart VIX 오버레이 | 없음 (기존 API 재사용) | Chart 탭 VIX 라인 pane | S | 2주 후 |
+| #32-P1 | DB 인프라 | 마이그레이션 + pipeline 기록 | 없음 | XS | 즉시 |
+| #32-P2 | 캘리브레이션 로직 | calibrate.go + API | 없음 | M | 6개월 |
+| #32-P3 | 캘리브레이션 UI | 없음 | Settings 탭 테이블 + 버튼 | M | 6개월 |
+| #32-P4 | 자동 실행 | scheduler + 알림 | Settings 토글 | S | 1년 |
 
-| 시점 | 작업 |
-|------|------|
-| 지금 | #22 Phase 1+2 (VIX 수집 + 비교 로직) |
-| 지금 | #32 DB 필드 추가 (htf_trend, atr_percentile) |
-| 1개월 후 | #22 Phase 3 (UI) — VIX 데이터 확인 후 |
-| 6개월 후 | #32 Phase 1 (캘리브레이션 로직) — 시그널 히스토리 축적 |
-| 1년 후 | #32 Phase 2+3 (UI + 자동 실행) — 통계적 유의성 확보 |
+## 리스크
+
+| 리스크 | 영향 | 대응 |
+|--------|------|------|
+| Yahoo ^VIX API 불안정 | VIX 수집 실패 | graceful skip, Status 탭에 "VIX unavailable" 표시 |
+| VIX ≠ 개별 종목 IV | Coiled 판단 부정확 | "시장 전체" 프록시로 제한, 개별 IV는 장기 과제 |
+| 크립토에 VIX 없음 | 크립토 coiled 미감지 | 크립토는 coiled skip, 향후 BVOL 연동 |
+| 캘리브레이션 과적합 | 미래에 유효하지 않은 패널티 | confidence 게이트 + 최소 샘플 요구 |
+| 시장 레짐 변화 | 과거 캘리브레이션 무효화 | rolling window (최근 1년만) 사용 |

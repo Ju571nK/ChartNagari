@@ -82,6 +82,7 @@ config/settings.yaml
 # ─── 기타 ───
 # Local overrides for config (if any)
 config/*.local.yaml
+TODOS.md
 *.gif
 *.local.yaml
 docs/research/

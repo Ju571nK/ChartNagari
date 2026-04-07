@@ -101,11 +101,19 @@ interface StatusData {
   data_sources: string[]
 }
 
+interface CoiledData {
+  is_coiled: boolean
+  realized_vol: number
+  implied_vol: number
+  ratio: number
+}
+
 interface VIXData {
   current: number
   avg_20d: number
   trend: string // "rising" | "falling"
   available: boolean
+  coiled?: CoiledData
 }
 
 interface PriceAlert {
@@ -695,6 +703,29 @@ function StatusTab() {
                 <div className="stat-value" style={{ color }}>{label}</div>
                 <div className="stat-label">{t('status')}</div>
               </div>
+              {vix.coiled && (
+                <>
+                  <div className="stat-card">
+                    <div className="stat-value">{vix.coiled.realized_vol.toFixed(1)}</div>
+                    <div className="stat-label">{t('realized_vol')}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-value">{vix.coiled.ratio.toFixed(2)}</div>
+                    <div className="stat-label">Ratio</div>
+                  </div>
+                  <div className="stat-card" style={{
+                    gridColumn: 'span 2',
+                    background: vix.coiled.is_coiled ? 'var(--warning-bg, rgba(255,193,7,0.12))' : undefined,
+                  }}>
+                    <div className="stat-value" style={{
+                      color: vix.coiled.is_coiled ? 'var(--warning)' : 'var(--text)',
+                    }}>
+                      {vix.coiled.is_coiled ? t('coiled_status') : t('not_coiled')}
+                    </div>
+                    <div className="stat-label">{t('coiled_market')}</div>
+                  </div>
+                </>
+              )}
             </div>
           </>
         )
@@ -2431,6 +2462,11 @@ interface SignalTuningConfig {
     ema_period: number
     rising_bonus_pct: number
   }
+  coiled_market: {
+    enabled: boolean
+    ratio_threshold: number
+    bonus_pct: number
+  }
 }
 
 function SignalTuningSection() {
@@ -2707,6 +2743,69 @@ function SignalTuningSection() {
             />
             <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.82rem' }}>
               {config.atr_slope.rising_bonus_pct}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Coiled Market */}
+      <div style={sectionBorder}>
+        <h3 style={{
+          fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: 'var(--accent)', marginBottom: '0.75rem',
+        }}>
+          {t('coiled_market')}
+        </h3>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={config.coiled_market.enabled}
+            onChange={(e) => setConfig({
+              ...config,
+              coiled_market: { ...config.coiled_market, enabled: e.target.checked }
+            })}
+            style={{ accentColor: 'var(--green)' }}
+          />
+          <span className="field-label" style={{ fontSize: '0.78rem' }}>{t('enable_coiled')}</span>
+        </label>
+
+        <div className="report-field" style={{ alignItems: 'center' }}>
+          <span className="field-label">{t('ratio_threshold')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={config.coiled_market.ratio_threshold}
+              onChange={(e) => setConfig({
+                ...config,
+                coiled_market: { ...config.coiled_market, ratio_threshold: parseInt(e.target.value) }
+              })}
+              style={{ flex: 1, accentColor: 'var(--green)' }}
+            />
+            <span style={{ minWidth: 48, textAlign: 'right', fontSize: '0.82rem' }}>
+              {(config.coiled_market.ratio_threshold / 100).toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        <div className="report-field" style={{ alignItems: 'center' }}>
+          <span className="field-label">{t('coiled_bonus')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={50}
+              value={config.coiled_market.bonus_pct}
+              onChange={(e) => setConfig({
+                ...config,
+                coiled_market: { ...config.coiled_market, bonus_pct: parseInt(e.target.value) }
+              })}
+              style={{ flex: 1, accentColor: 'var(--green)' }}
+            />
+            <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.82rem' }}>
+              {config.coiled_market.bonus_pct}%
             </span>
           </div>
         </div>

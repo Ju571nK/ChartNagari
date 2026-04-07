@@ -354,5 +354,12 @@
   "vix_low": "낮음",
   "vix_normal": "보통",
   "vix_elevated": "상승",
-  "vix_high": "높음"
+  "vix_high": "높음",
+  "coiled_market": "코일드 마켓",
+  "enable_coiled": "코일드 감지 활성화",
+  "ratio_threshold": "비율 임계값",
+  "coiled_bonus": "코일드 보너스",
+  "coiled_status": "코일드 — 돌파 임박",
+  "realized_vol": "실현 변동성 (20일)",
+  "not_coiled": "정상"
 }

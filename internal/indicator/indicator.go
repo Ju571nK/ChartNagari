@@ -101,6 +101,11 @@ func Compute(bars map[string][]models.OHLCV) map[string]float64 {
 			}
 		}
 
+		// Realized Volatility (20 periods, annualized)
+		if v, ok := realizedVol(closes, 20); ok {
+			result[prefix+"REALIZED_VOL_20"] = v
+		}
+
 		// Volume Profile (20 bins)
 		if poc, hvns, lvns, ok := volumeProfile(candles, 20); ok {
 			result[prefix+"VP_POC"] = poc

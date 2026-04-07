@@ -7,6 +7,37 @@ import (
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
+// CoiledState represents the realized-vs-implied volatility comparison.
+type CoiledState struct {
+	IsCoiled    bool    `json:"is_coiled"`
+	RealizedVol float64 `json:"realized_vol"`
+	ImpliedVol  float64 `json:"implied_vol"` // VIX value
+	Ratio       float64 `json:"ratio"`       // realized / implied
+}
+
+// detectCoiledMarket checks if realized vol is significantly below VIX.
+// Returns coiled state. If VIX data unavailable, IsCoiled = false.
+// threshold is the ratio below which the market is considered coiled (e.g. 0.70).
+func detectCoiledMarket(realizedVol float64, db OHLCVReader, threshold float64) CoiledState {
+	vixBars, err := db.GetOHLCV("^VIX", "1D", 1)
+	if err != nil || len(vixBars) == 0 {
+		return CoiledState{} // VIX unavailable
+	}
+	currentVIX := vixBars[0].Close
+
+	ratio := 0.0
+	if currentVIX > 0 {
+		ratio = realizedVol / currentVIX
+	}
+
+	return CoiledState{
+		IsCoiled:    ratio > 0 && ratio < threshold,
+		RealizedVol: realizedVol,
+		ImpliedVol:  currentVIX,
+		Ratio:       math.Round(ratio*100) / 100,
+	}
+}
+
 // volatilityRegime classifies the current ATR environment.
 type volatilityRegime int
 

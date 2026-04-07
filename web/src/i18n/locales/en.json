@@ -354,5 +354,12 @@
   "vix_low": "Low",
   "vix_normal": "Normal",
   "vix_elevated": "Elevated",
-  "vix_high": "High"
+  "vix_high": "High",
+  "coiled_market": "Coiled Market",
+  "enable_coiled": "Enable coiled detection",
+  "ratio_threshold": "Ratio threshold",
+  "coiled_bonus": "Coiled bonus",
+  "coiled_status": "Coiled — breakout likely",
+  "realized_vol": "Realized (20d)",
+  "not_coiled": "Normal"
 }

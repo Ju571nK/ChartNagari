@@ -438,6 +438,23 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		p.log.Debug().Str("symbol", sym).Str("phase", string(wyckoffPhase)).Msg("Wyckoff phase boost: SHORT +20%")
 	}
 
+	// Coiled market detection: boost signals when realized vol << implied vol (VIX).
+	if p.tuningHolder != nil {
+		tc := p.tuningHolder.Get()
+		if tc.CoiledMarket.Enabled {
+			if rv, hasRV := indicators["1D:REALIZED_VOL_20"]; hasRV {
+				coiled := detectCoiledMarket(rv, p.db, float64(tc.CoiledMarket.RatioThreshold)/100.0)
+				if coiled.IsCoiled {
+					bonus := 1.0 + float64(tc.CoiledMarket.BonusPct)/100.0
+					for i := range signals {
+						signals[i].Score *= bonus
+					}
+					p.log.Debug().Float64("ratio", coiled.Ratio).Msg("coiled market bonus applied")
+				}
+			}
+		}
+	}
+
 	// Volume Profile boost: adjust scores based on proximity to HVN/LVN/POC levels.
 	applyVolumeProfileBoost(signals, indicators)
 

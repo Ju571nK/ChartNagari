@@ -256,3 +256,97 @@ func TestApplyATRSlopeBonus_InsufficientBarsSkipped(t *testing.T) {
 		t.Errorf("expected score unchanged (10.0) with insufficient bars, got %.4f", got)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// detectCoiledMarket tests
+// ----------------------------------------------------------------------------
+
+// mockOHLCVReader is a simple mock for OHLCVReader used in coiled market tests.
+type mockOHLCVReader struct {
+	bars map[string][]models.OHLCV
+	err  error
+}
+
+func (m *mockOHLCVReader) GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	key := symbol + ":" + timeframe
+	bars, ok := m.bars[key]
+	if !ok {
+		return nil, nil
+	}
+	if limit > 0 && limit < len(bars) {
+		return bars[:limit], nil
+	}
+	return bars, nil
+}
+
+func TestDetectCoiledMarket_Coiled(t *testing.T) {
+	// Realized vol = 12.0, VIX = 20.0 → ratio = 0.60 < 0.70 → coiled.
+	db := &mockOHLCVReader{
+		bars: map[string][]models.OHLCV{
+			"^VIX:1D": {{Close: 20.0}},
+		},
+	}
+
+	state := detectCoiledMarket(12.0, db, 0.70)
+	if !state.IsCoiled {
+		t.Error("expected IsCoiled=true when ratio < threshold")
+	}
+	if state.RealizedVol != 12.0 {
+		t.Errorf("expected RealizedVol=12.0, got %f", state.RealizedVol)
+	}
+	if state.ImpliedVol != 20.0 {
+		t.Errorf("expected ImpliedVol=20.0, got %f", state.ImpliedVol)
+	}
+	if state.Ratio != 0.60 {
+		t.Errorf("expected Ratio=0.60, got %f", state.Ratio)
+	}
+}
+
+func TestDetectCoiledMarket_NotCoiled(t *testing.T) {
+	// Realized vol = 18.0, VIX = 20.0 → ratio = 0.90 >= 0.70 → not coiled.
+	db := &mockOHLCVReader{
+		bars: map[string][]models.OHLCV{
+			"^VIX:1D": {{Close: 20.0}},
+		},
+	}
+
+	state := detectCoiledMarket(18.0, db, 0.70)
+	if state.IsCoiled {
+		t.Error("expected IsCoiled=false when ratio >= threshold")
+	}
+	if state.Ratio != 0.90 {
+		t.Errorf("expected Ratio=0.90, got %f", state.Ratio)
+	}
+}
+
+func TestDetectCoiledMarket_NoVIX(t *testing.T) {
+	// No VIX data available → IsCoiled should be false.
+	db := &mockOHLCVReader{
+		bars: map[string][]models.OHLCV{}, // no ^VIX data
+	}
+
+	state := detectCoiledMarket(12.0, db, 0.70)
+	if state.IsCoiled {
+		t.Error("expected IsCoiled=false when VIX data unavailable")
+	}
+	if state.RealizedVol != 0 {
+		t.Errorf("expected RealizedVol=0, got %f", state.RealizedVol)
+	}
+}
+
+func TestDetectCoiledMarket_ZeroVIX(t *testing.T) {
+	// VIX = 0 → ratio would be 0/0, should not be coiled.
+	db := &mockOHLCVReader{
+		bars: map[string][]models.OHLCV{
+			"^VIX:1D": {{Close: 0.0}},
+		},
+	}
+
+	state := detectCoiledMarket(12.0, db, 0.70)
+	if state.IsCoiled {
+		t.Error("expected IsCoiled=false when VIX is zero")
+	}
+}

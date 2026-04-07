@@ -34,11 +34,19 @@ type ATRSlopeConfig struct {
 	RisingBonusPct  int `yaml:"rising_bonus_pct" json:"rising_bonus_pct"`
 }
 
+// CoiledMarketConfig controls coiled market detection (realized vol << implied vol).
+type CoiledMarketConfig struct {
+	Enabled        bool `yaml:"enabled" json:"enabled"`
+	RatioThreshold int  `yaml:"ratio_threshold" json:"ratio_threshold"` // 0-100 → 0.0-1.0
+	BonusPct       int  `yaml:"bonus_pct" json:"bonus_pct"`
+}
+
 // SignalTuningConfig is the top-level structure for config/signal_tuning.yaml.
 type SignalTuningConfig struct {
 	HTFFilter        HTFFilterConfig        `yaml:"htf_filter" json:"htf_filter"`
 	VolatilityRegime VolatilityRegimeConfig `yaml:"volatility_regime" json:"volatility_regime"`
 	ATRSlope         ATRSlopeConfig         `yaml:"atr_slope" json:"atr_slope"`
+	CoiledMarket     CoiledMarketConfig     `yaml:"coiled_market" json:"coiled_market"`
 }
 
 // DefaultSignalTuning returns sensible defaults matching the initial YAML.
@@ -62,6 +70,11 @@ func DefaultSignalTuning() SignalTuningConfig {
 		ATRSlope: ATRSlopeConfig{
 			EMAPeriod:      20,
 			RisingBonusPct: 10,
+		},
+		CoiledMarket: CoiledMarketConfig{
+			Enabled:        true,
+			RatioThreshold: 70,
+			BonusPct:       10,
 		},
 	}
 }

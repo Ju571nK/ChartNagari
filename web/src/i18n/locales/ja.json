@@ -354,5 +354,12 @@
   "vix_low": "低い",
   "vix_normal": "通常",
   "vix_elevated": "上昇",
-  "vix_high": "高い"
+  "vix_high": "高い",
+  "coiled_market": "コイルドマーケット",
+  "enable_coiled": "コイルド検出を有効化",
+  "ratio_threshold": "比率閾値",
+  "coiled_bonus": "コイルドボーナス",
+  "coiled_status": "コイルド — ブレイクアウト間近",
+  "realized_vol": "実現ボラ（20日）",
+  "not_coiled": "通常"
 }

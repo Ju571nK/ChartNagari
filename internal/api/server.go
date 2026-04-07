@@ -454,12 +454,21 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// CoiledResponse is the nested coiled market state in VIXResponse.
+type CoiledResponse struct {
+	IsCoiled    bool    `json:"is_coiled"`
+	RealizedVol float64 `json:"realized_vol"`
+	ImpliedVol  float64 `json:"implied_vol"`
+	Ratio       float64 `json:"ratio"`
+}
+
 // VIXResponse is the JSON structure for the /api/vix/current endpoint.
 type VIXResponse struct {
-	Current   float64 `json:"current"`
-	Avg20d    float64 `json:"avg_20d"`
-	Trend     string  `json:"trend"` // "rising" | "falling"
-	Available bool    `json:"available"`
+	Current   float64         `json:"current"`
+	Avg20d    float64         `json:"avg_20d"`
+	Trend     string          `json:"trend"` // "rising" | "falling"
+	Available bool            `json:"available"`
+	Coiled    *CoiledResponse `json:"coiled,omitempty"`
 }
 
 func (s *Server) getVIXCurrent(w http.ResponseWriter, _ *http.Request) {
@@ -493,12 +502,43 @@ func (s *Server) getVIXCurrent(w http.ResponseWriter, _ *http.Request) {
 		trend = "rising"
 	}
 
-	jsonOK(w, VIXResponse{
+	resp := VIXResponse{
 		Current:   math.Round(current*100) / 100,
 		Avg20d:    math.Round(avg20d*100) / 100,
 		Trend:     trend,
 		Available: true,
-	})
+	}
+
+	// Compute coiled market state using realized volatility from SPY (or any broad market proxy).
+	// We use SPY 1D closes to compute 20-period realized vol, then compare to VIX.
+	spyBars, spyErr := s.chartStore.GetOHLCV("SPY", "1D", 30)
+	if spyErr == nil && len(spyBars) >= 21 {
+		// spyBars are in DESC order; reverse for indicator computation (needs ASC).
+		closes := make([]float64, len(spyBars))
+		for i, b := range spyBars {
+			closes[len(spyBars)-1-i] = b.Close
+		}
+		rv := indicator.ComputeRealizedVol(closes, 20)
+		if rv > 0 {
+			ratio := 0.0
+			if current > 0 {
+				ratio = rv / current
+			}
+			threshold := 0.70 // default
+			if s.signalTuningHolder != nil {
+				tc := s.signalTuningHolder.Get()
+				threshold = float64(tc.CoiledMarket.RatioThreshold) / 100.0
+			}
+			resp.Coiled = &CoiledResponse{
+				IsCoiled:    ratio > 0 && ratio < threshold,
+				RealizedVol: math.Round(rv*10) / 10,
+				ImpliedVol:  resp.Current,
+				Ratio:       math.Round(ratio*100) / 100,
+			}
+		}
+	}
+
+	jsonOK(w, resp)
 }
 
 func (s *Server) getSymbols(w http.ResponseWriter, _ *http.Request) {

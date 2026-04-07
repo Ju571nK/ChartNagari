@@ -14,3 +14,7 @@ volatility_regime:
 atr_slope:
     ema_period: 20
     rising_bonus_pct: 10
+coiled_market:
+    enabled: true
+    ratio_threshold: 70
+    bonus_pct: 10

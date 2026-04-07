@@ -85,6 +85,10 @@ type SignalBar struct {
 	AIInterpretation string  `json:"ai_interpretation"`
 	ZoneLow          float64 `json:"zone_low,omitempty"`
 	ZoneHigh         float64 `json:"zone_high,omitempty"`
+	ForwardReturn5d  float64 `json:"forward_return_5d,omitempty"`
+	ForwardReturn10d float64 `json:"forward_return_10d,omitempty"`
+	ForwardReturn20d float64 `json:"forward_return_20d,omitempty"`
+	ForwardReturn40d float64 `json:"forward_return_40d,omitempty"`
 }
 
 // AggregatedRuleStat aggregates per-rule backtest stats across multiple symbols.
@@ -646,6 +650,10 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 			AIInterpretation: sig.AIInterpretation,
 			ZoneLow:          sig.ZoneLow,
 			ZoneHigh:         sig.ZoneHigh,
+			ForwardReturn5d:  sig.ForwardReturn5d,
+			ForwardReturn10d: sig.ForwardReturn10d,
+			ForwardReturn20d: sig.ForwardReturn20d,
+			ForwardReturn40d: sig.ForwardReturn40d,
 		}
 	}
 	jsonOK(w, result)
@@ -725,6 +733,10 @@ func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {
 			AIInterpretation: sig.AIInterpretation,
 			ZoneLow:          sig.ZoneLow,
 			ZoneHigh:         sig.ZoneHigh,
+			ForwardReturn5d:  sig.ForwardReturn5d,
+			ForwardReturn10d: sig.ForwardReturn10d,
+			ForwardReturn20d: sig.ForwardReturn20d,
+			ForwardReturn40d: sig.ForwardReturn40d,
 		}
 	}
 	jsonOK(w, result)
@@ -2091,7 +2103,7 @@ func (s *Server) exportSignalsCSV(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", `attachment; filename="signals_export.csv"`)
 		cw := csv.NewWriter(w)
-		cw.Write([]string{"time", "symbol", "timeframe", "rule", "direction", "score", "entry_price", "tp", "sl", "zone_low", "zone_high", "ai_interpretation"}) //nolint:errcheck
+		cw.Write([]string{"time", "symbol", "timeframe", "rule", "direction", "score", "entry_price", "tp", "sl", "zone_low", "zone_high", "forward_return_5d", "forward_return_10d", "forward_return_20d", "forward_return_40d", "ai_interpretation"}) //nolint:errcheck
 		cw.Flush()
 		return
 	}
@@ -2124,7 +2136,7 @@ func (s *Server) exportSignalsCSV(w http.ResponseWriter, r *http.Request) {
 	defer cw.Flush()
 
 	// Header row
-	cw.Write([]string{"time", "symbol", "timeframe", "rule", "direction", "score", "entry_price", "tp", "sl", "zone_low", "zone_high", "ai_interpretation"}) //nolint:errcheck
+	cw.Write([]string{"time", "symbol", "timeframe", "rule", "direction", "score", "entry_price", "tp", "sl", "zone_low", "zone_high", "forward_return_5d", "forward_return_10d", "forward_return_20d", "forward_return_40d", "ai_interpretation"}) //nolint:errcheck
 
 	for _, sig := range sigs {
 		cw.Write([]string{
@@ -2139,6 +2151,10 @@ func (s *Server) exportSignalsCSV(w http.ResponseWriter, r *http.Request) {
 			strconv.FormatFloat(sig.SL, 'f', 6, 64),
 			strconv.FormatFloat(sig.ZoneLow, 'f', 6, 64),
 			strconv.FormatFloat(sig.ZoneHigh, 'f', 6, 64),
+			strconv.FormatFloat(sig.ForwardReturn5d, 'f', 2, 64),
+			strconv.FormatFloat(sig.ForwardReturn10d, 'f', 2, 64),
+			strconv.FormatFloat(sig.ForwardReturn20d, 'f', 2, 64),
+			strconv.FormatFloat(sig.ForwardReturn40d, 'f', 2, 64),
 			sig.AIInterpretation,
 		}) //nolint:errcheck
 	}

@@ -80,6 +80,24 @@ func (r *WyckoffAccumulationRule) Analyze(ctx models.AnalysisContext) (*models.S
 		}
 
 		rawScore := math.Max(0.1, math.Min(1.0, 1.0-rangeWidth/rangePct))
+
+		// Relative Strength factor: compare symbol return vs benchmark (e.g., SPY).
+		// If benchmark return is available in indicators, apply RS bonus/penalty.
+		benchReturnKey := tf + ":BENCHMARK_RETURN_20"
+		if benchReturn, hasBench := ctx.Indicators[benchReturnKey]; hasBench {
+			// Calculate symbol's 20-bar return
+			if len(bars) >= lookback {
+				symbolReturn := (bars[len(bars)-1].Close - bars[len(bars)-lookback].Close) / bars[len(bars)-lookback].Close
+				rs := symbolReturn - benchReturn
+				if rs > 0 {
+					rawScore += 0.2 // outperforming market → higher confidence
+				} else if rs < -0.05 {
+					rawScore -= 0.1 // underperforming significantly → lower confidence
+				}
+				rawScore = math.Max(0.1, math.Min(1.5, rawScore)) // clamp after RS adjustment
+			}
+		}
+
 		weighted := rawScore * tfW[tf]
 
 		if weighted > bestScore {
@@ -109,6 +127,21 @@ func (r *WyckoffAccumulationRule) Analyze(ctx models.AnalysisContext) (*models.S
 	avgPrice := (rangeHigh + rangeLow) / 2
 	rangeWidth := (rangeHigh - rangeLow) / avgPrice
 	rawScore := math.Max(0.1, math.Min(1.0, 1.0-rangeWidth/rangePct))
+
+	// Apply RS bonus to the final score (mirrors the loop logic above).
+	benchReturnKey := bestTF + ":BENCHMARK_RETURN_20"
+	if benchReturn, hasBench := ctx.Indicators[benchReturnKey]; hasBench {
+		if len(bars) >= lookback {
+			symbolReturn := (bars[len(bars)-1].Close - bars[len(bars)-lookback].Close) / bars[len(bars)-lookback].Close
+			rs := symbolReturn - benchReturn
+			if rs > 0 {
+				rawScore += 0.2
+			} else if rs < -0.05 {
+				rawScore -= 0.1
+			}
+			rawScore = math.Max(0.1, math.Min(1.5, rawScore))
+		}
+	}
 
 	return &models.Signal{
 		Symbol:    ctx.Symbol,

@@ -18,6 +18,13 @@ import {
 
 type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar'
 
+type UIMode = 'beginner' | 'expert'
+const UI_MODE_KEY = 'chartnagari_ui_mode'
+function loadUIMode(): UIMode {
+  const v = localStorage.getItem(UI_MODE_KEY)
+  return v === 'beginner' ? 'beginner' : 'expert'
+}
+
 interface OHLCVBar {
   time: number
   open: number
@@ -38,6 +45,10 @@ interface SignalBar {
   ai_interpretation: string
   zone_low?: number
   zone_high?: number
+  forward_return_5d?: number
+  forward_return_10d?: number
+  forward_return_20d?: number
+  forward_return_40d?: number
 }
 
 interface SymbolItem {
@@ -695,7 +706,7 @@ const PHASE_LABELS: Record<string, string> = {
   ranging:      'Ranging',
 }
 
-function ChartTab() {
+function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const [symbol, setSymbol] = useState('')
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
@@ -1093,54 +1104,58 @@ function ChartTab() {
             </button>
           ))}
         </div>
-        <button
-          className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
-          onClick={() => setWyckoffEnabled((v) => !v)}
-          title="Toggle Wyckoff phase overlay (swing levels + spring/upthrust markers)"
-          style={{ marginLeft: 8, fontSize: '0.78rem', letterSpacing: '0.02em' }}
-        >
-          W.Phase
-        </button>
-        <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
-        {Object.entries(SIGNAL_CATEGORIES).map(([cat, def]) => (
-          <button
-            key={cat}
-            className={`tf-btn${enabledCategories.has(cat) ? ' active' : ''}`}
-            onClick={() => {
-              setEnabledCategories(prev => {
-                const next = new Set(prev)
-                if (next.has(cat)) next.delete(cat)
-                else next.add(cat)
-                saveSignalFilter(next)
-                return next
-              })
-            }}
-            style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
-            title={`${def.rules.map(r => RULE_ABBR[r] ?? r).join(', ')}`}
-          >
-            {def.label}
-          </button>
-        ))}
-        <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
-        {(['fvg', 'ob', 'zones'] as OverlayType[]).map((ov) => (
-          <button
-            key={ov}
-            className={`tf-btn${enabledOverlays.has(ov) ? ' active' : ''}`}
-            onClick={() => {
-              setEnabledOverlays(prev => {
-                const next = new Set(prev)
-                if (next.has(ov)) next.delete(ov)
-                else next.add(ov)
-                saveOverlayToggles(next)
-                return next
-              })
-            }}
-            style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
-            title={ov === 'fvg' ? 'Fair Value Gap zone overlay' : ov === 'ob' ? 'Order Block zone overlay' : 'Wyckoff phase zone overlay'}
-          >
-            {t(`overlay_${ov}`)}
-          </button>
-        ))}
+        {uiMode === 'expert' && (
+          <>
+            <button
+              className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
+              onClick={() => setWyckoffEnabled((v) => !v)}
+              title="Toggle Wyckoff phase overlay (swing levels + spring/upthrust markers)"
+              style={{ marginLeft: 8, fontSize: '0.78rem', letterSpacing: '0.02em' }}
+            >
+              W.Phase
+            </button>
+            <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
+            {Object.entries(SIGNAL_CATEGORIES).map(([cat, def]) => (
+              <button
+                key={cat}
+                className={`tf-btn${enabledCategories.has(cat) ? ' active' : ''}`}
+                onClick={() => {
+                  setEnabledCategories(prev => {
+                    const next = new Set(prev)
+                    if (next.has(cat)) next.delete(cat)
+                    else next.add(cat)
+                    saveSignalFilter(next)
+                    return next
+                  })
+                }}
+                style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
+                title={`${def.rules.map(r => RULE_ABBR[r] ?? r).join(', ')}`}
+              >
+                {def.label}
+              </button>
+            ))}
+            <span style={{ width: 1, height: 16, background: 'var(--muted)', opacity: 0.2, margin: '0 4px' }} />
+            {(['fvg', 'ob', 'zones'] as OverlayType[]).map((ov) => (
+              <button
+                key={ov}
+                className={`tf-btn${enabledOverlays.has(ov) ? ' active' : ''}`}
+                onClick={() => {
+                  setEnabledOverlays(prev => {
+                    const next = new Set(prev)
+                    if (next.has(ov)) next.delete(ov)
+                    else next.add(ov)
+                    saveOverlayToggles(next)
+                    return next
+                  })
+                }}
+                style={{ fontSize: '0.72rem', letterSpacing: '0.02em' }}
+                title={ov === 'fvg' ? 'Fair Value Gap zone overlay' : ov === 'ob' ? 'Order Block zone overlay' : 'Wyckoff phase zone overlay'}
+              >
+                {t(`overlay_${ov}`)}
+              </button>
+            ))}
+          </>
+        )}
       </div>
       {wyckoffEnabled && wyckoffData && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -1260,7 +1275,7 @@ interface RuleStats {
 function fmt2(n: number) { return n.toFixed(2) }
 function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
-function BacktestTab() {
+function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [marketFilter, setMarketFilter] = useState('all')
@@ -1684,7 +1699,7 @@ function BacktestTab() {
             </>
           )}
 
-          {result.regime_stats && result.regime_stats.length > 0 && (
+          {uiMode === 'expert' && result.regime_stats && result.regime_stats.length > 0 && (
             <>
               <p className="section-title" style={{ marginTop: 24 }}>{t('regime_performance')}</p>
               <div className="backtest-table-wrap">
@@ -2080,7 +2095,7 @@ interface AlertConfig {
   stock_sl_mult: number
 }
 
-function AlertTab() {
+function AlertTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const [config, setConfig] = useState<AlertConfig | null>(null)
   const [saving, setSaving] = useState(false)
@@ -2222,7 +2237,7 @@ function AlertTab() {
         {error && <span className="error-msg" style={{ padding: '4px 8px' }}>{error}</span>}
       </div>
 
-      <SignalTuningSection />
+      {uiMode === 'expert' && <SignalTuningSection />}
     </>
   )
 }
@@ -2483,7 +2498,7 @@ function SignalTuningSection() {
 
 // ── History Tab ───────────────────────────────────────────────────────────────
 
-function HistoryTab() {
+function HistoryTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const [symbols, setSymbols] = useState<string[]>([])
   const [symbol, setSymbol] = useState('ALL')
@@ -2540,11 +2555,11 @@ function HistoryTab() {
               <tr>
                 <th>{t('time_col')}</th>
                 <th>{t('symbol_col')}</th>
-                <th>TF</th>
+                {uiMode === 'expert' && <th>TF</th>}
                 <th>{t('direction')}</th>
-                <th>{t('rule')}</th>
-                <th>{t('score')}</th>
-                <th>{t('ai_interpretation')}</th>
+                {uiMode === 'expert' && <th>{t('rule')}</th>}
+                {uiMode === 'expert' && <th>{t('score')}</th>}
+                {uiMode === 'expert' && <th>{t('ai_interpretation')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -2554,27 +2569,37 @@ function HistoryTab() {
                     {new Date(s.time * 1000).toLocaleString()}
                   </td>
                   <td style={{ fontWeight: 600 }}>{s.symbol}</td>
-                  <td style={{ color: 'var(--muted)' }}>{s.timeframe}</td>
-                  <td className={s.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{s.direction}</td>
-                  <td style={{ color: 'var(--muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {abbreviateRule(s.rule)}
+                  {uiMode === 'expert' && <td style={{ color: 'var(--muted)' }}>{s.timeframe}</td>}
+                  <td className={s.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
+                    {uiMode === 'beginner'
+                      ? (s.direction === 'LONG' ? t('buy_signal') : t('sell_signal'))
+                      : s.direction}
                   </td>
-                  <td>
-                    <span style={{
-                      display: 'inline-block',
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      backgroundColor: scoreColor(s.score),
-                      marginRight: 4,
-                      verticalAlign: 'middle'
-                    }} />
-                    {s.score.toFixed(1)}
-                  </td>
-                  <td style={{ color: 'var(--muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem' }}
-                      title={s.ai_interpretation}>
-                    {s.ai_interpretation ? s.ai_interpretation.slice(0, 80) + (s.ai_interpretation.length > 80 ? '…' : '') : '─'}
-                  </td>
+                  {uiMode === 'expert' && (
+                    <td style={{ color: 'var(--muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {abbreviateRule(s.rule)}
+                    </td>
+                  )}
+                  {uiMode === 'expert' && (
+                    <td>
+                      <span style={{
+                        display: 'inline-block',
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: scoreColor(s.score),
+                        marginRight: 4,
+                        verticalAlign: 'middle'
+                      }} />
+                      {s.score.toFixed(1)}
+                    </td>
+                  )}
+                  {uiMode === 'expert' && (
+                    <td style={{ color: 'var(--muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem' }}
+                        title={s.ai_interpretation}>
+                      {s.ai_interpretation ? s.ai_interpretation.slice(0, 80) + (s.ai_interpretation.length > 80 ? '...' : '') : '─'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -2855,7 +2880,8 @@ const ENV_GROUPS: EnvGroup[] = [
   },
 ]
 
-function SettingsTab() {
+function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void }) {
+  const { t } = useTranslation()
   const [env, setEnv] = useState<EnvMap>({})
   const [edits, setEdits] = useState<EnvMap>({})
   const [loading, setLoading] = useState(true)
@@ -2928,6 +2954,40 @@ function SettingsTab() {
 
   return (
     <div className="section">
+      {/* UI Mode Toggle */}
+      <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(91,146,121,0.2)' }}>
+        <h3 style={{
+          fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: 'var(--accent)', marginBottom: '0.75rem',
+        }}>
+          {t('ui_mode')}
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
+            <input
+              type="radio"
+              name="ui_mode"
+              checked={uiMode === 'beginner'}
+              onChange={() => onSetUiMode('beginner')}
+              style={{ accentColor: 'var(--green)' }}
+            />
+            <span style={{ fontWeight: uiMode === 'beginner' ? 600 : 400 }}>{t('mode_beginner')}</span>
+            <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}> — {t('mode_beginner_desc')}</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
+            <input
+              type="radio"
+              name="ui_mode"
+              checked={uiMode === 'expert'}
+              onChange={() => onSetUiMode('expert')}
+              style={{ accentColor: 'var(--green)' }}
+            />
+            <span style={{ fontWeight: uiMode === 'expert' ? 600 : 400 }}>{t('mode_expert')}</span>
+            <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}> — {t('mode_expert_desc')}</span>
+          </label>
+        </div>
+      </div>
+
       <h2>Environment Settings</h2>
       <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
         Changes are written to <code>.env</code>. <strong>Restart the server</strong> to apply.
@@ -3391,6 +3451,11 @@ export function App() {
   const [wsConnected, setWsConnected] = useState(false)
   const [liveSignal, setLiveSignal] = useState<SignalBar | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const [uiMode, setUiMode] = useState<UIMode>(loadUIMode)
+  const handleSetUiMode = useCallback((mode: UIMode) => {
+    setUiMode(mode)
+    localStorage.setItem(UI_MODE_KEY, mode)
+  }, [])
 
   // WebSocket auto-reconnecting connection
   useEffect(() => {
@@ -3525,18 +3590,18 @@ export function App() {
         </nav>
       </header>
       <main>
-        {tab === 'chart' && <ChartTab />}
+        {tab === 'chart' && <ChartTab uiMode={uiMode} />}
         {tab === 'analysis' && <AnalysisTab />}
-        {tab === 'backtest' && <BacktestTab />}
+        {tab === 'backtest' && <BacktestTab uiMode={uiMode} />}
         {tab === 'performance' && <PerformanceTab />}
         {tab === 'paper' && <PaperTab />}
-        {tab === 'history' && <HistoryTab />}
+        {tab === 'history' && <HistoryTab uiMode={uiMode} />}
         {tab === 'symbols' && <SymbolsTab />}
         {tab === 'rules' && <RulesTab />}
-        {tab === 'alert' && <AlertTab />}
+        {tab === 'alert' && <AlertTab uiMode={uiMode} />}
         {tab === 'report' && <ReportTab />}
         {tab === 'status' && <StatusTab />}
-        {tab === 'settings' && <SettingsTab />}
+        {tab === 'settings' && <SettingsTab uiMode={uiMode} onSetUiMode={handleSetUiMode} />}
         {tab === 'price-alerts' && <PriceAlertsTab />}
         {tab === 'calendar' && <CalendarTab />}
       </main>

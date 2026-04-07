@@ -332,5 +332,12 @@
   "restore_success": "DB復元完了。サーバーを再起動してください。",
   "import_success": "設定インポート完了",
   "htf_regime_overrides": "レジーム別ペナルティ（0 = 上のデフォルト値を使用）",
-  "htf_regime_hint": "低ボラ: 高ペナルティ（ノイズ）。高ボラ: 低ペナルティ（反転がシャープ）。"
+  "htf_regime_hint": "低ボラ: 高ペナルティ（ノイズ）。高ボラ: 低ペナルティ（反転がシャープ）。",
+  "ui_mode": "UIモード",
+  "mode_beginner": "初心者",
+  "mode_expert": "エキスパート",
+  "mode_beginner_desc": "基本シグナルのみの簡易ビュー",
+  "mode_expert_desc": "すべての技術的詳細とコントロール",
+  "buy_signal": "買いシグナル",
+  "sell_signal": "売りシグナル"
 }

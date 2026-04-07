@@ -55,6 +55,13 @@ type SignalBroadcaster interface {
 	Broadcast(msgType string, payload interface{})
 }
 
+// ForwardReturnStore persists forward return updates.
+// *storage.DB satisfies this interface.
+type ForwardReturnStore interface {
+	ForwardReturnDB
+	ForwardReturnOHLCVReader
+}
+
 // Config controls pipeline timing and data parameters.
 type Config struct {
 	Interval        time.Duration // how often to run analysis (default: 1 minute)
@@ -100,6 +107,9 @@ type Pipeline struct {
 
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via SetSymbolProfiles
 	tuningHolder  *appconfig.SignalTuningHolder  // optional; set via SetSignalTuningHolder
+
+	forwardReturnDB   ForwardReturnDB          // optional; set via SetForwardReturnStore
+	forwardReturnOHLCV ForwardReturnOHLCVReader // optional; set via SetForwardReturnStore
 
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
@@ -166,6 +176,12 @@ func (p *Pipeline) SetSignalTuningHolder(h *appconfig.SignalTuningHolder) {
 	p.tuningHolder = h
 }
 
+// SetForwardReturnStore wires the forward return tracking store.
+func (p *Pipeline) SetForwardReturnStore(frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader) {
+	p.forwardReturnDB = frDB
+	p.forwardReturnOHLCV = ohlcv
+}
+
 // SetCryptoSymbols records which symbols are crypto (vs stock) for TP/SL multiplier selection.
 func (p *Pipeline) SetCryptoSymbols(syms []string) {
 	p.cryptoSyms = make(map[string]bool, len(syms))
@@ -217,6 +233,11 @@ func (p *Pipeline) runOnce(ctx context.Context) {
 		}
 		p.analyzeSymbol(ctx, sym)
 	}
+
+	// Forward return tracking: update historical signals with actual returns.
+	if p.forwardReturnDB != nil && p.forwardReturnOHLCV != nil {
+		UpdateForwardReturns(p.forwardReturnDB, p.forwardReturnOHLCV, p.log)
+	}
 }
 
 func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
@@ -254,6 +275,20 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 
 	// Compute all indicators across all loaded timeframes.
 	indicators := indicator.Compute(allBars)
+
+	// Inject benchmark (SPY) return for relative strength calculation.
+	// Only if SPY bars are available (SPY must be in the watchlist).
+	if sym != "SPY" {
+		for _, tf := range p.timeframes {
+			spyBars, err := p.db.GetOHLCV("SPY", tf, p.cfg.Lookback)
+			if err != nil || len(spyBars) < 20 {
+				continue
+			}
+			// spyBars are in DESC order; [0]=newest, [19]=20 bars ago
+			spyReturn := (spyBars[0].Close - spyBars[19].Close) / spyBars[19].Close
+			indicators[tf+":BENCHMARK_RETURN_20"] = spyReturn
+		}
+	}
 
 	// Run the rule engine.
 	analysisCtx := models.AnalysisContext{

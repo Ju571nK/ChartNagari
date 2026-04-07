@@ -332,5 +332,12 @@
   "restore_success": "DB 복원 완료. 서버를 재시작하세요.",
   "import_success": "설정 가져오기 완료.",
   "htf_regime_overrides": "레짐별 패널티 (0 = 위 기본값 사용)",
-  "htf_regime_hint": "저변동: 높은 패널티 (노이즈). 고변동: 낮은 패널티 (반전이 더 날카로움)."
+  "htf_regime_hint": "저변동: 높은 패널티 (노이즈). 고변동: 낮은 패널티 (반전이 더 날카로움).",
+  "ui_mode": "UI 모드",
+  "mode_beginner": "초보자",
+  "mode_expert": "전문가",
+  "mode_beginner_desc": "기본 시그널만 표시하는 간소화 뷰",
+  "mode_expert_desc": "전체 기술적 디테일과 컨트롤",
+  "buy_signal": "매수 시그널",
+  "sell_signal": "매도 시그널"
 }

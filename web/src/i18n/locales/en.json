@@ -332,5 +332,12 @@
   "restore_success": "Database restored. Please restart the server.",
   "import_success": "Settings imported successfully.",
   "htf_regime_overrides": "Per-regime penalty (0 = use default above)",
-  "htf_regime_hint": "Low vol: higher penalty (noise). High vol: lower penalty (sharper reversals)."
+  "htf_regime_hint": "Low vol: higher penalty (noise). High vol: lower penalty (sharper reversals).",
+  "ui_mode": "UI Mode",
+  "mode_beginner": "Beginner",
+  "mode_expert": "Expert",
+  "mode_beginner_desc": "Simplified view with basic signals",
+  "mode_expert_desc": "Full technical details and controls",
+  "buy_signal": "Buy Signal",
+  "sell_signal": "Sell Signal"
 }

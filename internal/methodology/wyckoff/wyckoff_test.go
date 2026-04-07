@@ -108,6 +108,64 @@ func TestAccumulation_InsufficientBars(t *testing.T) {
 	}
 }
 
+// TestAccumulation_WithRelativeStrength verifies that RS > 0 increases the score.
+func TestAccumulation_WithRelativeStrength(t *testing.T) {
+	// First, get baseline score without benchmark
+	ctxBase := makeCtx("AAPL")
+	ctxBase.Timeframes["1H"] = fillBars(20, 100, 102, 98, 99, 500)
+	ctxBase.Indicators["1H:EMA_50"] = 110.0
+	ctxBase.Indicators["1H:VOLUME_MA_20"] = 1000.0
+
+	rule := &WyckoffAccumulationRule{}
+	sigBase, err := rule.Analyze(ctxBase)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sigBase == nil {
+		t.Fatal("expected base signal, got nil")
+	}
+
+	// Now with positive RS (symbol outperforming benchmark)
+	ctxRS := makeCtx("AAPL")
+	ctxRS.Timeframes["1H"] = fillBars(20, 100, 102, 98, 99, 500)
+	ctxRS.Indicators["1H:EMA_50"] = 110.0
+	ctxRS.Indicators["1H:VOLUME_MA_20"] = 1000.0
+	ctxRS.Indicators["1H:BENCHMARK_RETURN_20"] = -0.05 // benchmark dropped 5%
+
+	sigRS, err := rule.Analyze(ctxRS)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sigRS == nil {
+		t.Fatal("expected RS signal, got nil")
+	}
+
+	if sigRS.Score <= sigBase.Score {
+		t.Errorf("expected RS signal score (%.3f) > base score (%.3f)", sigRS.Score, sigBase.Score)
+	}
+}
+
+// TestAccumulation_WithoutBenchmark verifies that missing benchmark data preserves existing behavior.
+func TestAccumulation_WithoutBenchmark(t *testing.T) {
+	ctx := makeCtx("AAPL")
+	ctx.Timeframes["1H"] = fillBars(20, 100, 102, 98, 99, 500)
+	ctx.Indicators["1H:EMA_50"] = 110.0
+	ctx.Indicators["1H:VOLUME_MA_20"] = 1000.0
+	// No BENCHMARK_RETURN_20 key → should work as before
+
+	rule := &WyckoffAccumulationRule{}
+	sig, err := rule.Analyze(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected signal, got nil")
+	}
+	if sig.Direction != "LONG" {
+		t.Errorf("expected LONG, got %s", sig.Direction)
+	}
+}
+
 // --- Distribution tests ---
 
 // TestDistribution_Detected verifies that a tight range above EMA50 with low volume yields a SHORT signal.

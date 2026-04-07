@@ -246,6 +246,7 @@ func main() {
 		pipe.SetAlertConfigHolder(alertHolder)
 		pipe.SetSymbolProfiles(profileHolder)
 		pipe.SetSignalTuningHolder(tuningHolder)
+		pipe.SetForwardReturnStore(db, db)
 		pipe.SetCryptoSymbols(cryptoSymbols)
 		go pipe.Run(ctx)
 		log.Info().

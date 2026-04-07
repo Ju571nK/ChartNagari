@@ -19,6 +19,12 @@ type Signal struct {
 	// Zone represents a price range for visual overlay (FVG gap, OB zone, etc.)
 	ZoneLow  float64 `json:"zone_low,omitempty"`  // lower bound of the signal zone
 	ZoneHigh float64 `json:"zone_high,omitempty"` // upper bound of the signal zone
+	// Forward return tracking: percentage returns N days after signal generation.
+	// Zero means not yet computed (signal too recent or data unavailable).
+	ForwardReturn5d  float64 `json:"forward_return_5d,omitempty"`
+	ForwardReturn10d float64 `json:"forward_return_10d,omitempty"`
+	ForwardReturn20d float64 `json:"forward_return_20d,omitempty"`
+	ForwardReturn40d float64 `json:"forward_return_40d,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

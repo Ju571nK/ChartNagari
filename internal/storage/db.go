@@ -203,6 +203,21 @@ func (db *DB) migrate() error {
 		}
 	}
 
+	// Migrate existing DB: add forward return tracking columns
+	forwardReturnCols := []string{
+		"forward_return_5d REAL NOT NULL DEFAULT 0",
+		"forward_return_10d REAL NOT NULL DEFAULT 0",
+		"forward_return_20d REAL NOT NULL DEFAULT 0",
+		"forward_return_40d REAL NOT NULL DEFAULT 0",
+	}
+	for _, col := range forwardReturnCols {
+		if _, err := db.conn.Exec(`ALTER TABLE signals ADD COLUMN ` + col); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("signals forward return migration failed: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 

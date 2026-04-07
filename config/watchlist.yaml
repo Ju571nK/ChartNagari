@@ -10,25 +10,7 @@ symbols:
         - symbol: TSLA
           exchange: nasdaq
           enabled: true
-        - symbol: SPY
-          exchange: nyse
-          enabled: true
         - symbol: PLTR
-          exchange: nasdaq
-          enabled: true
-        - symbol: IBRX
-          exchange: nasdaq
-          enabled: true
-        - symbol: BSEM
-          exchange: otc markets otcpk
-          enabled: true
-        - symbol: BABA
-          exchange: nyse
-          enabled: true
-        - symbol: CAPR
-          exchange: nasdaq
-          enabled: true
-        - symbol: ATAI
           exchange: nasdaq
           enabled: true
 timeframes:

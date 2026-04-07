@@ -339,5 +339,13 @@
   "mode_beginner_desc": "기본 시그널만 표시하는 간소화 뷰",
   "mode_expert_desc": "전체 기술적 디테일과 컨트롤",
   "buy_signal": "매수 시그널",
-  "sell_signal": "매도 시그널"
+  "sell_signal": "매도 시그널",
+  "use_gradient": "연속 그래디언트 사용",
+  "gradient_base": "기본 패널티 %",
+  "gradient_scaling": "변동성 스케일링",
+  "equity_curve": "자산 곡선",
+  "filter_impact": "필터 영향",
+  "signals_before": "전",
+  "signals_after": "후",
+  "filter_stage": "단계"
 }

@@ -20,6 +20,15 @@ func TestDefaultSignalTuning(t *testing.T) {
 	if cfg.ATRSlope.EMAPeriod != 20 {
 		t.Errorf("expected EMAPeriod=20, got %d", cfg.ATRSlope.EMAPeriod)
 	}
+	if !cfg.HTFFilter.UseGradient {
+		t.Error("expected UseGradient=true by default")
+	}
+	if cfg.HTFFilter.GradientBase != 50 {
+		t.Errorf("expected GradientBase=50, got %d", cfg.HTFFilter.GradientBase)
+	}
+	if cfg.HTFFilter.GradientScaling != 70 {
+		t.Errorf("expected GradientScaling=70, got %d", cfg.HTFFilter.GradientScaling)
+	}
 }
 
 func TestLoadSignalTuning(t *testing.T) {

@@ -362,19 +362,38 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		tc := p.tuningHolder.Get()
 		htfPenaltyPct = tc.HTFFilter.CounterTrendPenaltyPct
 
-		// Per-regime override: determine current regime from 1D ATR percentile
-		if bars1D, ok := allBars["1D"]; ok {
-			if currentATR, hasATR := indicators["1D:ATR_14"]; hasATR && currentATR > 0 {
-				pctl := atrPercentile(bars1D, currentATR, 14, 90)
-				if pctl >= 0 {
-					switch {
-					case pctl < float64(tc.VolatilityRegime.LowVolPercentile) && tc.HTFFilter.LowVolPenaltyPct > 0:
-						htfPenaltyPct = tc.HTFFilter.LowVolPenaltyPct
-					case pctl > float64(tc.VolatilityRegime.HighVolPercentile) && tc.HTFFilter.HighVolPenaltyPct > 0:
-						htfPenaltyPct = tc.HTFFilter.HighVolPenaltyPct
-					default:
-						if tc.HTFFilter.NormalPenaltyPct > 0 {
-							htfPenaltyPct = tc.HTFFilter.NormalPenaltyPct
+		if tc.HTFFilter.UseGradient {
+			// Continuous gradient: penalty decreases as volatility increases.
+			// penalty = gradient_base * (1 - gradient_scaling/100 * atr_percentile/100)
+			if bars1D, ok := allBars["1D"]; ok {
+				if currentATR, hasATR := indicators["1D:ATR_14"]; hasATR && currentATR > 0 {
+					atrPctl := atrPercentile(bars1D, currentATR, 14, 90)
+					if atrPctl >= 0 {
+						htfPenaltyPct = int(float64(tc.HTFFilter.GradientBase) * (1.0 - float64(tc.HTFFilter.GradientScaling)/100.0*atrPctl/100.0))
+						if htfPenaltyPct < 0 {
+							htfPenaltyPct = 0
+						}
+						if htfPenaltyPct > 100 {
+							htfPenaltyPct = 100
+						}
+					}
+				}
+			}
+		} else {
+			// Legacy 3-bucket mode: per-regime override from 1D ATR percentile
+			if bars1D, ok := allBars["1D"]; ok {
+				if currentATR, hasATR := indicators["1D:ATR_14"]; hasATR && currentATR > 0 {
+					pctl := atrPercentile(bars1D, currentATR, 14, 90)
+					if pctl >= 0 {
+						switch {
+						case pctl < float64(tc.VolatilityRegime.LowVolPercentile) && tc.HTFFilter.LowVolPenaltyPct > 0:
+							htfPenaltyPct = tc.HTFFilter.LowVolPenaltyPct
+						case pctl > float64(tc.VolatilityRegime.HighVolPercentile) && tc.HTFFilter.HighVolPenaltyPct > 0:
+							htfPenaltyPct = tc.HTFFilter.HighVolPenaltyPct
+						default:
+							if tc.HTFFilter.NormalPenaltyPct > 0 {
+								htfPenaltyPct = tc.HTFFilter.NormalPenaltyPct
+							}
 						}
 					}
 				}

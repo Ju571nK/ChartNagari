@@ -7,6 +7,7 @@ import {
   createChart,
   createSeriesMarkers,
   CandlestickSeries,
+  LineSeries,
   HistogramSeries,
   CrosshairMode,
   type IChartApi,
@@ -1252,6 +1253,17 @@ interface RegimeStats {
   total_return_pct: number
 }
 
+interface EquityPoint {
+  time: number
+  value: number
+}
+
+interface FilterStage {
+  name: string
+  signals_before: number
+  signals_after: number
+}
+
 interface BacktestResult {
   symbol: string
   timeframe: string
@@ -1260,6 +1272,8 @@ interface BacktestResult {
   stats: BacktestStats
   outcomes: TradeOutcome[]
   regime_stats?: RegimeStats[]
+  equity_curve?: EquityPoint[]
+  filter_impact?: FilterStage[]
 }
 
 interface RuleStats {
@@ -1743,6 +1757,50 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
             </>
           )}
 
+          {/* Equity Curve */}
+          {result.equity_curve && result.equity_curve.length > 1 && (
+            <>
+              <p className="section-title" style={{ marginTop: 24 }}>{t('equity_curve')}</p>
+              <EquityCurveChart equityCurve={result.equity_curve} />
+            </>
+          )}
+
+          {/* Filter Impact */}
+          {result.filter_impact && result.filter_impact.length > 0 && (
+            <>
+              <p className="section-title" style={{ marginTop: 24 }}>{t('filter_impact')}</p>
+              <div className="backtest-table-wrap">
+                <table className="backtest-table">
+                  <thead>
+                    <tr>
+                      <th>{t('filter_stage')}</th>
+                      <th>{t('signals_before')}</th>
+                      <th>{t('signals_after')}</th>
+                      <th>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.filter_impact.map((fi, i) => {
+                      const pct = fi.signals_before > 0
+                        ? ((fi.signals_before - fi.signals_after) / fi.signals_before * 100).toFixed(1)
+                        : '0.0'
+                      return (
+                        <tr key={i}>
+                          <td style={{ color: 'var(--muted)' }}>{fi.name}</td>
+                          <td>{fi.signals_before}</td>
+                          <td>{fi.signals_after}</td>
+                          <td style={{ color: fi.signals_after < fi.signals_before ? 'var(--warning, #B47B4A)' : 'var(--text)' }}>
+                            {fi.signals_before > fi.signals_after ? `-${pct}%` : '--'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
           {result.trades === 0 && (
             <p className="loading">{t('no_backtest_data')}</p>
           )}
@@ -1813,6 +1871,68 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
         </>
       )}
     </>
+  )
+}
+
+// ── Equity Curve Chart ───────────────────────────────────────────────────────
+
+function EquityCurveChart({ equityCurve }: { equityCurve: EquityPoint[] }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!containerRef.current || equityCurve.length < 2) return
+
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { color: '#0E0F0C' },
+        textColor: '#8F8073',
+      },
+      grid: {
+        vertLines: { color: 'rgba(234,230,229,0.04)' },
+        horzLines: { color: 'rgba(234,230,229,0.04)' },
+      },
+      width: containerRef.current.clientWidth,
+      height: 200,
+      timeScale: { borderColor: 'rgba(91,146,121,0.2)' },
+      rightPriceScale: { borderColor: 'rgba(91,146,121,0.2)' },
+    })
+
+    const series = chart.addSeries(LineSeries, {
+      color: '#8FCB9B',
+      lineWidth: 2,
+    })
+
+    series.setData(
+      equityCurve.map((p) => ({
+        time: p.time as UTCTimestamp,
+        value: p.value,
+      }))
+    )
+
+    chart.timeScale().fitContent()
+
+    const onResize = () => {
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      chart.remove()
+    }
+  }, [equityCurve])
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: '100%',
+        height: 200,
+        borderRadius: 6,
+        overflow: 'hidden',
+        border: '1px solid rgba(91,146,121,0.15)',
+        marginBottom: 8,
+      }}
+    />
   )
 }
 
@@ -2250,6 +2370,9 @@ interface SignalTuningConfig {
     low_vol_penalty_pct: number
     normal_penalty_pct: number
     high_vol_penalty_pct: number
+    use_gradient: boolean
+    gradient_base: number
+    gradient_scaling: number
   }
   volatility_regime: {
     low_vol_percentile: number
@@ -2324,34 +2447,93 @@ function SignalTuningSection() {
         </div>
         <p className="item-meta">{t('htf_penalty_hint')}</p>
 
-        {/* Per-regime HTF penalty overrides */}
+        {/* Gradient mode toggle */}
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className="field-label" style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{t('htf_regime_overrides')}</span>
-          {(['low_vol', 'normal', 'high_vol'] as const).map((regime) => {
-            const key = `${regime}_penalty_pct` as 'low_vol_penalty_pct' | 'normal_penalty_pct' | 'high_vol_penalty_pct'
-            return (
-              <div key={regime} className="report-field" style={{ alignItems: 'center' }}>
-                <span className="field-label" style={{ fontSize: '0.75rem', minWidth: 80 }}>{t(`regime_${regime}`)}</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={config.htf_filter.use_gradient}
+              onChange={(e) => setConfig({
+                ...config,
+                htf_filter: { ...config.htf_filter, use_gradient: e.target.checked }
+              })}
+              style={{ accentColor: 'var(--green)' }}
+            />
+            <span className="field-label" style={{ fontSize: '0.78rem' }}>{t('use_gradient')}</span>
+          </label>
+
+          {config.htf_filter.use_gradient ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="report-field" style={{ alignItems: 'center' }}>
+                <span className="field-label" style={{ fontSize: '0.75rem', minWidth: 120 }}>{t('gradient_base')}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                   <input
                     type="range"
                     min={0}
                     max={100}
-                    value={config.htf_filter[key]}
+                    value={config.htf_filter.gradient_base}
                     onChange={(e) => setConfig({
                       ...config,
-                      htf_filter: { ...config.htf_filter, [key]: parseInt(e.target.value) }
+                      htf_filter: { ...config.htf_filter, gradient_base: parseInt(e.target.value) }
                     })}
-                    style={{ flex: 1, accentColor: regime === 'high_vol' ? 'var(--safe)' : regime === 'low_vol' ? 'var(--warning)' : 'var(--green)' }}
+                    style={{ flex: 1, accentColor: 'var(--green)' }}
                   />
                   <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.78rem' }}>
-                    {config.htf_filter[key]}%
+                    {config.htf_filter.gradient_base}%
                   </span>
                 </div>
               </div>
-            )
-          })}
-          <p className="item-meta">{t('htf_regime_hint')}</p>
+              <div className="report-field" style={{ alignItems: 'center' }}>
+                <span className="field-label" style={{ fontSize: '0.75rem', minWidth: 120 }}>{t('gradient_scaling')}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={config.htf_filter.gradient_scaling}
+                    onChange={(e) => setConfig({
+                      ...config,
+                      htf_filter: { ...config.htf_filter, gradient_scaling: parseInt(e.target.value) }
+                    })}
+                    style={{ flex: 1, accentColor: 'var(--green)' }}
+                  />
+                  <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.78rem' }}>
+                    {config.htf_filter.gradient_scaling}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Per-regime HTF penalty overrides (legacy 3-bucket mode) */}
+              <span className="field-label" style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{t('htf_regime_overrides')}</span>
+              {(['low_vol', 'normal', 'high_vol'] as const).map((regime) => {
+                const key = `${regime}_penalty_pct` as 'low_vol_penalty_pct' | 'normal_penalty_pct' | 'high_vol_penalty_pct'
+                return (
+                  <div key={regime} className="report-field" style={{ alignItems: 'center' }}>
+                    <span className="field-label" style={{ fontSize: '0.75rem', minWidth: 80 }}>{t(`regime_${regime}`)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={config.htf_filter[key]}
+                        onChange={(e) => setConfig({
+                          ...config,
+                          htf_filter: { ...config.htf_filter, [key]: parseInt(e.target.value) }
+                        })}
+                        style={{ flex: 1, accentColor: regime === 'high_vol' ? 'var(--safe)' : regime === 'low_vol' ? 'var(--warning)' : 'var(--green)' }}
+                      />
+                      <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.78rem' }}>
+                        {config.htf_filter[key]}%
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+              <p className="item-meta">{t('htf_regime_hint')}</p>
+            </>
+          )}
         </div>
       </div>
 

@@ -3,6 +3,9 @@ htf_filter:
     low_vol_penalty_pct: 70
     normal_penalty_pct: 0
     high_vol_penalty_pct: 30
+    use_gradient: true
+    gradient_base: 50
+    gradient_scaling: 70
 volatility_regime:
     low_vol_percentile: 25
     high_vol_percentile: 75

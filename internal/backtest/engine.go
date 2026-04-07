@@ -13,6 +13,19 @@ import (
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
+// EquityPoint represents a single point on the equity curve.
+type EquityPoint struct {
+	Time  int64   `json:"time"`  // Unix seconds
+	Value float64 `json:"value"` // cumulative equity (starting at 10000)
+}
+
+// FilterStage records the signal count before and after a filter step.
+type FilterStage struct {
+	Name          string `json:"name"`
+	SignalsBefore int    `json:"signals_before"`
+	SignalsAfter  int    `json:"signals_after"`
+}
+
 // TradeOutcome records the result of one simulated trade.
 type TradeOutcome struct {
 	EntryTime  time.Time `json:"entry_time"`
@@ -40,13 +53,15 @@ type RegimeStats struct {
 
 // BacktestResult holds the full output of a backtest run.
 type BacktestResult struct {
-	Symbol      string         `json:"symbol"`
-	Timeframe   string         `json:"timeframe"`
-	Bars        int            `json:"bars"`
-	Trades      int            `json:"trades"`
-	Stats       Stats          `json:"stats"`
-	Outcomes    []TradeOutcome `json:"outcomes"`
-	RegimeStats []RegimeStats  `json:"regime_stats,omitempty"`
+	Symbol       string         `json:"symbol"`
+	Timeframe    string         `json:"timeframe"`
+	Bars         int            `json:"bars"`
+	Trades       int            `json:"trades"`
+	Stats        Stats          `json:"stats"`
+	Outcomes     []TradeOutcome `json:"outcomes"`
+	RegimeStats  []RegimeStats  `json:"regime_stats,omitempty"`
+	EquityCurve  []EquityPoint  `json:"equity_curve,omitempty"`
+	FilterImpact []FilterStage  `json:"filter_impact,omitempty"`
 }
 
 // Config controls the simulation parameters.
@@ -221,7 +236,89 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 	result.Trades = len(result.Outcomes)
 	result.Stats = ComputeStats(result.Outcomes)
 	result.RegimeStats = computeRegimeStats(result.Outcomes, bars)
+	result.EquityCurve = computeEquityCurve(result.Outcomes)
+	result.FilterImpact = computeFilterImpact(result.Outcomes, e.cfg)
 	return result
+}
+
+// computeEquityCurve builds an equity curve from trade outcomes sorted by entry time.
+// Starting equity is 10000. Each trade compounds the return.
+func computeEquityCurve(outcomes []TradeOutcome) []EquityPoint {
+	if len(outcomes) == 0 {
+		return nil
+	}
+
+	// Sort outcomes by entry time (ascending).
+	sorted := make([]TradeOutcome, len(outcomes))
+	copy(sorted, outcomes)
+	sortOutcomesByTime(sorted)
+
+	equity := 10000.0
+	curve := make([]EquityPoint, 0, len(sorted)+1)
+	curve = append(curve, EquityPoint{
+		Time:  sorted[0].EntryTime.Unix(),
+		Value: equity,
+	})
+	for _, o := range sorted {
+		equity *= (1.0 + o.PnLPct/100.0)
+		// Use entry time + exit_bars offset as the exit time approximation.
+		exitTime := o.EntryTime.Add(time.Duration(o.ExitBars) * time.Hour)
+		curve = append(curve, EquityPoint{
+			Time:  exitTime.Unix(),
+			Value: equity,
+		})
+	}
+	return curve
+}
+
+// sortOutcomesByTime sorts outcomes by EntryTime ascending (in-place).
+func sortOutcomesByTime(outcomes []TradeOutcome) {
+	for i := 1; i < len(outcomes); i++ {
+		for j := i; j > 0 && outcomes[j].EntryTime.Before(outcomes[j-1].EntryTime); j-- {
+			outcomes[j], outcomes[j-1] = outcomes[j-1], outcomes[j]
+		}
+	}
+}
+
+// computeFilterImpact records the signal filtering stages in the backtest.
+// Currently tracks: raw signals count and min-score filter (score > 0).
+func computeFilterImpact(outcomes []TradeOutcome, cfg Config) []FilterStage {
+	if len(outcomes) == 0 {
+		return nil
+	}
+
+	totalOutcomes := len(outcomes)
+	impact := []FilterStage{
+		{Name: "Raw signals", SignalsBefore: totalOutcomes, SignalsAfter: totalOutcomes},
+	}
+
+	// Score filter: count outcomes with score > 5.0 (default pipeline min score)
+	highScore := 0
+	for _, o := range outcomes {
+		if o.Score >= 5.0 {
+			highScore++
+		}
+	}
+	impact = append(impact, FilterStage{
+		Name:          "Min score filter",
+		SignalsBefore: totalOutcomes,
+		SignalsAfter:  highScore,
+	})
+
+	// TP/SL filter: count winning vs losing outcomes
+	winners := 0
+	for _, o := range outcomes {
+		if o.Win {
+			winners++
+		}
+	}
+	impact = append(impact, FilterStage{
+		Name:          "TP/SL exit",
+		SignalsBefore: totalOutcomes,
+		SignalsAfter:  winners,
+	})
+
+	return impact
 }
 
 // buildContext constructs an AnalysisContext from a window of bars.

@@ -11,10 +11,13 @@ import (
 // HTFFilterConfig controls counter-trend penalty behavior.
 // Per-regime overrides: if set (> 0), override the default penalty in that regime.
 type HTFFilterConfig struct {
-	CounterTrendPenaltyPct int `yaml:"counter_trend_penalty_pct" json:"counter_trend_penalty_pct"`
-	LowVolPenaltyPct       int `yaml:"low_vol_penalty_pct,omitempty" json:"low_vol_penalty_pct"`
-	NormalPenaltyPct       int `yaml:"normal_penalty_pct,omitempty" json:"normal_penalty_pct"`
-	HighVolPenaltyPct      int `yaml:"high_vol_penalty_pct,omitempty" json:"high_vol_penalty_pct"`
+	CounterTrendPenaltyPct int  `yaml:"counter_trend_penalty_pct" json:"counter_trend_penalty_pct"`
+	LowVolPenaltyPct       int  `yaml:"low_vol_penalty_pct,omitempty" json:"low_vol_penalty_pct"`
+	NormalPenaltyPct       int  `yaml:"normal_penalty_pct,omitempty" json:"normal_penalty_pct"`
+	HighVolPenaltyPct      int  `yaml:"high_vol_penalty_pct,omitempty" json:"high_vol_penalty_pct"`
+	UseGradient            bool `yaml:"use_gradient,omitempty" json:"use_gradient"`
+	GradientBase           int  `yaml:"gradient_base,omitempty" json:"gradient_base"`
+	GradientScaling        int  `yaml:"gradient_scaling,omitempty" json:"gradient_scaling"` // 0-100, represents 0.0-1.0
 }
 
 // VolatilityRegimeConfig controls ATR percentile thresholds and score adjustments.
@@ -46,6 +49,9 @@ func DefaultSignalTuning() SignalTuningConfig {
 			LowVolPenaltyPct:      70,
 			NormalPenaltyPct:      0, // 0 = use default CounterTrendPenaltyPct
 			HighVolPenaltyPct:     30,
+			UseGradient:           true,
+			GradientBase:          50,
+			GradientScaling:       70,
 		},
 		VolatilityRegime: VolatilityRegimeConfig{
 			LowVolPercentile:  25,

@@ -339,5 +339,13 @@
   "mode_beginner_desc": "基本シグナルのみの簡易ビュー",
   "mode_expert_desc": "すべての技術的詳細とコントロール",
   "buy_signal": "買いシグナル",
-  "sell_signal": "売りシグナル"
+  "sell_signal": "売りシグナル",
+  "use_gradient": "スムーズグラデーション使用",
+  "gradient_base": "基本ペナルティ%",
+  "gradient_scaling": "ボラスケーリング",
+  "equity_curve": "エクイティカーブ",
+  "filter_impact": "フィルター影響",
+  "signals_before": "前",
+  "signals_after": "後",
+  "filter_stage": "ステージ"
 }

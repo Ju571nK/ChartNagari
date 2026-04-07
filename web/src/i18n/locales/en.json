@@ -339,5 +339,13 @@
   "mode_beginner_desc": "Simplified view with basic signals",
   "mode_expert_desc": "Full technical details and controls",
   "buy_signal": "Buy Signal",
-  "sell_signal": "Sell Signal"
+  "sell_signal": "Sell Signal",
+  "use_gradient": "Use smooth gradient",
+  "gradient_base": "Base penalty %",
+  "gradient_scaling": "Vol scaling factor",
+  "equity_curve": "Equity Curve",
+  "filter_impact": "Filter Impact",
+  "signals_before": "Before",
+  "signals_after": "After",
+  "filter_stage": "Stage"
 }

@@ -448,6 +448,23 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		applyATRSlopeBonus(signals, allBars, indicators, tc.ATRSlope)
 	}
 
+	// Compute HTF trend and ATR percentile for signal metadata (#32 Phase 1).
+	// These values are already partially computed above; extract them for persistence.
+	computedHTFTrend := htfContext(indicators, "1D", allBars)
+	if computedHTFTrend == "" {
+		computedHTFTrend = htfContext(indicators, "1W", allBars)
+	}
+	var computedATRPctl float64 = -1
+	if bars1D, ok := allBars["1D"]; ok {
+		if currentATR, hasATR := indicators["1D:ATR_14"]; hasATR && currentATR > 0 {
+			computedATRPctl = atrPercentile(bars1D, currentATR, 14, 90)
+		}
+	}
+	for i := range signals {
+		signals[i].HTFTrend = computedHTFTrend
+		signals[i].ATRPercentile = computedATRPctl
+	}
+
 	// Paper trading: open new positions and check existing TP/SL.
 	if p.paperTrader != nil {
 		p.paperTrader.OnSignals(signals)

@@ -102,6 +102,21 @@ func main() {
 		log.Info().Msg("no enabled stock symbols — set enabled: true in watchlist.yaml")
 	}
 
+	// ── Index (VIX) data collector — 1D only, not included in pipeline ──
+	indexSymbols := cfg.EnabledIndexSymbols()
+	if len(indexSymbols) > 0 {
+		indexTFs := []string{"1D"} // indices use daily timeframe only
+		if cfg.Tiingo.APIKey != "" {
+			tiingoIdx := collector.NewTiingoCollector(cfg.Tiingo.APIKey, db, indexSymbols, indexTFs, cfg.Tiingo.PollInterval)
+			go tiingoIdx.Start(ctx)
+			log.Info().Strs("symbols", indexSymbols).Msg("Index collector started (Tiingo, 1D only)")
+		} else {
+			yahooIdx := collector.NewYahooCollector(db, indexSymbols, indexTFs, cfg.Yahoo.PollInterval)
+			go yahooIdx.Start(ctx)
+			log.Info().Strs("symbols", indexSymbols).Msg("Index collector started (Yahoo, 1D only)")
+		}
+	}
+
 	// ── AlphaVantage 20년 일봉 수집기 (1회 실행) ─────────────────────
 	if cfg.AlphaVantage.APIKey != "" {
 		avCollector := collector.NewAlphaVantageCollector(cfg.AlphaVantage.APIKey, db, []string{"SPY"})

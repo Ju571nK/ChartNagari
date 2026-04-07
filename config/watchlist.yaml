@@ -13,6 +13,10 @@ symbols:
         - symbol: PLTR
           exchange: nasdaq
           enabled: true
+    indices:
+        - symbol: "^VIX"
+          exchange: cboe
+          enabled: true
 timeframes:
     - 1W
     - 1D

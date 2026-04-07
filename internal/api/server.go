@@ -89,6 +89,8 @@ type SignalBar struct {
 	ForwardReturn10d float64 `json:"forward_return_10d,omitempty"`
 	ForwardReturn20d float64 `json:"forward_return_20d,omitempty"`
 	ForwardReturn40d float64 `json:"forward_return_40d,omitempty"`
+	HTFTrend         string  `json:"htf_trend,omitempty"`
+	ATRPercentile    float64 `json:"atr_percentile,omitempty"`
 }
 
 // AggregatedRuleStat aggregates per-rule backtest stats across multiple symbols.
@@ -323,6 +325,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/rules", s.getRules)
 	mux.HandleFunc("PUT /api/rules/{name}", s.updateRule)
 
+	// VIX market volatility
+	mux.HandleFunc("GET /api/vix/current", s.getVIXCurrent)
+
 	// Chart dashboard data
 	mux.HandleFunc("GET /api/ohlcv/{symbol}/{timeframe}", s.getChartOHLCV)
 	mux.HandleFunc("GET /api/signals", s.getChartSignals)
@@ -446,6 +451,53 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 		LastSignalUnix: lastSignal,
 		DataSources:    sources,
 		WSClients:      wsClients,
+	})
+}
+
+// VIXResponse is the JSON structure for the /api/vix/current endpoint.
+type VIXResponse struct {
+	Current   float64 `json:"current"`
+	Avg20d    float64 `json:"avg_20d"`
+	Trend     string  `json:"trend"` // "rising" | "falling"
+	Available bool    `json:"available"`
+}
+
+func (s *Server) getVIXCurrent(w http.ResponseWriter, _ *http.Request) {
+	if s.chartStore == nil {
+		jsonOK(w, VIXResponse{Available: false})
+		return
+	}
+
+	bars, err := s.chartStore.GetOHLCV("^VIX", "1D", 30)
+	if err != nil || len(bars) == 0 {
+		jsonOK(w, VIXResponse{Available: false})
+		return
+	}
+
+	// bars are newest-first (DESC order from DB)
+	current := bars[0].Close
+
+	// Calculate 20-day simple moving average of close prices
+	n := len(bars)
+	if n > 20 {
+		n = 20
+	}
+	var sum float64
+	for i := 0; i < n; i++ {
+		sum += bars[i].Close
+	}
+	avg20d := sum / float64(n)
+
+	trend := "falling"
+	if current > avg20d {
+		trend = "rising"
+	}
+
+	jsonOK(w, VIXResponse{
+		Current:   math.Round(current*100) / 100,
+		Avg20d:    math.Round(avg20d*100) / 100,
+		Trend:     trend,
+		Available: true,
 	})
 }
 
@@ -654,6 +706,8 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 			ForwardReturn10d: sig.ForwardReturn10d,
 			ForwardReturn20d: sig.ForwardReturn20d,
 			ForwardReturn40d: sig.ForwardReturn40d,
+			HTFTrend:         sig.HTFTrend,
+			ATRPercentile:    sig.ATRPercentile,
 		}
 	}
 	jsonOK(w, result)
@@ -737,6 +791,8 @@ func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {
 			ForwardReturn10d: sig.ForwardReturn10d,
 			ForwardReturn20d: sig.ForwardReturn20d,
 			ForwardReturn40d: sig.ForwardReturn40d,
+			HTFTrend:         sig.HTFTrend,
+			ATRPercentile:    sig.ATRPercentile,
 		}
 	}
 	jsonOK(w, result)

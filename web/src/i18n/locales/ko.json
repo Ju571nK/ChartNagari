@@ -347,5 +347,12 @@
   "filter_impact": "필터 영향",
   "signals_before": "전",
   "signals_after": "후",
-  "filter_stage": "단계"
+  "filter_stage": "단계",
+  "market_volatility": "시장 변동성",
+  "vix_current": "VIX",
+  "vix_average": "20일 평균",
+  "vix_low": "낮음",
+  "vix_normal": "보통",
+  "vix_elevated": "상승",
+  "vix_high": "높음"
 }

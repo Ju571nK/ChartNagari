@@ -101,6 +101,13 @@ interface StatusData {
   data_sources: string[]
 }
 
+interface VIXData {
+  current: number
+  avg_20d: number
+  trend: string // "rising" | "falling"
+  available: boolean
+}
+
 interface PriceAlert {
   ID: number
   Symbol: string
@@ -620,16 +627,30 @@ function fmtRelTime(unix: number): string {
   return i18n.t('days_ago', { n: Math.floor(diff / 86400) })
 }
 
+function vixStatusLabel(vix: number, t: (k: string) => string): { label: string; color: string } {
+  if (vix < 15) return { label: t('vix_low'), color: 'var(--safe)' }
+  if (vix <= 25) return { label: t('vix_normal'), color: 'var(--text)' }
+  if (vix <= 35) return { label: t('vix_elevated'), color: 'var(--warning)' }
+  return { label: t('vix_high'), color: 'var(--danger)' }
+}
+
 function StatusTab() {
   const { t } = useTranslation()
   const [status, setStatus] = useState<StatusData | null>(null)
+  const [vix, setVix] = useState<VIXData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
-    apiFetch<StatusData>('/status')
-      .then(setStatus)
+    Promise.all([
+      apiFetch<StatusData>('/status'),
+      apiFetch<VIXData>('/vix/current').catch(() => null),
+    ])
+      .then(([s, v]) => {
+        setStatus(s)
+        if (v) setVix(v)
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -652,6 +673,32 @@ function StatusTab() {
         <span>{t('pipeline_running')}</span>
         <span className="status-uptime">{t('uptime_label', { time: fmtUptime(status.uptime_sec) })}</span>
       </div>
+
+      {vix && vix.available && (() => {
+        const { label, color } = vixStatusLabel(vix.current, t)
+        const arrow = vix.trend === 'rising' ? '\u2191' : '\u2193'
+        return (
+          <>
+            <p className="section-title">{t('market_volatility')}</p>
+            <div className="status-grid">
+              <div className="stat-card">
+                <div className="stat-value" style={{ color }}>
+                  {vix.current.toFixed(1)} {arrow}
+                </div>
+                <div className="stat-label">{t('vix_current')}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{vix.avg_20d.toFixed(1)}</div>
+                <div className="stat-label">{t('vix_average')}</div>
+              </div>
+              <div className="stat-card" style={{ gridColumn: 'span 2' }}>
+                <div className="stat-value" style={{ color }}>{label}</div>
+                <div className="stat-label">{t('status')}</div>
+              </div>
+            </div>
+          </>
+        )
+      })()}
 
       <p className="section-title">{t('data_sources')}</p>
       <div className="source-list">

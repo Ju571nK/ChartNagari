@@ -347,5 +347,12 @@
   "filter_impact": "フィルター影響",
   "signals_before": "前",
   "signals_after": "後",
-  "filter_stage": "ステージ"
+  "filter_stage": "ステージ",
+  "market_volatility": "市場ボラティリティ",
+  "vix_current": "VIX",
+  "vix_average": "20日平均",
+  "vix_low": "低い",
+  "vix_normal": "通常",
+  "vix_elevated": "上昇",
+  "vix_high": "高い"
 }

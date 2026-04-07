@@ -218,6 +218,24 @@ func (db *DB) migrate() error {
 		}
 	}
 
+	// Migrate existing DB: add htf_trend column for HTF context tracking (#32)
+	if _, err := db.conn.Exec(
+		`ALTER TABLE signals ADD COLUMN htf_trend TEXT NOT NULL DEFAULT ''`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("signals htf_trend migration failed: %w", err)
+		}
+	}
+
+	// Migrate existing DB: add atr_percentile column for volatility regime tracking (#32)
+	if _, err := db.conn.Exec(
+		`ALTER TABLE signals ADD COLUMN atr_percentile REAL NOT NULL DEFAULT -1`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("signals atr_percentile migration failed: %w", err)
+		}
+	}
+
 	return nil
 }
 

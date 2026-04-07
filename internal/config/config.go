@@ -160,8 +160,9 @@ type ScoringConfig struct {
 // WatchlistConfig mirrors config/watchlist.yaml structure.
 type WatchlistConfig struct {
 	Symbols struct {
-		Crypto []SymbolEntry `yaml:"crypto"`
-		Stocks []SymbolEntry `yaml:"stocks"`
+		Crypto  []SymbolEntry `yaml:"crypto"`
+		Stocks  []SymbolEntry `yaml:"stocks"`
+		Indices []SymbolEntry `yaml:"indices"`
 	} `yaml:"symbols"`
 	Timeframes []string `yaml:"timeframes"`
 }
@@ -466,6 +467,17 @@ func (c *Config) EnabledCryptoSymbols() []string {
 func (c *Config) EnabledStockSymbols() []string {
 	var out []string
 	for _, s := range c.Watchlist.Symbols.Stocks {
+		if s.Enabled {
+			out = append(out, s.Symbol)
+		}
+	}
+	return out
+}
+
+// EnabledIndexSymbols returns only the enabled index symbols (e.g. ^VIX).
+func (c *Config) EnabledIndexSymbols() []string {
+	var out []string
+	for _, s := range c.Watchlist.Symbols.Indices {
 		if s.Enabled {
 			out = append(out, s.Symbol)
 		}

@@ -25,6 +25,9 @@ type Signal struct {
 	ForwardReturn10d float64 `json:"forward_return_10d,omitempty"`
 	ForwardReturn20d float64 `json:"forward_return_20d,omitempty"`
 	ForwardReturn40d float64 `json:"forward_return_40d,omitempty"`
+	// HTF context and volatility regime metadata (filled by pipeline, persisted in DB).
+	HTFTrend      string  `json:"htf_trend,omitempty"`
+	ATRPercentile float64 `json:"atr_percentile,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

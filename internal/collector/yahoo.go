@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -118,7 +119,7 @@ func (c *YahooCollector) fetchOHLCV(symbol, tf string) ([]models.OHLCV, error) {
 		return nil, fmt.Errorf("unsupported timeframe: %s", tf)
 	}
 
-	url := fmt.Sprintf(yahooChartURL, symbol, params[0], params[1])
+	url := fmt.Sprintf(yahooChartURL, url.PathEscape(symbol), params[0], params[1])
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

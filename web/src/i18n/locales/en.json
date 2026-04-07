@@ -347,5 +347,12 @@
   "filter_impact": "Filter Impact",
   "signals_before": "Before",
   "signals_after": "After",
-  "filter_stage": "Stage"
+  "filter_stage": "Stage",
+  "market_volatility": "Market Volatility",
+  "vix_current": "VIX",
+  "vix_average": "20d Average",
+  "vix_low": "Low",
+  "vix_normal": "Normal",
+  "vix_elevated": "Elevated",
+  "vix_high": "High"
 }

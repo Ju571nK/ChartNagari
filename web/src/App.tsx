@@ -2230,7 +2230,12 @@ function AlertTab() {
 // ── Signal Tuning Section ─────────────────────────────────────────────────────
 
 interface SignalTuningConfig {
-  htf_filter: { counter_trend_penalty_pct: number }
+  htf_filter: {
+    counter_trend_penalty_pct: number
+    low_vol_penalty_pct: number
+    normal_penalty_pct: number
+    high_vol_penalty_pct: number
+  }
   volatility_regime: {
     low_vol_percentile: number
     high_vol_percentile: number
@@ -2303,6 +2308,36 @@ function SignalTuningSection() {
           </div>
         </div>
         <p className="item-meta">{t('htf_penalty_hint')}</p>
+
+        {/* Per-regime HTF penalty overrides */}
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className="field-label" style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{t('htf_regime_overrides')}</span>
+          {(['low_vol', 'normal', 'high_vol'] as const).map((regime) => {
+            const key = `${regime}_penalty_pct` as 'low_vol_penalty_pct' | 'normal_penalty_pct' | 'high_vol_penalty_pct'
+            return (
+              <div key={regime} className="report-field" style={{ alignItems: 'center' }}>
+                <span className="field-label" style={{ fontSize: '0.75rem', minWidth: 80 }}>{t(`regime_${regime}`)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={config.htf_filter[key]}
+                    onChange={(e) => setConfig({
+                      ...config,
+                      htf_filter: { ...config.htf_filter, [key]: parseInt(e.target.value) }
+                    })}
+                    style={{ flex: 1, accentColor: regime === 'high_vol' ? 'var(--safe)' : regime === 'low_vol' ? 'var(--warning)' : 'var(--green)' }}
+                  />
+                  <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.78rem' }}>
+                    {config.htf_filter[key]}%
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+          <p className="item-meta">{t('htf_regime_hint')}</p>
+        </div>
       </div>
 
       {/* Volatility Regime */}

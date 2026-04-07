@@ -320,11 +320,31 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 
 	// HTF context filter: penalize (or suppress) lower-TF signals that contradict higher-TF trend.
-	// Penalty percentage is controlled by signal tuning config (0=pass all, 100=full suppress).
+	// Penalty percentage varies by volatility regime if per-regime overrides are set.
 	// Wyckoff phase can override: accumulation/markup → allow LONG even if EMA says bearish.
 	htfPenaltyPct := 100 // legacy default: full suppress
 	if p.tuningHolder != nil {
-		htfPenaltyPct = p.tuningHolder.Get().HTFFilter.CounterTrendPenaltyPct
+		tc := p.tuningHolder.Get()
+		htfPenaltyPct = tc.HTFFilter.CounterTrendPenaltyPct
+
+		// Per-regime override: determine current regime from 1D ATR percentile
+		if bars1D, ok := allBars["1D"]; ok {
+			if currentATR, hasATR := indicators["1D:ATR_14"]; hasATR && currentATR > 0 {
+				pctl := atrPercentile(bars1D, currentATR, 14, 90)
+				if pctl >= 0 {
+					switch {
+					case pctl < float64(tc.VolatilityRegime.LowVolPercentile) && tc.HTFFilter.LowVolPenaltyPct > 0:
+						htfPenaltyPct = tc.HTFFilter.LowVolPenaltyPct
+					case pctl > float64(tc.VolatilityRegime.HighVolPercentile) && tc.HTFFilter.HighVolPenaltyPct > 0:
+						htfPenaltyPct = tc.HTFFilter.HighVolPenaltyPct
+					default:
+						if tc.HTFFilter.NormalPenaltyPct > 0 {
+							htfPenaltyPct = tc.HTFFilter.NormalPenaltyPct
+						}
+					}
+				}
+			}
+		}
 	}
 	beforeHTF := len(signals)
 	signals = penalizeHTFContext(signals, indicators, allBars, wyckoffPhase, htfPenaltyPct)

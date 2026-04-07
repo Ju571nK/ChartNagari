@@ -330,5 +330,7 @@
   "import_settings": "設定インポート",
   "restore_confirm": "全データが置き換えられます。続行しますか？",
   "restore_success": "DB復元完了。サーバーを再起動してください。",
-  "import_success": "設定インポート完了"
+  "import_success": "設定インポート完了",
+  "htf_regime_overrides": "レジーム別ペナルティ（0 = 上のデフォルト値を使用）",
+  "htf_regime_hint": "低ボラ: 高ペナルティ（ノイズ）。高ボラ: 低ペナルティ（反転がシャープ）。"
 }

@@ -9,8 +9,12 @@ import (
 )
 
 // HTFFilterConfig controls counter-trend penalty behavior.
+// Per-regime overrides: if set (> 0), override the default penalty in that regime.
 type HTFFilterConfig struct {
 	CounterTrendPenaltyPct int `yaml:"counter_trend_penalty_pct" json:"counter_trend_penalty_pct"`
+	LowVolPenaltyPct       int `yaml:"low_vol_penalty_pct,omitempty" json:"low_vol_penalty_pct"`
+	NormalPenaltyPct       int `yaml:"normal_penalty_pct,omitempty" json:"normal_penalty_pct"`
+	HighVolPenaltyPct      int `yaml:"high_vol_penalty_pct,omitempty" json:"high_vol_penalty_pct"`
 }
 
 // VolatilityRegimeConfig controls ATR percentile thresholds and score adjustments.
@@ -39,6 +43,9 @@ func DefaultSignalTuning() SignalTuningConfig {
 	return SignalTuningConfig{
 		HTFFilter: HTFFilterConfig{
 			CounterTrendPenaltyPct: 50,
+			LowVolPenaltyPct:      70,
+			NormalPenaltyPct:      0, // 0 = use default CounterTrendPenaltyPct
+			HighVolPenaltyPct:     30,
 		},
 		VolatilityRegime: VolatilityRegimeConfig{
 			LowVolPercentile:  25,

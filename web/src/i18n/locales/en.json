@@ -330,5 +330,7 @@
   "import_settings": "Import Settings",
   "restore_confirm": "This will replace ALL existing data. Are you sure?",
   "restore_success": "Database restored. Please restart the server.",
-  "import_success": "Settings imported successfully."
+  "import_success": "Settings imported successfully.",
+  "htf_regime_overrides": "Per-regime penalty (0 = use default above)",
+  "htf_regime_hint": "Low vol: higher penalty (noise). High vol: lower penalty (sharper reversals)."
 }

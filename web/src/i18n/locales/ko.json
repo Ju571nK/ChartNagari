@@ -330,5 +330,7 @@
   "import_settings": "설정 가져오기",
   "restore_confirm": "모든 기존 데이터가 교체됩니다. 계속하시겠습니까?",
   "restore_success": "DB 복원 완료. 서버를 재시작하세요.",
-  "import_success": "설정 가져오기 완료."
+  "import_success": "설정 가져오기 완료.",
+  "htf_regime_overrides": "레짐별 패널티 (0 = 위 기본값 사용)",
+  "htf_regime_hint": "저변동: 높은 패널티 (노이즈). 고변동: 낮은 패널티 (반전이 더 날카로움)."
 }

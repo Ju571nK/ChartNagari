@@ -321,5 +321,14 @@
   "regime_trades": "トレード数",
   "regime_avg_rr": "平均R:R",
   "regime_pf": "PF",
-  "regime_return": "リターン"
+  "regime_return": "リターン",
+  "data_management": "データ管理",
+  "download_backup": "DBバックアップ",
+  "restore_db": "DB復元",
+  "export_signals": "シグナルCSVエクスポート",
+  "export_settings": "設定エクスポート",
+  "import_settings": "設定インポート",
+  "restore_confirm": "全データが置き換えられます。続行しますか？",
+  "restore_success": "DB復元完了。サーバーを再起動してください。",
+  "import_success": "設定インポート完了"
 }

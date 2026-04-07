@@ -3,13 +3,16 @@ package api
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -183,6 +186,7 @@ type Server struct {
 	demoEngine       *engine.RuleEngine             // optional; set via WithDemoEngine for /api/demo/scan
 	profileHolder       *appconfig.SymbolProfilesHolder    // optional; set via WithSymbolProfiles
 	signalTuningHolder  *appconfig.SignalTuningHolder      // optional; set via WithSignalTuningHolder
+	dbPath              string                             // path to SQLite DB file; set via WithDBPath
 	startTime           time.Time                          // server start timestamp for uptime
 	dataSources         []string                           // active data sources (e.g. ["Binance","Tiingo"])
 	mu                  sync.RWMutex
@@ -279,6 +283,11 @@ func (s *Server) WithSettingsFile(path string) {
 	s.settingsFile = path
 }
 
+// WithDBPath stores the SQLite database file path for backup/restore endpoints.
+func (s *Server) WithDBPath(path string) {
+	s.dbPath = path
+}
+
 // Handler returns the fully configured http.Handler for the server.
 // All /api/* routes are registered; other paths fall through to the static
 // file server when available.
@@ -373,6 +382,17 @@ func (s *Server) Handler() http.Handler {
 	if s.demoEngine != nil {
 		mux.HandleFunc("GET /api/demo/scan", s.demoScan)
 	}
+
+	// Signal CSV export
+	mux.HandleFunc("GET /api/signals/export", s.exportSignalsCSV)
+
+	// DB backup & restore
+	mux.HandleFunc("GET /api/backup/db", s.backupDB)
+	mux.HandleFunc("POST /api/restore/db", s.restoreDB)
+
+	// Settings export & import
+	mux.HandleFunc("GET /api/settings/export", s.exportSettings)
+	mux.HandleFunc("POST /api/settings/import", s.importSettings)
 
 	// Multi-analyst full analysis
 	mux.HandleFunc("POST /api/analysis/full", s.runFullAnalysis)
@@ -2061,4 +2081,231 @@ func generateDemoBars(symbol, timeframe string, count int) []models.OHLCV {
 	}
 
 	return bars
+}
+
+// ── Signal CSV Export ────────────────────────────────────────────────────────
+
+// exportSignalsCSV handles GET /api/signals/export?format=csv&symbol=X&direction=Y&limit=N.
+func (s *Server) exportSignalsCSV(w http.ResponseWriter, r *http.Request) {
+	if s.chartStore == nil {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", `attachment; filename="signals_export.csv"`)
+		cw := csv.NewWriter(w)
+		cw.Write([]string{"time", "symbol", "timeframe", "rule", "direction", "score", "entry_price", "tp", "sl", "zone_low", "zone_high", "ai_interpretation"}) //nolint:errcheck
+		cw.Flush()
+		return
+	}
+
+	symbol := r.URL.Query().Get("symbol")
+	if symbol == "" {
+		symbol = "ALL"
+	}
+	direction := r.URL.Query().Get("direction")
+	if direction == "" {
+		direction = "ALL"
+	}
+	limit := 1000
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	sigs, err := s.chartStore.GetSignalsFiltered(symbol, direction, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="signals_export.csv"`)
+
+	cw := csv.NewWriter(w)
+	defer cw.Flush()
+
+	// Header row
+	cw.Write([]string{"time", "symbol", "timeframe", "rule", "direction", "score", "entry_price", "tp", "sl", "zone_low", "zone_high", "ai_interpretation"}) //nolint:errcheck
+
+	for _, sig := range sigs {
+		cw.Write([]string{
+			sig.CreatedAt.Format(time.RFC3339),
+			sig.Symbol,
+			sig.Timeframe,
+			sig.Rule,
+			sig.Direction,
+			strconv.FormatFloat(sig.Score, 'f', 2, 64),
+			strconv.FormatFloat(sig.EntryPrice, 'f', 6, 64),
+			strconv.FormatFloat(sig.TP, 'f', 6, 64),
+			strconv.FormatFloat(sig.SL, 'f', 6, 64),
+			strconv.FormatFloat(sig.ZoneLow, 'f', 6, 64),
+			strconv.FormatFloat(sig.ZoneHigh, 'f', 6, 64),
+			sig.AIInterpretation,
+		}) //nolint:errcheck
+	}
+}
+
+// ── DB Backup & Restore ─────────────────────────────────────────────────────
+
+// backupDB handles GET /api/backup/db — streams the SQLite file as a download.
+func (s *Server) backupDB(w http.ResponseWriter, _ *http.Request) {
+	if s.dbPath == "" {
+		http.Error(w, "database path not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	f, err := os.Open(s.dbPath)
+	if err != nil {
+		http.Error(w, "failed to open database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	filename := fmt.Sprintf("chartnagari_backup_%s.db", time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+	if _, err := io.Copy(w, f); err != nil {
+		log.Error().Err(err).Msg("backup DB streaming failed")
+	}
+}
+
+// restoreDB handles POST /api/restore/db — replaces the SQLite file with the uploaded one.
+func (s *Server) restoreDB(w http.ResponseWriter, r *http.Request) {
+	if s.dbPath == "" {
+		http.Error(w, "database path not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse multipart; limit to 512 MB.
+	if err := r.ParseMultipartForm(512 << 20); err != nil {
+		http.Error(w, "failed to parse upload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "missing 'file' field: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Backup existing DB to .bak
+	bakPath := s.dbPath + ".bak"
+	if err := copyFile(s.dbPath, bakPath); err != nil {
+		log.Warn().Err(err).Msg("failed to create .bak before restore (may not exist yet)")
+	}
+
+	// Write uploaded file to a temp file, then rename for atomicity.
+	tmpPath := s.dbPath + ".tmp"
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		http.Error(w, "failed to create temp file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := io.Copy(out, file); err != nil {
+		out.Close()
+		os.Remove(tmpPath)
+		http.Error(w, "failed to write uploaded file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out.Close()
+
+	if err := os.Rename(tmpPath, s.dbPath); err != nil {
+		http.Error(w, "failed to replace database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonOK(w, map[string]string{
+		"status":  "ok",
+		"message": "Database restored. Please restart the server.",
+	})
+}
+
+// copyFile copies src to dst (used for .bak backups).
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// ── Settings Export & Import ─────────────────────────────────────────────────
+
+// exportSettings handles GET /api/settings/export — bundles config YAML files into JSON.
+func (s *Server) exportSettings(w http.ResponseWriter, _ *http.Request) {
+	files := map[string]string{
+		"watchlist.yaml":       filepath.Join(s.configDir, "watchlist.yaml"),
+		"rules.yaml":           filepath.Join(s.configDir, "rules.yaml"),
+		"signal_tuning.yaml":   filepath.Join(s.configDir, "signal_tuning.yaml"),
+		"symbol_profiles.yaml": filepath.Join(s.configDir, "symbol_profiles.yaml"),
+	}
+
+	result := make(map[string]string, len(files))
+	for key, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				result[key] = ""
+				continue
+			}
+			http.Error(w, fmt.Sprintf("failed to read %s: %v", key, err), http.StatusInternalServerError)
+			return
+		}
+		result[key] = string(data)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="chartnagari_settings.json"`)
+	json.NewEncoder(w).Encode(result) //nolint:errcheck
+}
+
+// importSettings handles POST /api/settings/import — restores config YAML files from JSON.
+func (s *Server) importSettings(w http.ResponseWriter, r *http.Request) {
+	var payload map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	allowedFiles := map[string]bool{
+		"watchlist.yaml":       true,
+		"rules.yaml":           true,
+		"signal_tuning.yaml":   true,
+		"symbol_profiles.yaml": true,
+	}
+
+	for key, content := range payload {
+		if !allowedFiles[key] {
+			continue
+		}
+		if content == "" {
+			continue
+		}
+		filePath := filepath.Join(s.configDir, key)
+
+		// Backup existing file to .bak
+		if _, err := os.Stat(filePath); err == nil {
+			_ = copyFile(filePath, filePath+".bak")
+		}
+
+		if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+			http.Error(w, fmt.Sprintf("failed to write %s: %v", key, err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	jsonOK(w, map[string]string{
+		"status":  "ok",
+		"message": "Settings imported successfully.",
+	})
 }

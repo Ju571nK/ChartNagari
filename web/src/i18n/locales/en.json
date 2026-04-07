@@ -321,5 +321,14 @@
   "regime_trades": "Trades",
   "regime_avg_rr": "Avg R:R",
   "regime_pf": "PF",
-  "regime_return": "Return"
+  "regime_return": "Return",
+  "data_management": "Data Management",
+  "download_backup": "Download DB Backup",
+  "restore_db": "Restore DB",
+  "export_signals": "Export Signals CSV",
+  "export_settings": "Export Settings",
+  "import_settings": "Import Settings",
+  "restore_confirm": "This will replace ALL existing data. Are you sure?",
+  "restore_success": "Database restored. Please restart the server.",
+  "import_success": "Settings imported successfully."
 }

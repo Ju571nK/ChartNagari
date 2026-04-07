@@ -2948,6 +2948,103 @@ function SettingsTab() {
       <button className="run-btn" onClick={handleSave} disabled={saving}>
         {saving ? 'Saving…' : 'Save to .env'}
       </button>
+
+      <DataManagementSection />
+    </div>
+  )
+}
+
+// ── Data Management Section ──────────────────────────────────────────────────
+
+function DataManagementSection() {
+  const { t } = useTranslation()
+  const [restoreMsg, setRestoreMsg] = useState('')
+  const [importMsg, setImportMsg] = useState('')
+
+  const handleRestoreDB = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!window.confirm(t('restore_confirm'))) {
+      e.target.value = ''
+      return
+    }
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch('/api/restore/db', { method: 'POST', body: form })
+      if (!res.ok) throw new Error(await res.text())
+      setRestoreMsg(t('restore_success'))
+    } catch (err: unknown) {
+      setRestoreMsg(err instanceof Error ? err.message : 'Restore failed')
+    }
+    e.target.value = ''
+  }
+
+  const handleImportSettings = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const res = await fetch('/api/settings/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setImportMsg(t('import_success'))
+    } catch (err: unknown) {
+      setImportMsg(err instanceof Error ? err.message : 'Import failed')
+    }
+    e.target.value = ''
+  }
+
+  return (
+    <div style={{ marginTop: '2.5rem' }}>
+      <h3 style={{
+        fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+        color: 'var(--accent)', marginBottom: '0.75rem',
+        borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
+      }}>
+        {t('data_management')}
+      </h3>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+        <a href="/api/backup/db" className="tab-btn" style={{ textDecoration: 'none' }}>
+          {t('download_backup')}
+        </a>
+        <label className="tab-btn" style={{ cursor: 'pointer' }}>
+          {t('restore_db')}
+          <input type="file" accept=".db" style={{ display: 'none' }} onChange={handleRestoreDB} />
+        </label>
+      </div>
+
+      {restoreMsg && (
+        <div className="save-success" style={{ marginBottom: '1rem' }}>
+          {restoreMsg}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+        <a href="/api/signals/export?format=csv" className="tab-btn" style={{ textDecoration: 'none' }}>
+          {t('export_signals')}
+        </a>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+        <a href="/api/settings/export" className="tab-btn" style={{ textDecoration: 'none' }}>
+          {t('export_settings')}
+        </a>
+        <label className="tab-btn" style={{ cursor: 'pointer' }}>
+          {t('import_settings')}
+          <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportSettings} />
+        </label>
+      </div>
+
+      {importMsg && (
+        <div className="save-success" style={{ marginBottom: '1rem' }}>
+          {importMsg}
+        </div>
+      )}
     </div>
   )
 }

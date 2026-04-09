@@ -1,5 +1,7 @@
 # ChartNagari
 
+**🌐 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md)**
+
 [![CI](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)

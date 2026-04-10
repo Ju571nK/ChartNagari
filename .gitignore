@@ -96,6 +96,6 @@ docs/*.svg
 docs/*.png
 docs/*.html
 docs/*.md
-!docs/market-research.md
-!docs/community-feedback-improvements.md
-!docs/community-posts.md
+docs/market-research.md
+docs/community-feedback-improvements.md
+docs/community-posts.md

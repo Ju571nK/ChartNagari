@@ -18,7 +18,9 @@ import (
 // Config is the top-level application configuration.
 type Config struct {
 	Env        string
+	ServerHost string // bind address; default "127.0.0.1"
 	ServerPort string
+	APIToken   string // optional bearer token for mutating API endpoints
 	LogLevel   string
 	DBPath     string
 
@@ -178,8 +180,10 @@ type SymbolEntry struct {
 type SettingsYAML struct {
 	Server struct {
 		Env      string `yaml:"env"`
+		Host     string `yaml:"host"`
 		Port     string `yaml:"port"`
 		LogLevel string `yaml:"log_level"`
+		APIToken string `yaml:"api_token"`
 	} `yaml:"server"`
 	Database struct {
 		Path string `yaml:"path"`
@@ -250,8 +254,10 @@ func (s *SettingsYAML) ToMap() map[string]string {
 	}
 	return map[string]string{
 		"ENV":                  s.Server.Env,
+		"SERVER_HOST":          s.Server.Host,
 		"SERVER_PORT":          s.Server.Port,
 		"LOG_LEVEL":            s.Server.LogLevel,
+		"API_TOKEN":            s.Server.APIToken,
 		"BINANCE_API_KEY":      s.Binance.APIKey,
 		"BINANCE_SECRET_KEY":   s.Binance.SecretKey,
 		"TIINGO_API_KEY":       s.Tiingo.APIKey,
@@ -298,8 +304,10 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	}
 
 	set(&s.Server.Env, "ENV")
+	set(&s.Server.Host, "SERVER_HOST")
 	set(&s.Server.Port, "SERVER_PORT")
 	set(&s.Server.LogLevel, "LOG_LEVEL")
+	set(&s.Server.APIToken, "API_TOKEN")
 	set(&s.Binance.APIKey, "BINANCE_API_KEY")
 	set(&s.Binance.SecretKey, "BINANCE_SECRET_KEY")
 	set(&s.Tiingo.APIKey, "TIINGO_API_KEY")
@@ -363,7 +371,9 @@ func Load(envFile, configDir string) (*Config, error) {
 
 	cfg := &Config{
 		Env:        getEnvOr("ENV", s.Server.Env, "development"),
+		ServerHost: getEnvOr("SERVER_HOST", s.Server.Host, "127.0.0.1"),
 		ServerPort: getEnvOr("SERVER_PORT", s.Server.Port, "8080"),
+		APIToken:   getEnvOr("API_TOKEN", s.Server.APIToken, ""),
 		LogLevel:   getEnvOr("LOG_LEVEL", s.Server.LogLevel, "debug"),
 		DBPath:     getEnvOr("DB_PATH", s.Database.Path, "./data/chart_analyzer.db"),
 		Binance: BinanceConfig{

@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	_ "modernc.org/sqlite" // pure-Go SQLite driver for integrity_check
 
 	"github.com/rs/zerolog/log"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
@@ -195,6 +198,8 @@ type Server struct {
 	dbPath              string                             // path to SQLite DB file; set via WithDBPath
 	startTime           time.Time                          // server start timestamp for uptime
 	dataSources         []string                           // active data sources (e.g. ["Binance","Tiingo"])
+	allowedOrigins      map[string]bool                    // CORS allowlist; set via WithAllowedOrigins
+	apiToken            string                             // optional bearer token; set via WithAPIToken
 	mu                  sync.RWMutex
 }
 
@@ -203,13 +208,37 @@ type Server struct {
 //   - webDist:   path to the compiled React frontend (web/dist); empty or
 //     non-existent path → static serving is disabled.
 func New(configDir, webDist string) *Server {
-	s := &Server{configDir: configDir, startTime: time.Now()}
+	s := &Server{
+		configDir: configDir,
+		startTime: time.Now(),
+		allowedOrigins: map[string]bool{
+			"http://localhost:5173":   true,
+			"http://localhost:8080":   true,
+			"http://127.0.0.1:5173":  true,
+			"http://127.0.0.1:8080":  true,
+		},
+	}
 	if webDist != "" {
 		if _, err := os.Stat(webDist); err == nil {
 			s.static = http.FileServer(http.Dir(webDist))
 		}
 	}
 	return s
+}
+
+// WithAllowedOrigins replaces the CORS allowed-origin set.
+func (s *Server) WithAllowedOrigins(origins []string) {
+	m := make(map[string]bool, len(origins))
+	for _, o := range origins {
+		m[o] = true
+	}
+	s.allowedOrigins = m
+}
+
+// WithAPIToken sets the bearer token required for mutating (non-GET) endpoints.
+// When token is empty, auth is skipped for backward compatibility.
+func (s *Server) WithAPIToken(token string) {
+	s.apiToken = token
 }
 
 // WithChartStore wires the chart data store (OHLCV + signals) to the server.
@@ -414,7 +443,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("/", s.static)
 	}
 
-	return corsMiddleware(mux)
+	return s.corsMiddleware(s.authMiddleware(mux))
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
@@ -1819,11 +1848,12 @@ var envSensitiveKeys = map[string]bool{
 	"OPENAI_API_KEY":       true,
 	"GROQ_API_KEY":         true,
 	"GEMINI_API_KEY":       true,
+	"API_TOKEN":            true,
 }
 
 // envExposedKeys is the ordered list of setting keys exposed via the API.
 var envExposedKeys = []string{
-	"ENV", "SERVER_PORT", "LOG_LEVEL", "ALERT_COOLDOWN_HOURS",
+	"ENV", "SERVER_HOST", "SERVER_PORT", "LOG_LEVEL", "ALERT_COOLDOWN_HOURS", "API_TOKEN",
 	"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL",
 	"TIINGO_API_KEY", "TIINGO_POLL_INTERVAL",
 	"YAHOO_POLL_INTERVAL",
@@ -1983,13 +2013,47 @@ func (s *Server) getCalendarEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // corsMiddleware adds CORS headers and handles OPTIONS preflight requests.
-func corsMiddleware(next http.Handler) http.Handler {
+// Only origins in s.allowedOrigins receive the Access-Control-Allow-Origin header;
+// unrecognised origins get no CORS header (browser will block them).
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+		// Always advertise that the response varies by Origin so caches don't
+		// serve a response with one Origin's CORS header to a different Origin.
+		w.Header().Set("Vary", "Origin")
+		if origin != "" && s.allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// authMiddleware enforces bearer-token authentication on mutating (non-GET, non-OPTIONS)
+// requests when s.apiToken is non-empty. GET and OPTIONS requests are always allowed so
+// that the frontend can read data without auth, preserving backward compatibility.
+// When s.apiToken is empty the middleware is a no-op, keeping full backward compatibility
+// for users who have not configured a token.
+func (s *Server) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.apiToken == "" || r.Method == http.MethodGet || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		authHeader := r.Header.Get("Authorization")
+		const prefix = "Bearer "
+		if len(authHeader) <= len(prefix) || authHeader[:len(prefix)] != prefix {
+			http.Error(w, "unauthorized: missing or malformed Authorization header", http.StatusUnauthorized)
+			return
+		}
+		token := authHeader[len(prefix):]
+		if token != s.apiToken {
+			http.Error(w, "unauthorized: invalid token", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -2322,6 +2386,21 @@ func (s *Server) restoreDB(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Close()
 
+	// Validate the uploaded file before replacing the live database.
+	// Step 1: verify the SQLite file magic (first 16 bytes).
+	const sqliteMagic = "SQLite format 3\x00"
+	if err := validateSQLiteMagic(tmpPath, sqliteMagic); err != nil {
+		os.Remove(tmpPath)
+		http.Error(w, "invalid database file: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Step 2: open with the driver and run PRAGMA integrity_check.
+	if err := validateSQLiteIntegrity(tmpPath); err != nil {
+		os.Remove(tmpPath)
+		http.Error(w, "database integrity check failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if err := os.Rename(tmpPath, s.dbPath); err != nil {
 		http.Error(w, "failed to replace database: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -2331,6 +2410,44 @@ func (s *Server) restoreDB(w http.ResponseWriter, r *http.Request) {
 		"status":  "ok",
 		"message": "Database restored. Please restart the server.",
 	})
+}
+
+// validateSQLiteMagic reads the first 16 bytes of path and checks for the SQLite magic string.
+var errNotSQLite = errors.New("file does not begin with SQLite format 3 magic bytes")
+
+func validateSQLiteMagic(path, magic string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	buf := make([]byte, 16)
+	if _, err := io.ReadFull(f, buf); err != nil {
+		return fmt.Errorf("file too small to be a valid SQLite database: %w", err)
+	}
+	if string(buf) != magic {
+		return errNotSQLite
+	}
+	return nil
+}
+
+// validateSQLiteIntegrity opens the SQLite file and runs PRAGMA integrity_check.
+// Returns an error if the database is corrupt or cannot be opened.
+func validateSQLiteIntegrity(path string) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return fmt.Errorf("cannot open uploaded database: %w", err)
+	}
+	defer db.Close()
+	row := db.QueryRow("PRAGMA integrity_check")
+	var result string
+	if err := row.Scan(&result); err != nil {
+		return fmt.Errorf("integrity_check query failed: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("integrity_check reported: %s", result)
+	}
+	return nil
 }
 
 // copyFile copies src to dst (used for .bak backups).

@@ -289,12 +289,29 @@ func TestUpdateRule_NotFound(t *testing.T) {
 	}
 }
 
-// Test 15: CORS header is present on every response.
+// Test 15: CORS header is present for allowed origins; wildcard is never returned.
 func TestCORSHeaders_Present(t *testing.T) {
 	srv := setupTest(t)
-	w := do(t, srv, "GET", "/api/status", nil)
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Errorf("Access-Control-Allow-Origin: want \"*\", got %q", got)
+
+	// An allowed origin should get exactly its own origin echoed back, not "*".
+	req := httptest.NewRequest("GET", "/api/status", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Errorf("allowed origin: want %q, got %q", "http://localhost:5173", got)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Errorf("wildcard CORS must not be returned")
+	}
+
+	// An unknown origin must not receive any ACAO header.
+	req2 := httptest.NewRequest("GET", "/api/status", nil)
+	req2.Header.Set("Origin", "http://evil.example.com")
+	w2 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w2, req2)
+	if got := w2.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("unknown origin: expected no ACAO header, got %q", got)
 	}
 }
 

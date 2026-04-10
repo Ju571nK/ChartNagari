@@ -14,6 +14,16 @@ Format:
 
 ---
 
+## [2.2.3.0] - 2026-04-09
+
+### Security
+- **CORS restriction** — replace wildcard `*` with localhost-only allowlist (ports 5173/8080), add `Vary: Origin`
+- **Localhost binding** — server defaults to `127.0.0.1` instead of `0.0.0.0`; opt-in via `SERVER_HOST=0.0.0.0`
+- **Bearer token auth** — optional `API_TOKEN` protects all mutating endpoints (POST/PUT/PATCH/DELETE); backward-compatible when unset
+- **SQLite restore validation** — verify magic bytes + `PRAGMA integrity_check` before replacing live database
+
+---
+
 ## [2.2.2.0] - 2026-04-07
 
 ### Added

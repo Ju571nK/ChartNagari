@@ -400,7 +400,10 @@ func main() {
 		activeSources = append(activeSources, "Yahoo Finance ("+strings.Join(stockSymbols, "/")+")")
 	}
 	apiSrv.WithDataSources(activeSources)
-	httpAddr := ":" + cfg.ServerPort
+	if cfg.APIToken != "" {
+		apiSrv.WithAPIToken(cfg.APIToken)
+	}
+	httpAddr := cfg.ServerHost + ":" + cfg.ServerPort
 	go func() {
 		log.Info().Str("addr", httpAddr).Msg("HTTP API server starting")
 		if err := http.ListenAndServe(httpAddr, apiSrv.Handler()); err != nil {

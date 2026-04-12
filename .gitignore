@@ -4,6 +4,9 @@
 .env.*.local
 !.env.example
 
+# ─── gstack / codex 세션 메타 ───
+.context/
+
 # ─── Go ───
 # Binaries (root or bin/)
 /chart-analyzer

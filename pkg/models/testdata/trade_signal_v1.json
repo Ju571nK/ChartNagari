@@ -1,0 +1,18 @@
+{
+  "id": "11111111-2222-3333-4444-555555555555",
+  "version": "1.0",
+  "timestamp": "2026-04-12T10:30:00Z",
+  "symbol": "AAPL",
+  "direction": "LONG",
+  "timeframe": "4H",
+  "rule": "liquidity_sweep",
+  "entry_price": 175.5,
+  "take_profit": 180.2,
+  "stop_loss": 173.1,
+  "score": 14.5,
+  "htf_trend": "LONG",
+  "atr_percentile": 0.65,
+  "asset_class": "stock",
+  "exchange": "nasdaq",
+  "ai_interpretation": "Strong sweep with 2.3x volume"
+}

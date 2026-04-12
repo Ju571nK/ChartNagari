@@ -14,6 +14,20 @@ Format:
 
 ---
 
+## [Unreleased]
+
+### Added
+- **TradeSignal envelope** (`pkg/models/trade_signal.go`) — outbound webhook payload wrapping internal `Signal`; injects uuid/timestamp/version/asset_class/exchange at dispatch time. JSON wire format frozen against `pkg/models/testdata/trade_signal_v1.json`.
+- **OrderFeedback model + status enum** (RECEIVED/SUBMITTED/FILLED/PARTIAL_FILL/REJECTED/CANCELLED/ERROR) for plugin callbacks.
+- **Execution plugin config** (`internal/config/execution.go`) — `ExecutionConfig`/`PluginConfig`, YAML load with zero-value fallback on missing file, atomic save (temp → fsync → rename → fsync parent dir) so kill-switch toggles are durable before the in-memory flag flips.
+- `ExecutionHolder.SetKillSwitch` persists disk before updating memory, `RedactSecrets`/`MergeIncomingSecrets` helpers keep plugin secrets out of API GETs while allowing rotation on PUT.
+- Validation rejects empty plugin id/url, non-http(s) url, duplicate ids, negative counters, `direction_filter` outside `{"", "LONG", "SHORT"}`, and empty `symbol_map` keys; normalizes plugin `symbols` and `symbol_map` keys/values to uppercase.
+
+### Changed
+- `go.mod`/`go.sum` — `github.com/google/uuid` promoted from indirect to direct dependency (used by `ToTradeSignal`); `go mod tidy` also promoted other already-direct deps misfiled as indirect.
+
+---
+
 ## [2.2.3.0] - 2026-04-09
 
 ### Security

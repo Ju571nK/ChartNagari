@@ -200,7 +200,24 @@ type Server struct {
 	dataSources         []string                           // active data sources (e.g. ["Binance","Tiingo"])
 	allowedOrigins      map[string]bool                    // CORS allowlist; set via WithAllowedOrigins
 	apiToken            string                             // optional bearer token; set via WithAPIToken
+	execHolder          *appconfig.ExecutionHolder         // optional; set via WithExecutionHolder
+	execPath            string                             // path to execution.yaml; set via WithExecutionPath
+	execDispatcher      ExecutionReleaser                  // optional; set via WithExecutionDispatcher
+	execFeedback        FeedbackRecorder                   // optional; set via WithExecutionFeedback
 	mu                  sync.RWMutex
+}
+
+// ExecutionReleaser is the minimal dispatcher surface the feedback handler
+// needs (Release on terminal statuses). *execution.Dispatcher satisfies this.
+type ExecutionReleaser interface {
+	Release()
+	ActiveCount() int64
+}
+
+// FeedbackRecorder records inbound plugin feedback idempotently.
+// *execution.FeedbackIdempotency satisfies this.
+type FeedbackRecorder interface {
+	RecordOnce(ctx context.Context, pluginID, signalID, orderID, status string, at time.Time) (bool, error)
 }
 
 // New creates a Server.
@@ -224,6 +241,22 @@ func New(configDir, webDist string) *Server {
 		}
 	}
 	return s
+}
+
+// WithExecutionHolder wires the execution config holder (Phase 2 dispatcher).
+func (s *Server) WithExecutionHolder(h *appconfig.ExecutionHolder, path string) {
+	s.execHolder = h
+	s.execPath = path
+}
+
+// WithExecutionDispatcher wires the dispatcher so feedback can call Release().
+func (s *Server) WithExecutionDispatcher(d ExecutionReleaser) {
+	s.execDispatcher = d
+}
+
+// WithExecutionFeedback wires the idempotency recorder.
+func (s *Server) WithExecutionFeedback(f FeedbackRecorder) {
+	s.execFeedback = f
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
@@ -437,6 +470,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/analysis/export", s.runAnalysisExport)
 	mux.HandleFunc("GET /api/analysis/history", s.getAnalysisHistory)
 	mux.HandleFunc("GET /api/analysis/history/{id}", s.getAnalysisDetail)
+
+	// Execution dispatcher (Phase 2).
+	if s.execHolder != nil {
+		mux.HandleFunc("GET /api/execution/config", s.getExecutionConfig)
+		mux.HandleFunc("PUT /api/execution/config", s.updateExecutionConfig)
+		mux.HandleFunc("POST /api/execution/kill", s.toggleExecutionKill)
+		mux.HandleFunc("POST /api/execution/feedback", s.postExecutionFeedback)
+	}
 
 	// Static frontend (SPA)
 	if s.static != nil {

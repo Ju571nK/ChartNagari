@@ -23,6 +23,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/collector"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
+	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
@@ -240,6 +241,29 @@ func main() {
 	// ── 페이퍼 트레이딩 엔진 ──────────────────────────────────────────────
 	paperTrader := paper.New(db, log.Logger)
 
+	// ── Trade Execution Dispatcher (Phase 2) ─────────────────────────────
+	// Load execution.yaml (missing file → disabled config with no plugins).
+	// Wire: ExecutionHolder → DedupStore → Dispatcher → FeedbackIdempotency.
+	// The dispatcher is always constructed; individual dispatches are gated by
+	// ExecutionConfig.Enabled + KillSwitch so an empty config is a no-op.
+	execPath := "config/execution.yaml"
+	execCfg, err := appconfig.LoadExecutionConfig(execPath)
+	if err != nil {
+		log.Warn().Err(err).Str("path", execPath).Msg("failed to load execution config — using disabled default")
+		execCfg = appconfig.ExecutionConfig{}
+	}
+	execHolder := appconfig.NewExecutionHolder(execPath, execCfg)
+	dedupStore := execution.NewDedupStore(db.Conn(), execCfg.DedupWindow())
+	dispatcher := execution.New(execHolder, dedupStore, execution.Options{Logger: log.Logger})
+	feedbackIdem := execution.NewFeedbackIdempotency(db.Conn())
+	dedupCleaner := execution.NewDedupCleaner(dedupStore, log.Logger)
+	go dedupCleaner.Run(ctx)
+	log.Info().
+		Bool("enabled", execCfg.Enabled).
+		Bool("kill_switch", execCfg.KillSwitch).
+		Int("plugins", len(execCfg.Plugins)).
+		Msg("execution dispatcher wired")
+
 	// ── 분석 파이프라인 시작 ──────────────────────────────────────────
 	allSymbols := append(cryptoSymbols, stockSymbols...)
 	if len(allSymbols) > 0 {
@@ -263,6 +287,7 @@ func main() {
 		pipe.SetSignalTuningHolder(tuningHolder)
 		pipe.SetForwardReturnStore(db, db)
 		pipe.SetCryptoSymbols(cryptoSymbols)
+		pipe.SetExecutionDispatcher(dispatcher)
 		go pipe.Run(ctx)
 		log.Info().
 			Strs("symbols", allSymbols).
@@ -315,6 +340,9 @@ func main() {
 	apiSrv.WithDemoEngine(eng)
 	apiSrv.WithSymbolProfiles(profileHolder)
 	apiSrv.WithSignalTuningHolder(tuningHolder)
+	apiSrv.WithExecutionHolder(execHolder, execPath)
+	apiSrv.WithExecutionDispatcher(dispatcher)
+	apiSrv.WithExecutionFeedback(feedbackIdem)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

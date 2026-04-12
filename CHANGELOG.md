@@ -14,6 +14,28 @@ Format:
 
 ---
 
+## [2.3.1.0] - 2026-04-12
+
+### Added
+- **Execution dispatcher** (`internal/execution/dispatcher.go`) — fan-out goroutine per eligible plugin with per-request HMAC signing, bounded 500ms timeout (default 10s), one retry on non-2xx, atomic `ActiveCount` gated by `max_dispatched` cap. Kill switch and `enabled=false` short-circuit before any HTTP I/O.
+- **HMAC-SHA256 signing** (`internal/execution/hmac.go`) — canonical string `plugin_id\ntimestamp\nmethod\npath\nhex(sha256(body))`; `Sign`/`Verify` use constant-time compare; `WithinSkew` enforces inclusive ±300s (configurable) on inbound feedback timestamps.
+- **SQLite-backed dedup** (`internal/execution/dedup.go`) — single-statement `INSERT OR IGNORE` against `UNIQUE(key, bucket)` eliminates TOCTOU; bucket key normalizes symbol+direction to upper/trim; `SQLITE_BUSY` fails closed.
+- **Feedback idempotency store** — `UNIQUE(plugin_id, signal_id, order_id, status)` prevents replay; distinct statuses for the same signal (ACK → FILLED) remain independent rows.
+- **Dedup cleaner** (`internal/execution/cleanup.go`) — background goroutine deletes rows older than `max(2*window, 2m)` on a 1-minute tick.
+- **API endpoints** (`internal/api/execution_handler.go`) — `GET /api/execution/config` (secrets redacted), `PUT /api/execution/config` (merge preserves unchanged secrets on empty/masked input), `POST /api/execution/kill` (disk-first persist then memory flip), `POST /api/execution/feedback` (HMAC-verified, terminal statuses free capacity via `Release()`, duplicates return 409).
+- **Pipeline integration** (`internal/pipeline/pipeline.go`) — `SetExecutionDispatcher` hook dispatches enriched signals post-notify via `models.ToTradeSignal` conversion.
+- **Server wiring** (`cmd/server/main.go`) — loads `config/execution.yaml` (zero-value fallback if missing), constructs dedup store + dispatcher + feedback idempotency + cleaner, binds to pipeline and API server.
+- **Default execution config** (`config/execution.yaml`) — fully disabled out of the box with commentary on every field.
+- **WebSocket hub subprotocol auth** — client type filtering with HMAC-authenticated subprotocol on `/ws` connections.
+
+### Database
+- New tables `execution_dedup` (UNIQUE(key, bucket), cleanup index on `dispatched_at`) and `feedback_idempotency` (UNIQUE(plugin_id, signal_id, order_id, status), lookup index on `(plugin_id, signal_id)`).
+
+### Tests
+- Coverage on `internal/execution/` at 82.2% across dispatcher (T1–T14), HMAC canonical format, dedup window/normalization, cleanup TTL flooring, and API handlers (redaction, secret preservation, kill persistence, replay 409, skew, terminal/non-terminal release semantics). Full suite runs `-race` clean.
+
+---
+
 ## [2.3.0.0] - 2026-04-12
 
 ### Added

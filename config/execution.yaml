@@ -1,0 +1,34 @@
+# Trade execution dispatcher configuration (Phase 2).
+#
+# By default the dispatcher is DISABLED and has no plugins — ChartNagari will
+# not send any outbound execution webhooks until an operator edits this file
+# (or uses PUT /api/execution/config) to register a plugin and flip enabled.
+#
+# kill_switch: when true, stops all dispatching regardless of enabled. Set via
+#   POST /api/execution/kill {"on": true|false}. Disk-first persistence
+#   guarantees the flag survives crashes (Codex #10).
+#
+# max_dispatched: 0 = no cap on concurrent in-flight dispatches. Any positive
+#   number enforces an ActiveCount ceiling (T6).
+#
+# dedup_window_sec: duplicate (symbol, rule, direction) dispatches inside this
+#   window are skipped. Defaults to 300s.
+#
+# timestamp_skew_sec: allowed clock skew for inbound feedback HMAC verification.
+#   Defaults to 300s.
+#
+# allowed_origins: origins permitted to open the /ws/execution WebSocket (in
+#   addition to HMAC subprotocol auth).
+#
+# plugins[]: each plugin has a unique id, an https:// URL (http:// allowed for
+#   local dev only), a shared HMAC secret, and optional filters (symbols,
+#   min_score, direction_filter).
+
+enabled: false
+kill_switch: false
+max_dispatched: 0
+dedup_window_sec: 300
+timestamp_skew_sec: 300
+allowed_origins: []
+symbol_map: {}
+plugins: []

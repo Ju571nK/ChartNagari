@@ -49,6 +49,13 @@ type PriceAlertWatcher interface {
 	CheckSymbol(ctx context.Context, symbol string, currentPrice float64)
 }
 
+// ExecutionDispatcher fans out TradeSignal envelopes to registered plugins.
+// *execution.Dispatcher satisfies this interface. Kept as an interface so the
+// pipeline has no hard dependency on the execution package (tests can stub).
+type ExecutionDispatcher interface {
+	Dispatch(ctx context.Context, signal models.TradeSignal)
+}
+
 // SignalBroadcaster pushes new signals to connected WebSocket clients.
 // *hub.Hub satisfies this interface.
 type SignalBroadcaster interface {
@@ -102,6 +109,7 @@ type Pipeline struct {
 
 	priceAlertWatcher PriceAlertWatcher // optional; set via SetPriceAlertWatcher
 	broadcaster       SignalBroadcaster  // optional; set via SetBroadcaster
+	dispatcher        ExecutionDispatcher // optional; set via SetExecutionDispatcher
 
 	seqTracker *sequence.Tracker // tracks signal sequences for bonus scoring
 
@@ -159,6 +167,13 @@ func (p *Pipeline) SetPriceAlertWatcher(w PriceAlertWatcher) {
 // SetBroadcaster wires an optional WebSocket broadcaster.
 func (p *Pipeline) SetBroadcaster(b SignalBroadcaster) {
 	p.broadcaster = b
+}
+
+// SetExecutionDispatcher wires the Phase 2 trade execution dispatcher. When set,
+// every enriched signal that passes notifier filtering is also converted to a
+// TradeSignal envelope and fanned out to eligible plugins.
+func (p *Pipeline) SetExecutionDispatcher(d ExecutionDispatcher) {
+	p.dispatcher = d
 }
 
 // SetAlertConfigHolder wires an optional live-updated alert configuration holder.
@@ -540,6 +555,16 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 
 	// Notify: filters by score threshold and cooldown.
 	p.notif.Notify(ctx, enriched)
+
+	// Execution dispatch (Phase 2): after notifier handling, fan out every
+	// enriched signal as a TradeSignal envelope. The dispatcher is responsible
+	// for kill-switch checks, dedup, per-plugin filtering, and HMAC signing —
+	// the pipeline simply converts + calls Dispatch in a fire-and-forget loop.
+	if p.dispatcher != nil {
+		for i := range enriched {
+			p.dispatcher.Dispatch(ctx, models.ToTradeSignal(enriched[i]))
+		}
+	}
 }
 
 // filterMTFConsensus returns only signals whose direction has signals

@@ -173,6 +173,33 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_economic_events_time
 		ON economic_events(event_time);
+
+	-- Execution dispatcher dedup table (Phase 2 trade execution).
+	-- Codex #2: single-statement INSERT OR IGNORE prevents TOCTOU race.
+	-- key = symbol+":"+rule+":"+direction, bucket = floor(unix_ts / dedup_window_sec).
+	CREATE TABLE IF NOT EXISTS execution_dedup (
+		key            TEXT    NOT NULL,
+		bucket         INTEGER NOT NULL,
+		dispatched_at  INTEGER NOT NULL,  -- Unix seconds (UTC)
+		UNIQUE(key, bucket)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_execution_dedup_cleanup
+		ON execution_dedup(dispatched_at);
+
+	-- Execution feedback idempotency table (Codex #4).
+	-- Composite UNIQUE prevents duplicate ActiveCount decrements on plugin retries.
+	CREATE TABLE IF NOT EXISTS feedback_idempotency (
+		plugin_id    TEXT    NOT NULL,
+		signal_id    TEXT    NOT NULL,
+		order_id     TEXT    NOT NULL DEFAULT '',
+		status       TEXT    NOT NULL,
+		received_at  INTEGER NOT NULL,  -- Unix seconds (UTC)
+		UNIQUE(plugin_id, signal_id, order_id, status)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_feedback_idempotency_lookup
+		ON feedback_idempotency(plugin_id, signal_id);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err

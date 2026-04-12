@@ -6,7 +6,8 @@ services:
     container_name: chart-analyzer
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # 호스트 루프백으로만 노출 (LAN 차단). 컨테이너 내부는 0.0.0.0 바인딩.
+      - "127.0.0.1:8080:8080"
     volumes:
       # SQLite DB 영속화
       - ./data:/app/data
@@ -19,6 +20,9 @@ services:
     environment:
       - ENV=${ENV:-development}
       - DB_PATH=/app/data/chart_analyzer.db
+      # 컨테이너 내부에서는 0.0.0.0으로 바인딩해야 Docker 포트 매핑이 도달 가능.
+      # 호스트 외부 노출은 ports: "8080:8080"이 127.0.0.1로만 제한하므로 안전.
+      - SERVER_HOST=0.0.0.0
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s

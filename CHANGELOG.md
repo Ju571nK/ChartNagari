@@ -14,7 +14,7 @@ Format:
 
 ---
 
-## [Unreleased]
+## [2.3.0.0] - 2026-04-12
 
 ### Added
 - **TradeSignal envelope** (`pkg/models/trade_signal.go`) — outbound webhook payload wrapping internal `Signal`; injects uuid/timestamp/version/asset_class/exchange at dispatch time. JSON wire format frozen against `pkg/models/testdata/trade_signal_v1.json`.

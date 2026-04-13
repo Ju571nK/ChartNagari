@@ -14,6 +14,13 @@ Format:
 
 ---
 
+## [2.4.0.1] - 2026-04-13
+
+### Fixed
+- **Chart shows stale candles after symbol/timeframe switch** (`web/src/App.tsx`) — when switching symbols (e.g. BTCUSDT → TSLA) or timeframes the chart kept rendering the previous symbol's candlesticks, volume bars, and price axis until the new OHLCV fetch resolved (~30ms locally, longer on remote networks). The selector label updated immediately, producing a confusing "TSLA selected with BTC 70000+ price axis" state. Fix: clear `seriesRef.setData([])`, `volRef.setData([])`, and `setSignals([])` synchronously at the start of the load effect, before issuing the fetch. The Wyckoff effect was patched the same way (`setWyckoffData(null)`) so the phase badge no longer carries the previous symbol's label during the in-flight `/wyckoff/{symbol}/{tf}` request.
+
+---
+
 ## [2.4.0.0] - 2026-04-13
 
 ### Added

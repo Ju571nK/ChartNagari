@@ -922,6 +922,10 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
       try { seriesRef.current.removePriceLine(line) } catch { /* already removed */ }
     }
     overlayLinesRef.current = []
+    // Clear previous symbol's candles/volume/signals to avoid stale display during fetch
+    seriesRef.current.setData([])
+    volRef.current?.setData([])
+    setSignals([])
 
     apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`)
       .then((bars) => {
@@ -1021,6 +1025,8 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
       return
     }
     if (!symbol) return
+    // Clear stale phase badge/events while fetching the new symbol's Wyckoff analysis
+    setWyckoffData(null)
 
     apiFetch<WyckoffAnalysis>(`/wyckoff/${encodeURIComponent(symbol)}/${tf}`)
       .then((data) => {

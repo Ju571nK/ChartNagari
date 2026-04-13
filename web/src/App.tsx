@@ -2906,6 +2906,8 @@ function HistoryTab({ uiMode }: { uiMode: UIMode }) {
   const load = useCallback(() => {
     setLoading(true)
     setError('')
+    // Clear previous filter's rows so the table doesn't mismatch the selected filters during fetch
+    setSignals([])
     apiFetch<SignalBar[]>(`/history?symbol=${encodeURIComponent(symbol)}&direction=${direction}&limit=${limit}`)
       .then(setSignals)
       .catch((e: Error) => setError(e.message))

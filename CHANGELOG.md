@@ -14,6 +14,13 @@ Format:
 
 ---
 
+## [2.4.0.2] - 2026-04-14
+
+### Fixed
+- **History tab shows stale rows after filter change** (`web/src/App.tsx` HistoryTab) — same stale-state pattern as the chart fix in `2.4.0.1`: when the user changed the symbol/direction/limit filter, the table kept the previous filter's rows visible until `/history` resolved, so "SHORT selected" could briefly show LONG rows. Fix: `setSignals([])` synchronously at the start of the `load` callback before the fetch. Reproduced and verified with `/browse`: after the patch, switching direction shows an empty table + "Loading..." during the in-flight request.
+
+---
+
 ## [2.4.0.1] - 2026-04-13
 
 ### Fixed

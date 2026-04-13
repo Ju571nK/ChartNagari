@@ -32,3 +32,23 @@ timestamp_skew_sec: 300
 allowed_origins: []
 symbol_map: {}
 plugins: []
+
+# Example: register the Alpaca paper trading sidecar (cmd/plugin-alpaca).
+# Start the sidecar with matching CHARTNAGARI_PLUGIN_SECRET and CHARTNAGARI_PLUGIN_ID
+# env vars, then uncomment and add to plugins[]:
+#
+# plugins:
+#   - id: alpaca-paper
+#     url: http://127.0.0.1:9100/webhook
+#     secret: change-me-shared-hmac-secret      # must match CHARTNAGARI_PLUGIN_SECRET on the sidecar
+#     enabled: true
+#     symbols: ["AAPL", "MSFT", "SPY"]          # equities only (crypto is rejected by the adapter)
+#     min_score: 70
+#     direction_filter: ""                      # "" = both, "LONG" or "SHORT" to restrict
+#     max_in_flight: 5                          # cap on concurrent unacked submissions for this plugin
+#
+# Manual smoke test:
+#   1. export ALPACA_API_KEY=... ALPACA_API_SECRET=... CHARTNAGARI_PLUGIN_SECRET=...
+#   2. ./plugin-alpaca   (binds :9100, refuses to start if URL is not paper-api.alpaca.markets)
+#   3. Curl ChartNagari with a high-confluence signal and watch for /webhook 202
+#      and a follow-up POST to /api/execution/feedback marked SUBMITTED.

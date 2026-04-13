@@ -14,6 +14,25 @@ Format:
 
 ---
 
+## [2.4.0.0] - 2026-04-13
+
+### Added
+- **Alpaca paper trading plugin adapter** (`cmd/plugin-alpaca/`, `internal/plugins/alpaca/`) — first reference execution plugin. Standalone Go binary that receives ChartNagari `TradeSignal` webhooks, translates them into Alpaca paper-trading market orders, and POSTs `OrderFeedback` callbacks back to `/api/execution/feedback`.
+- **Webhook endpoint** (`/webhook`) — verifies inbound HMAC-SHA256 signatures using `internal/execution.Verify` directly (single source of truth — no canonical-string drift between dispatcher and adapter); enforces the same `±300s` skew window as the dispatcher (configurable via `ALPACA_TIMESTAMP_SKEW_SEC`).
+- **Paper-only hard guard** (`Config.Validate`) — refuses to start unless `ALPACA_API_URL` resolves to `paper-api.alpaca.markets` (loopback hosts allowed only for tests). The live Alpaca endpoint is rejected at startup; this is a deliberate operational safety rail.
+- **Direction mapping** (`internal/plugins/alpaca/mapper.go`) — `LONG → buy`, `SHORT → sell` market orders with `time_in_force=day`; quantity sized as `floor(notional / entry_price)` from `ALPACA_NOTIONAL_PER_TRADE` (default $1000). Crypto signals are rejected (Alpaca's crypto API requires a different endpoint contract).
+- **SQLite idempotency store** (`internal/plugins/alpaca/idempotency.go`) — `INSERT OR IGNORE` against `UNIQUE(signal_id)` eliminates double-submits across restarts; `Reserve` returns `ErrDuplicate` (HTTP 409) for repeat signal_ids; `MarkSubmitted` records the resulting Alpaca order_id for diagnostics.
+- **Outbound feedback** (`internal/plugins/alpaca/feedback.go`) — async POSTs `OrderFeedback{SUBMITTED|REJECTED|ERROR}` signed with `internal/execution.Sign` so the dispatcher's `Verify` accepts the response without any signing-format duplication.
+- **Error response taxonomy** — `400` bad JSON, `401` HMAC/skew/unknown plugin_id, `405` wrong method, `409` duplicate signal_id, `422` mapping reject or Alpaca 4xx, `502` Alpaca 5xx, `500` persistence failure.
+- **Env-var configuration** (`config.go`) — `ALPACA_API_URL`, `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `CHARTNAGARI_FEEDBACK_URL`, `CHARTNAGARI_PLUGIN_SECRET`, `CHARTNAGARI_PLUGIN_ID`, `LISTEN_ADDR` (default `:9100`), `ALPACA_DB_PATH`, `ALPACA_NOTIONAL_PER_TRADE`, `ALPACA_TIMESTAMP_SKEW_SEC`. Sidecar deployment surface — no YAML, no hot reload.
+- **Runner lifecycle** (`internal/plugins/alpaca/runner.go`) — `NewRunner` validates config + opens store; `Start(ctx)` blocks on `http.Server.Serve` with `ReadHeaderTimeout=5s` and graceful `Shutdown` on `SIGINT`/`SIGTERM` (5s drain).
+- **Example plugin entry** in `config/execution.yaml` (commented) showing how to register the Alpaca sidecar at `http://127.0.0.1:9100/webhook` for local smoke testing.
+
+### Tests
+- `internal/plugins/alpaca/` at **87.5% coverage**, all `-race` clean. Tables cover: config validation (paper-only guard, loopback allow-list, IPv6 host parsing, env fallbacks), mapper direction/quantity/asset-class rejection, idempotency reserve/release/duplicate, Alpaca client 2xx/4xx/5xx + transport error paths, feedback HMAC headers + non-2xx propagation, server end-to-end (HMAC fail, skew, duplicate, mapping reject, Alpaca 4xx/5xx, success path), runner Start→Shutdown lifecycle and listen-error.
+
+---
+
 ## [2.3.1.0] - 2026-04-12
 
 ### Added

@@ -9,7 +9,7 @@
 //     the Alpaca paper endpoint.
 //   - Map TradeSignal.Direction → Alpaca order side:
 //       LONG  → buy (market)
-//       SHORT → sell_short (market, shortable equities only)
+//       SHORT → sell (market; closes existing long position only in Phase 3)
 //   - Idempotency on signal_id stored in a tiny SQLite file so restarts do not
 //     re-submit an order for a signal that was already processed.
 //   - POST OrderFeedback back to ChartNagari, HMAC-signed with the same shared
@@ -69,8 +69,6 @@ type Config struct {
 // NOT accept live-api.alpaca.markets here — the binary refuses to start.
 var paperHosts = map[string]struct{}{
 	"paper-api.alpaca.markets": {},
-	// Alpaca sometimes routes through this host for paper; not enabled by
-	// default because its contract is not officially documented for orders.
 }
 
 // LoadConfigFromEnv resolves a Config from the process environment.
@@ -131,7 +129,7 @@ func (c Config) Validate() error {
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return fmt.Errorf("ALPACA_API_URL must be http(s), got %q", u.Scheme)
 	}
-	host := strings.ToLower(u.Host)
+	host := strings.ToLower(u.Hostname())
 	if _, ok := paperHosts[host]; !ok {
 		// Permit localhost / 127.0.0.1 / any host beginning with "127." for tests
 		// (httptest.Server) — production config must use paper-api.alpaca.markets.

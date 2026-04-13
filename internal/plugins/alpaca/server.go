@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -31,6 +32,27 @@ type Server struct {
 	// without standing up a full httptest.Server per case. In production nil →
 	// falls through to alpaca.SubmitOrder.
 	submitFn func(ctx context.Context, req OrderRequest) (*OrderResponse, error)
+
+	// feedbackWG tracks in-flight async feedback goroutines so the Runner can
+	// wait for them to drain during graceful shutdown. Without this the process
+	// could exit while a feedback POST was mid-flight, silently dropping the
+	// status update that ChartNagari relies on to close the in-flight window.
+	feedbackWG sync.WaitGroup
+}
+
+// WaitFeedback blocks until all in-flight async feedback POSTs have finished.
+// Callers pass a bounded ctx so a stuck feedback send cannot block shutdown
+// forever — the goroutines themselves carry their own HTTPTimeout.
+func (s *Server) WaitFeedback(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		s.feedbackWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 // NewServer builds a Server from resolved dependencies. Callers construct the
@@ -179,7 +201,11 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "alpaca upstream error", http.StatusBadGateway)
 				return
 			}
-			http.Error(w, "alpaca rejected: "+ae.Message, http.StatusUnprocessableEntity)
+			// Don't echo raw upstream text back to the dispatcher — Alpaca error
+			// bodies can contain account-scoped detail (position sizes, equity).
+			// Full detail is already in the Warn log above and in the async
+			// feedback payload, both of which stay inside our trust boundary.
+			http.Error(w, "alpaca rejected order", http.StatusUnprocessableEntity)
 			return
 		}
 		s.log.Error().Err(err).Str("signal_id", sig.ID).Msg("alpaca: submit failed")
@@ -191,13 +217,13 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	// --- Persist the order id on the idempotency row for future diagnostics.
 	if err := s.store.MarkSubmitted(ctx, sig.ID, resp.ID, resp.Status); err != nil {
 		// Non-fatal: the order is already live on Alpaca. Log and continue.
-		s.log.Error().Err(err).Str("signal_id", sig.ID).Str("order_id", resp.ID).
-			Msg("alpaca: mark submitted failed (order still live upstream)")
+		s.log.Error().Err(err).Str("plugin_name", s.cfg.PluginID).Str("signal_id", sig.ID).
+			Str("order_id", resp.ID).Msg("alpaca: mark submitted failed (order still live upstream)")
 	}
 
-	s.log.Info().Str("signal_id", sig.ID).Str("order_id", resp.ID).
-		Str("symbol", resp.Symbol).Str("side", resp.Side).Str("qty", resp.Qty).
-		Str("status", resp.Status).Msg("alpaca: order submitted")
+	s.log.Info().Str("plugin_name", s.cfg.PluginID).Str("signal_id", sig.ID).
+		Str("order_id", resp.ID).Str("symbol", resp.Symbol).Str("side", resp.Side).
+		Str("qty", resp.Qty).Str("status", resp.Status).Msg("alpaca: order submitted")
 
 	// --- Feedback to ChartNagari. Non-terminal "SUBMITTED" acknowledges the
 	// handoff; a separate FILLED/REJECTED/CANCELED event would normally come
@@ -218,16 +244,21 @@ func (s *Server) sendFeedbackAsync(signalID, orderID, status, message string) {
 		return
 	}
 	fb := models.OrderFeedback{
-		SignalID: signalID,
-		OrderID:  orderID,
-		Status:   status,
-		Message:  message,
+		SignalID:   signalID,
+		OrderID:    orderID,
+		Status:     status,
+		Message:    message,
+		PluginName: s.cfg.PluginID,
+		Timestamp:  s.nowFn().UTC(),
 	}
+	s.feedbackWG.Add(1)
 	go func() {
+		defer s.feedbackWG.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), HTTPTimeout)
 		defer cancel()
 		if err := s.feedbck.Send(ctx, fb); err != nil {
-			s.log.Warn().Err(err).Str("signal_id", signalID).Str("status", status).
+			s.log.Warn().Err(err).Str("plugin_name", s.cfg.PluginID).
+				Str("signal_id", signalID).Str("status", status).
 				Msg("alpaca: feedback send failed")
 		}
 	}()

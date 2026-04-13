@@ -16,6 +16,7 @@ import (
 type Runner struct {
 	cfg    Config
 	server *http.Server
+	svc    *Server
 	store  *IdempotencyStore
 	log    zerolog.Logger
 }
@@ -42,7 +43,7 @@ func NewRunner(cfg Config, log zerolog.Logger) (*Runner, error) {
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	return &Runner{cfg: cfg, server: httpServer, store: store, log: log}, nil
+	return &Runner{cfg: cfg, server: httpServer, svc: srv, store: store, log: log}, nil
 }
 
 // Start blocks on ListenAndServe. Returns nil when ctx is cancelled and the
@@ -62,9 +63,17 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		// Shutdown budgets are split on purpose: if server.Shutdown exhausts
+		// the first 5s draining in-flight webhooks, we still give feedback
+		// goroutines a fresh 5s window to finish POSTing back to ChartNagari.
+		// Sharing a single deadline would silently drop status updates exactly
+		// when we promised not to.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		_ = r.server.Shutdown(shutdownCtx)
+		cancel()
+		feedbackCtx, cancelFb := context.WithTimeout(context.Background(), 5*time.Second)
+		r.svc.WaitFeedback(feedbackCtx)
+		cancelFb()
 		_ = r.store.Close()
 		return nil
 	case err := <-errCh:

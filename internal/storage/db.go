@@ -200,6 +200,17 @@ func (db *DB) migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_feedback_idempotency_lookup
 		ON feedback_idempotency(plugin_id, signal_id);
+
+	-- Execution runtime state (kill switch timestamp, config version, etc.).
+	CREATE TABLE IF NOT EXISTS execution_state (
+		key         TEXT    NOT NULL PRIMARY KEY,
+		value       TEXT    NOT NULL,
+		updated_at  INTEGER NOT NULL  -- Unix seconds (UTC)
+	);
+
+	-- Feedback read-path index for 24h window aggregation and list queries.
+	CREATE INDEX IF NOT EXISTS idx_feedback_received_at
+		ON feedback_idempotency(received_at);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err
@@ -260,6 +271,24 @@ func (db *DB) migrate() error {
 	); err != nil {
 		if !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("signals atr_percentile migration failed: %w", err)
+		}
+	}
+
+	// Migrate existing DB: add symbol column to feedback_idempotency.
+	if _, err := db.conn.Exec(
+		`ALTER TABLE feedback_idempotency ADD COLUMN symbol TEXT NOT NULL DEFAULT ''`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("feedback_idempotency symbol migration: %w", err)
+		}
+	}
+
+	// Migrate existing DB: add message column to feedback_idempotency.
+	if _, err := db.conn.Exec(
+		`ALTER TABLE feedback_idempotency ADD COLUMN message TEXT NOT NULL DEFAULT ''`,
+	); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("feedback_idempotency message migration: %w", err)
 		}
 	}
 

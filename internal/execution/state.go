@@ -15,12 +15,7 @@ type StateStore struct {
 }
 
 // NewStateStore constructs a StateStore bound to the given database handle.
-// It enforces a single open connection so that concurrent Set calls serialise
-// through SQLite without generating SQLITE_BUSY errors — the execution_state
-// table is written infrequently (kill-switch timestamps, config versions) so
-// this has no meaningful throughput impact.
 func NewStateStore(db *sql.DB) *StateStore {
-	db.SetMaxOpenConns(1)
 	return &StateStore{db: db}
 }
 

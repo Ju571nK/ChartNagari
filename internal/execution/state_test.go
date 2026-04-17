@@ -16,6 +16,13 @@ func newStateTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+	// WAL is not supported for :memory: databases; use a single connection so all
+	// goroutines share the same in-memory state. This is TEST-ONLY — the
+	// production constructor never touches the connection pool.
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
+		t.Fatalf("busy_timeout: %v", err)
+	}
 	if _, err := db.Exec(`
 		CREATE TABLE execution_state (
 			key         TEXT PRIMARY KEY,

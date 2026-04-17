@@ -11,6 +11,7 @@ import (
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/execution"
+	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // getExecutionConfig returns the current execution config with plugin secrets
@@ -131,11 +132,7 @@ func (s *Server) postExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse the feedback payload AFTER authentication succeeds.
-	var fb struct {
-		SignalID string `json:"signal_id"`
-		OrderID  string `json:"order_id"`
-		Status   string `json:"status"`
-	}
+	var fb models.OrderFeedback
 	if err := json.Unmarshal(body, &fb); err != nil {
 		http.Error(w, "invalid feedback JSON: "+err.Error(), http.StatusBadRequest)
 		return
@@ -145,7 +142,12 @@ func (s *Server) postExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fresh, err := s.execFeedback.RecordOnce(r.Context(), pluginID, fb.SignalID, fb.OrderID, fb.Status, "", "", time.Now())
+	fresh, err := s.execFeedback.RecordOnce(
+		r.Context(),
+		pluginID, fb.SignalID, fb.OrderID, fb.Status,
+		strings.ToUpper(fb.Symbol), fb.Message,
+		time.Now(),
+	)
 	if err != nil {
 		log.Error().Err(err).Msg("api: feedback idempotency insert failed")
 		http.Error(w, "persist failed", http.StatusInternalServerError)

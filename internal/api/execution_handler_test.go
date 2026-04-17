@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/execution"
+	_ "modernc.org/sqlite"
 )
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
@@ -345,6 +347,84 @@ func TestPostExecutionFeedback_OutsideSkew(t *testing.T) {
 	s.postExecutionFeedback(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status %d, want 401", rec.Code)
+	}
+}
+
+// newFeedbackTestDB opens an in-memory SQLite with the feedback_idempotency
+// schema used by FeedbackIdempotency, so TestFeedback_PersistsSymbolAndMessage
+// can query the row directly.
+func newFeedbackTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	schema := `
+	CREATE TABLE feedback_idempotency (
+		plugin_id    TEXT    NOT NULL,
+		signal_id    TEXT    NOT NULL,
+		order_id     TEXT    NOT NULL DEFAULT '',
+		status       TEXT    NOT NULL,
+		received_at  INTEGER NOT NULL,
+		symbol       TEXT    NOT NULL DEFAULT '',
+		message      TEXT    NOT NULL DEFAULT '',
+		UNIQUE(plugin_id, signal_id, order_id, status)
+	);`
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	return db
+}
+
+// TestFeedback_PersistsSymbolAndMessage verifies that the handler parses
+// symbol and message from the feedback JSON and forwards them to RecordOnce,
+// which persists them in the feedback_idempotency table (Task 4).
+func TestFeedback_PersistsSymbolAndMessage(t *testing.T) {
+	cfg := appconfig.ExecutionConfig{
+		Enabled: true,
+		Plugins: []appconfig.PluginConfig{
+			{ID: "alpaca-paper", URL: "https://x/y", Secret: "secret", Enabled: true},
+		},
+	}
+	db := newFeedbackTestDB(t)
+	idem := execution.NewFeedbackIdempotency(db)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "execution.yaml")
+	if err := appconfig.SaveExecutionConfig(path, cfg); err != nil {
+		t.Fatalf("SaveExecutionConfig: %v", err)
+	}
+	holder := appconfig.NewExecutionHolder(path, cfg)
+	releaser := &fakeReleaser{}
+
+	s := &Server{}
+	s.WithExecutionHolder(holder, path)
+	s.WithExecutionDispatcher(releaser)
+	s.WithExecutionFeedback(idem)
+
+	body := []byte(`{"signal_id":"sig-99","plugin_name":"alpaca-paper","status":"FILLED","symbol":"tsla","message":"OK"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/execution/feedback", bytes.NewReader(body))
+	now := time.Now().Unix()
+	sig := execution.Sign("secret", "alpaca-paper", now, http.MethodPost, "/api/execution/feedback", body)
+	req.Header.Set(execution.SignatureHeader, sig)
+	req.Header.Set(execution.TimestampHeader, strconv.FormatInt(now, 10))
+	req.Header.Set(execution.PluginIDHeader, "alpaca-paper")
+
+	rec := httptest.NewRecorder()
+	s.postExecutionFeedback(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status: %d; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var sym, msg string
+	row := db.QueryRow(`SELECT symbol, message FROM feedback_idempotency WHERE signal_id = 'sig-99'`)
+	if err := row.Scan(&sym, &msg); err != nil {
+		t.Fatalf("row: %v", err)
+	}
+	// symbol must be uppercased by the handler; message preserved verbatim.
+	if sym != "TSLA" || msg != "OK" {
+		t.Fatalf("got (%q, %q), want (TSLA, OK)", sym, msg)
 	}
 }
 

@@ -174,7 +174,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		// manual re-send with the same signal_id after a config fix should work.
 		_ = s.store.Release(ctx, sig.ID)
 		s.log.Warn().Err(err).Str("signal_id", sig.ID).Str("symbol", sig.Symbol).Msg("alpaca: mapping rejected")
-		s.sendFeedbackAsync(sig.ID, "", models.OrderStatusRejected, err.Error())
+		s.sendFeedbackAsync(sig.ID, "", sig.Symbol, models.OrderStatusRejected, err.Error())
 		http.Error(w, "mapping rejected: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -196,7 +196,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &ae) {
 			s.log.Warn().Int("status", ae.StatusCode).Str("signal_id", sig.ID).
 				Str("symbol", sig.Symbol).Msg("alpaca: order rejected")
-			s.sendFeedbackAsync(sig.ID, "", models.OrderStatusRejected, ae.Error())
+			s.sendFeedbackAsync(sig.ID, "", sig.Symbol, models.OrderStatusRejected, ae.Error())
 			if ae.IsServerError() {
 				http.Error(w, "alpaca upstream error", http.StatusBadGateway)
 				return
@@ -209,7 +209,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.log.Error().Err(err).Str("signal_id", sig.ID).Msg("alpaca: submit failed")
-		s.sendFeedbackAsync(sig.ID, "", models.OrderStatusError, err.Error())
+		s.sendFeedbackAsync(sig.ID, "", sig.Symbol, models.OrderStatusError, err.Error())
 		http.Error(w, "submit failed: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -228,7 +228,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	// --- Feedback to ChartNagari. Non-terminal "SUBMITTED" acknowledges the
 	// handoff; a separate FILLED/REJECTED/CANCELED event would normally come
 	// from a long-poll or streaming connection — that's Phase 4 scope.
-	s.sendFeedbackAsync(sig.ID, resp.ID, models.OrderStatusSubmitted, "accepted by alpaca")
+	s.sendFeedbackAsync(sig.ID, resp.ID, sig.Symbol, models.OrderStatusSubmitted, "accepted by alpaca")
 
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -239,13 +239,14 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 // sendFeedbackAsync fires a feedback POST in a goroutine with its own timeout
 // so webhook response is never blocked on ChartNagari. Failures are logged.
-func (s *Server) sendFeedbackAsync(signalID, orderID, status, message string) {
+func (s *Server) sendFeedbackAsync(signalID, orderID, symbol, status, message string) {
 	if s.feedbck == nil {
 		return
 	}
 	fb := models.OrderFeedback{
 		SignalID:   signalID,
 		OrderID:    orderID,
+		Symbol:     symbol,
 		Status:     status,
 		Message:    message,
 		PluginName: s.cfg.PluginID,

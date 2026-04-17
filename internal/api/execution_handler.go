@@ -145,7 +145,7 @@ func (s *Server) postExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fresh, err := s.execFeedback.RecordOnce(r.Context(), pluginID, fb.SignalID, fb.OrderID, fb.Status, time.Now())
+	fresh, err := s.execFeedback.RecordOnce(r.Context(), pluginID, fb.SignalID, fb.OrderID, fb.Status, "", "", time.Now())
 	if err != nil {
 		log.Error().Err(err).Msg("api: feedback idempotency insert failed")
 		http.Error(w, "persist failed", http.StatusInternalServerError)

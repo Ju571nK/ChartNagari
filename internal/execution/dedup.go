@@ -122,11 +122,12 @@ func NewFeedbackIdempotency(db *sql.DB) *FeedbackIdempotency {
 }
 
 // RecordOnce attempts to mark (pluginID, signalID, orderID, status) as
-// processed. Returns true if this is the first time we've seen the combo.
-func (f *FeedbackIdempotency) RecordOnce(ctx context.Context, pluginID, signalID, orderID, status string, at time.Time) (bool, error) {
+// processed. symbol and message are stored for audit but do not affect
+// the uniqueness key. Returns true if this is the first time we've seen the combo.
+func (f *FeedbackIdempotency) RecordOnce(ctx context.Context, pluginID, signalID, orderID, status, symbol, message string, at time.Time) (bool, error) {
 	res, err := f.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO feedback_idempotency(plugin_id, signal_id, order_id, status, received_at) VALUES(?, ?, ?, ?, ?)`,
-		pluginID, signalID, orderID, status, at.Unix(),
+		`INSERT OR IGNORE INTO feedback_idempotency(plugin_id, signal_id, order_id, status, received_at, symbol, message) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		pluginID, signalID, orderID, status, at.Unix(), symbol, message,
 	)
 	if err != nil {
 		if isBusy(err) {

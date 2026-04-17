@@ -217,7 +217,7 @@ type ExecutionReleaser interface {
 // FeedbackRecorder records inbound plugin feedback idempotently.
 // *execution.FeedbackIdempotency satisfies this.
 type FeedbackRecorder interface {
-	RecordOnce(ctx context.Context, pluginID, signalID, orderID, status string, at time.Time) (bool, error)
+	RecordOnce(ctx context.Context, pluginID, signalID, orderID, status, symbol, message string, at time.Time) (bool, error)
 }
 
 // New creates a Server.

@@ -35,7 +35,7 @@ type fakeFeedback struct {
 	err  error
 }
 
-func (f *fakeFeedback) RecordOnce(_ context.Context, pluginID, signalID, orderID, status string, _ time.Time) (bool, error) {
+func (f *fakeFeedback) RecordOnce(_ context.Context, pluginID, signalID, orderID, status, _, _ string, _ time.Time) (bool, error) {
 	if f.err != nil {
 		return false, f.err
 	}

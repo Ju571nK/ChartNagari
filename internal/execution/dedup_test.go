@@ -147,12 +147,12 @@ func TestFeedbackIdempotency_RecordOnce(t *testing.T) {
 	idem := NewFeedbackIdempotency(db)
 	now := time.Unix(1_700_000_000, 0)
 
-	ok, err := idem.RecordOnce(context.Background(), "p1", "sig-1", "ord-1", "FILLED", now)
+	ok, err := idem.RecordOnce(context.Background(), "p1", "sig-1", "ord-1", "FILLED", "", "", now)
 	if err != nil || !ok {
 		t.Fatalf("first insert: ok=%v err=%v", ok, err)
 	}
 	// Exact replay → duplicate.
-	ok, err = idem.RecordOnce(context.Background(), "p1", "sig-1", "ord-1", "FILLED", now)
+	ok, err = idem.RecordOnce(context.Background(), "p1", "sig-1", "ord-1", "FILLED", "", "", now)
 	if err != nil {
 		t.Fatalf("replay err: %v", err)
 	}
@@ -160,8 +160,30 @@ func TestFeedbackIdempotency_RecordOnce(t *testing.T) {
 		t.Fatal("replay must return fresh=false")
 	}
 	// Different status for same signal → separate row.
-	ok, err = idem.RecordOnce(context.Background(), "p1", "sig-1", "ord-1", "CANCELLED", now)
+	ok, err = idem.RecordOnce(context.Background(), "p1", "sig-1", "ord-1", "CANCELLED", "", "", now)
 	if err != nil || !ok {
 		t.Fatalf("different status: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestFeedbackIdempotency_PersistsSymbolAndMessage(t *testing.T) {
+	db := newExecTestDB(t)
+	f := NewFeedbackIdempotency(db)
+	ctx := context.Background()
+
+	fresh, err := f.RecordOnce(ctx, "alpaca-paper", "sig-1", "ord-1", "FILLED", "AAPL", "Market order filled", time.Now())
+	if err != nil || !fresh {
+		t.Fatalf("record: fresh=%v err=%v", fresh, err)
+	}
+
+	var gotSymbol, gotMsg string
+	err = db.QueryRow(
+		`SELECT symbol, message FROM feedback_idempotency WHERE signal_id = 'sig-1'`,
+	).Scan(&gotSymbol, &gotMsg)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if gotSymbol != "AAPL" || gotMsg != "Market order filled" {
+		t.Fatalf("got (%q, %q), want (AAPL, Market order filled)", gotSymbol, gotMsg)
 	}
 }

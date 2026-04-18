@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -177,4 +178,84 @@ func isTerminalFeedbackStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+// listExecutionFeedback returns recent feedback rows, newest first, with
+// optional plugin/status/symbol filters and a limit (default 100, max 500).
+// Unlike most GET endpoints, this one enforces bearer-token auth when s.apiToken
+// is configured, because feedback rows may contain sensitive trade data.
+func (s *Server) listExecutionFeedback(w http.ResponseWriter, r *http.Request) {
+	if s.execDB == nil {
+		http.Error(w, "not enabled", http.StatusNotFound)
+		return
+	}
+
+	// Enforce bearer-token auth for this sensitive GET endpoint.
+	if s.apiToken != "" {
+		authHeader := r.Header.Get("Authorization")
+		const prefix = "Bearer "
+		if len(authHeader) <= len(prefix) || authHeader[:len(prefix)] != prefix || authHeader[len(prefix):] != s.apiToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	q := r.URL.Query()
+	plugin := q.Get("plugin")
+	status := q.Get("status")
+	symbol := strings.ToUpper(strings.TrimSpace(q.Get("symbol")))
+
+	limit := 100
+	if ls := q.Get("limit"); ls != "" {
+		n, err := strconv.Atoi(ls)
+		if err != nil {
+			http.Error(w, "bad limit", http.StatusBadRequest)
+			return
+		}
+		if n < 0 || n > 500 {
+			http.Error(w, "limit out of range (0..500)", http.StatusBadRequest)
+			return
+		}
+		if n > 0 {
+			limit = n
+		}
+	}
+
+	rows, err := s.execDB.QueryContext(r.Context(), `
+		SELECT plugin_id, signal_id, order_id, status, COALESCE(symbol,''), COALESCE(message,''), received_at
+		FROM feedback_idempotency
+		WHERE (? = '' OR plugin_id = ?)
+		  AND (? = '' OR status = ?)
+		  AND (? = '' OR symbol = ?)
+		ORDER BY received_at DESC
+		LIMIT ?`,
+		plugin, plugin, status, status, symbol, symbol, limit,
+	)
+	if err != nil {
+		http.Error(w, "query", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type feedbackItem struct {
+		PluginID   string `json:"plugin_id"`
+		SignalID   string `json:"signal_id"`
+		OrderID    string `json:"order_id"`
+		Status     string `json:"status"`
+		Symbol     string `json:"symbol"`
+		Message    string `json:"message"`
+		ReceivedAt int64  `json:"received_at"`
+	}
+	items := []feedbackItem{}
+	for rows.Next() {
+		var it feedbackItem
+		if err := rows.Scan(&it.PluginID, &it.SignalID, &it.OrderID, &it.Status, &it.Symbol, &it.Message, &it.ReceivedAt); err != nil {
+			http.Error(w, "scan", http.StatusInternalServerError)
+			return
+		}
+		items = append(items, it)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "count": len(items)})
 }

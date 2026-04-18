@@ -428,6 +428,167 @@ func TestFeedback_PersistsSymbolAndMessage(t *testing.T) {
 	}
 }
 
+// ── ListExecutionFeedback test helpers ────────────────────────────────────────
+
+const testAPIToken = "test-bearer-token"
+
+// executionHandlerTestServer wraps a Server and a real SQLite DB so that
+// TestListFeedback_* tests can seed rows and make authenticated requests.
+type executionHandlerTestServer struct {
+	srv *Server
+	db  *sql.DB
+	ts  *httptest.Server
+}
+
+// newExecutionHandlerTestServer creates a test server with a real SQLite DB
+// (the feedback_idempotency schema), a wired execDB, and an API token.
+func newExecutionHandlerTestServer(t *testing.T) (*executionHandlerTestServer, func()) {
+	t.Helper()
+	db := newFeedbackTestDB(t)
+
+	cfg := appconfig.ExecutionConfig{
+		Enabled: true,
+		Plugins: []appconfig.PluginConfig{
+			{ID: "alpaca-paper", URL: "https://x/y", Secret: "secret", Enabled: true},
+		},
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "execution.yaml")
+	if err := appconfig.SaveExecutionConfig(path, cfg); err != nil {
+		t.Fatalf("SaveExecutionConfig: %v", err)
+	}
+	holder := appconfig.NewExecutionHolder(path, cfg)
+
+	s := &Server{}
+	s.WithExecutionHolder(holder, path)
+	s.WithExecutionDB(db)
+	s.WithAPIToken(testAPIToken)
+
+	ts := httptest.NewServer(s.Handler())
+	cleanup := func() { ts.Close() }
+	return &executionHandlerTestServer{srv: s, db: db, ts: ts}, cleanup
+}
+
+// seedFeedback inserts a row directly into feedback_idempotency.
+func (h *executionHandlerTestServer) seedFeedback(t *testing.T, pluginID, signalID, orderID, status, symbol, message string) {
+	t.Helper()
+	_, err := h.db.Exec(
+		`INSERT INTO feedback_idempotency(plugin_id, signal_id, order_id, status, received_at, symbol, message) VALUES(?,?,?,?,?,?,?)`,
+		pluginID, signalID, orderID, status, time.Now().Unix(), symbol, message,
+	)
+	if err != nil {
+		t.Fatalf("seedFeedback: %v", err)
+	}
+}
+
+// get sends an authenticated GET to the test server at the given path.
+func (h *executionHandlerTestServer) get(t *testing.T, path string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, h.ts.URL+path, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testAPIToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	return resp
+}
+
+// getNoAuth sends an unauthenticated GET to the test server at the given path.
+func (h *executionHandlerTestServer) getNoAuth(t *testing.T, path string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, h.ts.URL+path, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	return resp
+}
+
+// ── ListExecutionFeedback tests ───────────────────────────────────────────────
+
+func TestListFeedback_NoFilterReturnsRecent(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	srv.seedFeedback(t, "alpaca-paper", "sig-1", "ord-1", "FILLED", "AAPL", "ok")
+	srv.seedFeedback(t, "alpaca-paper", "sig-2", "ord-2", "REJECTED", "TSLA", "bad")
+
+	resp := srv.get(t, "/api/execution/feedback")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	var out struct {
+		Items []struct{ SignalID, Status, Symbol, Message string } `json:"items"`
+		Count int                                                  `json:"count"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if out.Count != 2 {
+		t.Fatalf("count: %d", out.Count)
+	}
+}
+
+func TestListFeedback_FilterByStatus(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	srv.seedFeedback(t, "alpaca-paper", "s1", "o1", "FILLED", "AAPL", "")
+	srv.seedFeedback(t, "alpaca-paper", "s2", "o2", "REJECTED", "TSLA", "")
+
+	resp := srv.get(t, "/api/execution/feedback?status=FILLED")
+	var out struct{ Count int `json:"count"` }
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if out.Count != 1 {
+		t.Fatalf("count: %d", out.Count)
+	}
+}
+
+func TestListFeedback_SymbolFilterUppercase(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	srv.seedFeedback(t, "alpaca-paper", "s1", "o1", "FILLED", "AAPL", "")
+
+	resp := srv.get(t, "/api/execution/feedback?symbol=aapl")
+	var out struct{ Count int `json:"count"` }
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if out.Count != 1 {
+		t.Fatalf("lowercase query should match uppercase storage, got %d", out.Count)
+	}
+}
+
+func TestListFeedback_LimitBounds(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+
+	cases := []struct {
+		q          string
+		wantStatus int
+	}{
+		{"?limit=0", http.StatusOK},        // treat as default
+		{"?limit=-1", http.StatusBadRequest},
+		{"?limit=501", http.StatusBadRequest},
+		{"?limit=500", http.StatusOK},
+	}
+	for _, c := range cases {
+		resp := srv.get(t, "/api/execution/feedback"+c.q)
+		if resp.StatusCode != c.wantStatus {
+			t.Errorf("%s: got %d want %d", c.q, resp.StatusCode, c.wantStatus)
+		}
+	}
+}
+
+func TestListFeedback_Unauthorized(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	resp := srv.getNoAuth(t, "/api/execution/feedback")
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+}
+
 // isTerminalFeedbackStatus coverage.
 func TestIsTerminalFeedbackStatus(t *testing.T) {
 	for _, s := range []string{"FILLED", "filled", " REJECTED ", "CANCELLED", "CANCELED", "ERROR"} {

@@ -204,6 +204,7 @@ type Server struct {
 	execPath            string                             // path to execution.yaml; set via WithExecutionPath
 	execDispatcher      ExecutionReleaser                  // optional; set via WithExecutionDispatcher
 	execFeedback        FeedbackRecorder                   // optional; set via WithExecutionFeedback
+	execDB              *sql.DB                            // optional; set via WithExecutionDB for feedback queries
 	mu                  sync.RWMutex
 }
 
@@ -257,6 +258,12 @@ func (s *Server) WithExecutionDispatcher(d ExecutionReleaser) {
 // WithExecutionFeedback wires the idempotency recorder.
 func (s *Server) WithExecutionFeedback(f FeedbackRecorder) {
 	s.execFeedback = f
+}
+
+// WithExecutionDB wires a shared *sql.DB for feedback queries (e.g. listExecutionFeedback).
+// In production this is the same db.Conn() used by FeedbackIdempotency.
+func (s *Server) WithExecutionDB(db *sql.DB) {
+	s.execDB = db
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
@@ -477,6 +484,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("PUT /api/execution/config", s.updateExecutionConfig)
 		mux.HandleFunc("POST /api/execution/kill", s.toggleExecutionKill)
 		mux.HandleFunc("POST /api/execution/feedback", s.postExecutionFeedback)
+		mux.HandleFunc("GET /api/execution/feedback", s.listExecutionFeedback)
 	}
 
 	// Static frontend (SPA)

@@ -14,6 +14,53 @@ Format:
 
 ---
 
+## [2.5.0.0] - 2026-04-18
+
+### Added
+- **Execution tab (React UI)** (`web/src/ExecutionTab.tsx` + 5 component files) — first UI surface for the execution plugin system shipped in v2.3–v2.4. Top-level tab with four regions: kill switch (confirmation modal + red banner with `killed_at` timestamp), plugin cards (24h SUBMITTED/FILLED/REJECTED counts with last-failure tooltip), global config form (max_dispatched, dedup_window, symbol_map editor), and filtered feedback table (plugin/status/symbol filters, 100-row default).
+- **`GET /api/execution/feedback`** (`internal/api/execution_handler.go`) — lists recent feedback with plugin/status/symbol filters and a `limit` bound (0..500, default 100). Queries the new `symbol`/`message` columns on `feedback_idempotency`.
+- **`GET /api/execution/plugins/stats?window=24h`** — per-plugin 24h aggregation (SUBMITTED/FILLED/REJECTED counts + most recent failure message). Emits `Cache-Control: max-age=60`.
+- **Config version field** on `PUT /api/execution/config` — request must include the last-read `version`; mismatch returns 409 with `current_version` so a concurrent edit surfaces as a banner instead of silently overwriting. Mutex-serialized: 10 concurrent PUTs produce exactly 1 OK + 9 CONFLICT, eliminating the TOCTOU race.
+- **`execution_state` SQLite table** — generic key-value runtime state. Houses `killed_at` (moved out of YAML — kill switch state now survives restarts via DB, not git-tracked config) and `config_version`.
+- **Secret `Generate` UX** — in-modal button produces a 32-byte hex secret via `crypto.getRandomValues` and auto-copies to clipboard; falls back to a `Copy manually` toast when clipboard is unavailable (HTTP-served remote sessions).
+- **Stale-rows regression guard** — FeedbackTable applies the v2.4.0.2 `setFeedback([])` pattern on filter change so no previous-filter rows linger during the new fetch. Same pattern locked in with a filtersRef pattern so the 30s polling timer does not tear down and restart on each filter change.
+- **`requireBearer` helper** (`internal/api/auth.go`) — constant-time bearer-token comparison for GET endpoints that the global method-gated middleware bypasses.
+- **`TestNoSecretLeakInExecutionEndpoints`** — blanket regression that asserts raw plugin secrets never appear in any `/api/execution/*` response body or header, seeded with a sentinel and verified across GET config / feedback / plugins/stats.
+
+### Changed
+- `feedback_idempotency` schema — added `symbol` and `message` columns (NOT NULL DEFAULT '' so pre-existing rows remain valid after migration). New index `idx_feedback_received_at` supports the 24h aggregation query.
+- `OrderFeedback` wire format (`pkg/models/trade_signal.go`) — added optional `Symbol` field. Alpaca adapter now echoes `TradeSignal.Symbol` in feedback callbacks so the feedback table can show which symbol each order corresponded to.
+- `FeedbackIdempotency.RecordOnce` signature extended with `symbol` and `message` arguments.
+- Kill switch state — `killed_at` moved from `config/execution.yaml` to the new `execution_state` SQLite key-value table.
+
+### Database
+- New table `execution_state(key PRIMARY KEY, value NOT NULL, updated_at NOT NULL)`.
+- New columns on `feedback_idempotency`: `symbol TEXT NOT NULL DEFAULT ''`, `message TEXT NOT NULL DEFAULT ''`.
+- New index `idx_feedback_received_at ON feedback_idempotency(received_at)` for the 24h plugin-stats aggregation.
+
+### Tests
+- Backend: new tests in `internal/execution/state_test.go`, `internal/api/execution_handler_test.go` (15+ new cases covering feedback listing, plugin stats, config version gate + concurrent-writes race-free contract, kill state persistence, secret-leak blanket test). Backend coverage on new handlers ~80%. Full suite `-race` clean.
+- Frontend: new Vitest files `ExecutionTab.test.tsx`, `KillSwitch.test.tsx`, `PluginCard.test.tsx`, `FeedbackTable.test.tsx`, `PluginEditModal.test.tsx`, `GlobalConfigForm.test.tsx` — 43 tests total.
+
+### i18n
+- Added ~40 new keys across en/ko/ja for the Execution tab (field labels, validation errors, status filters, column headers, kill banner, secret toasts, duplicate-name error, config-conflict banner).
+
+### Deferred (tracked in TODOS.md)
+- WebSocket feedback push (Phase 5).
+- Playwright E2E infrastructure.
+- Detailed dispatcher metrics (active positions, avg latency, dedup skip count).
+
+### Manual verification checklist (post-merge smoke)
+- [ ] Execution tab renders with at least one plugin card after server start.
+- [ ] Kill switch → confirm modal → red banner with last-killed timestamp.
+- [ ] Re-enable → banner clears.
+- [ ] Edit plugin → change `min_score`, save, reopen modal → value persists.
+- [ ] Generate secret → toast + clipboard receives hex.
+- [ ] Two-tab 409: edit in tab A, save, then save in tab B → banner appears, modal closes, tab B can reload and retry.
+- [ ] FeedbackTable filter change → rows clear synchronously, then repopulate.
+
+---
+
 ## [2.4.0.2] - 2026-04-14
 
 ### Fixed

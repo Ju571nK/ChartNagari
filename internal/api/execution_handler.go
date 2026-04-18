@@ -122,14 +122,24 @@ func (s *Server) updateExecutionConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read body once so we can decode it twice (version check + full config).
+	// One-shot warning: if the holder is wired but the state store is not, the
+	// optimistic-concurrency version gate is effectively disabled (silent-success
+	// mode). Log once at startup so the operator notices the misconfiguration.
+	s.configUpdateOnce.Do(func() {
+		if s.execHolder != nil && s.execState == nil {
+			log.Warn().Msg("api: execution config version control disabled — execState not wired (silent-success mode); wire WithExecutionState to enable TOCTOU protection")
+		}
+	})
+
+	// Read body and do pure-computation JSON parsing OUTSIDE the lock — these
+	// do not touch shared state and blocking them under the lock would penalise
+	// concurrent reads unnecessarily.
 	rawBody, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// ── Version gate ──────────────────────────────────────────────────────────
 	var versionEnvelope struct {
 		Version *int `json:"version"`
 	}
@@ -143,13 +153,28 @@ func (s *Server) updateExecutionConfig(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "version field required"})
 		return
 	}
+
+	var incoming appconfig.ExecutionConfig
+	if err := json.Unmarshal(rawBody, &incoming); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// ── Serialised critical section: version-read → version-check → save → bump
+	// Holding s.mu.Lock() for the entire sequence closes the TOCTOU window where
+	// two concurrent PUTs both read the same version N, both pass the gate, and
+	// both write — making the last-write-wins silently discard the first update.
+	s.mu.Lock()
+
 	current, err := s.readConfigVersion(r.Context())
 	if err != nil {
+		s.mu.Unlock()
 		log.Error().Err(err).Msg("api: read config_version")
 		http.Error(w, "state", http.StatusInternalServerError)
 		return
 	}
 	if *versionEnvelope.Version != current {
+		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -159,27 +184,23 @@ func (s *Server) updateExecutionConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ── Existing merge / validate / persist logic (unchanged) ─────────────────
-	var incoming appconfig.ExecutionConfig
-	if err := json.Unmarshal(rawBody, &incoming); err != nil {
-		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
 	existing := s.execHolder.Get()
 	merged := appconfig.MergeIncomingSecrets(existing, incoming)
 	if err := merged.Validate(); err != nil {
+		s.mu.Unlock()
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := appconfig.SaveExecutionConfig(s.execPath, merged); err != nil {
+		s.mu.Unlock()
 		log.Error().Err(err).Msg("api: save execution config failed")
 		http.Error(w, "persist failed", http.StatusInternalServerError)
 		return
 	}
 	s.execHolder.Set(merged)
 
-	// ── Bump version and include in response ──────────────────────────────────
 	next, err := s.bumpConfigVersion(r.Context())
+	s.mu.Unlock()
 	if err != nil {
 		log.Error().Err(err).Msg("api: bump config_version")
 		http.Error(w, "version bump", http.StatusInternalServerError)

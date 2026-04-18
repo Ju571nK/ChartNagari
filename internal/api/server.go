@@ -208,6 +208,7 @@ type Server struct {
 	execDB              *sql.DB                            // optional; set via WithExecutionDB for feedback queries
 	execState           *execution.StateStore              // optional; set via WithExecutionState for config versioning
 	mu                  sync.RWMutex
+	configUpdateOnce    sync.Once                          // guards the one-shot "execState nil" startup warning
 }
 
 // ExecutionReleaser is the minimal dispatcher surface the feedback handler

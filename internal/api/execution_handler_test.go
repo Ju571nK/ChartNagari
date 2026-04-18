@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -841,6 +842,59 @@ func TestUpdateConfig_MissingVersionRejected(t *testing.T) {
 	resp := srv.put(t, "/api/execution/config", body)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status: %d", resp.StatusCode)
+	}
+}
+
+// TestUpdateConfig_ConcurrentWritesRaceFree verifies that the TOCTOU window in
+// the version-check/save/bump sequence is closed by the mutex. Ten goroutines
+// all claim the same initial version; exactly one must succeed (200) and the
+// remaining nine must be rejected with 409 (version_conflict). After all
+// goroutines finish the persisted version must be exactly initialVersion+1.
+func TestUpdateConfig_ConcurrentWritesRaceFree(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+
+	cfg := srv.getConfig(t)
+
+	// Fire N concurrent PUTs all claiming the same initial version.
+	const N = 10
+	var wg sync.WaitGroup
+	statuses := make(chan int, N)
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body, _ := json.Marshal(map[string]any{
+				"version":        cfg.Version,
+				"enabled":        true,
+				"max_dispatched": 3,
+			})
+			resp := srv.put(t, "/api/execution/config", body)
+			_ = resp.Body.Close()
+			statuses <- resp.StatusCode
+		}()
+	}
+	wg.Wait()
+	close(statuses)
+
+	var ok, conflict int
+	for s := range statuses {
+		switch s {
+		case http.StatusOK:
+			ok++
+		case http.StatusConflict:
+			conflict++
+		default:
+			t.Errorf("unexpected status: %d", s)
+		}
+	}
+	if ok != 1 || conflict != N-1 {
+		t.Fatalf("ok=%d conflict=%d (want 1/%d)", ok, conflict, N-1)
+	}
+
+	final := srv.getConfig(t)
+	if final.Version != cfg.Version+1 {
+		t.Fatalf("version after %d concurrent PUTs: %d → %d (want +1)", N, cfg.Version, final.Version)
 	}
 }
 

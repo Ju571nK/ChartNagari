@@ -453,9 +453,10 @@ const testAPIToken = "test-bearer-token"
 // executionHandlerTestServer wraps a Server and a real SQLite DB so that
 // TestListFeedback_* tests can seed rows and make authenticated requests.
 type executionHandlerTestServer struct {
-	srv *Server
-	db  *sql.DB
-	ts  *httptest.Server
+	srv       *Server
+	db        *sql.DB
+	ts        *httptest.Server
+	execState *execution.StateStore
 }
 
 // newExecutionHandlerTestServer creates a test server with a real SQLite DB
@@ -498,7 +499,7 @@ func newExecutionHandlerTestServer(t *testing.T) (*executionHandlerTestServer, f
 
 	ts := httptest.NewServer(s.Handler())
 	cleanup := func() { ts.Close() }
-	return &executionHandlerTestServer{srv: s, db: db, ts: ts}, cleanup
+	return &executionHandlerTestServer{srv: s, db: db, ts: ts, execState: execState}, cleanup
 }
 
 // execConfigResponse is the shape returned by GET /api/execution/config for
@@ -895,6 +896,84 @@ func TestUpdateConfig_ConcurrentWritesRaceFree(t *testing.T) {
 	final := srv.getConfig(t)
 	if final.Version != cfg.Version+1 {
 		t.Fatalf("version after %d concurrent PUTs: %d → %d (want +1)", N, cfg.Version, final.Version)
+	}
+}
+
+// post sends an authenticated POST to the test server at the given path with body.
+func (h *executionHandlerTestServer) post(t *testing.T, path string, body []byte) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, h.ts.URL+path, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testAPIToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	return resp
+}
+
+// ── Kill-switch state-table tests (Task 9) ────────────────────────────────────
+
+func TestKill_WritesToStateTable(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+
+	before := time.Now().Add(-1 * time.Second)
+	resp := srv.post(t, "/api/execution/kill", []byte(`{"on":true}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	cfg := srv.getConfig(t)
+	if cfg.KilledAt == "" {
+		t.Fatalf("KilledAt empty")
+	}
+	ts, err := time.Parse(time.RFC3339, cfg.KilledAt)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if ts.Before(before) {
+		t.Fatalf("KilledAt %v precedes request time %v", ts, before)
+	}
+
+	// Confirm value landed in state table.
+	v, err := srv.execState.Get(context.Background(), "killed_at")
+	if err != nil || v == "" {
+		t.Fatalf("state: v=%q err=%v", v, err)
+	}
+}
+
+func TestKill_Idempotent(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	_ = srv.post(t, "/api/execution/kill", []byte(`{"on":true}`))
+	resp := srv.post(t, "/api/execution/kill", []byte(`{"on":true}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("second kill status: %d", resp.StatusCode)
+	}
+}
+
+func TestKill_OffClearsState(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	_ = srv.post(t, "/api/execution/kill", []byte(`{"on":true}`))
+
+	cfg := srv.getConfig(t)
+	if cfg.KilledAt == "" {
+		t.Fatal("expected killed_at set after kill")
+	}
+
+	resp := srv.post(t, "/api/execution/kill", []byte(`{"on":false}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	cfg2 := srv.getConfig(t)
+	if cfg2.KilledAt != "" {
+		t.Fatalf("KilledAt not cleared: %q", cfg2.KilledAt)
 	}
 }
 

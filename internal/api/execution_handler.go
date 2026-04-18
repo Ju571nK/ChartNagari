@@ -242,6 +242,19 @@ func (s *Server) toggleExecutionKill(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "persist failed", http.StatusInternalServerError)
 		return
 	}
+	if s.execState != nil {
+		if body.On {
+			if err := s.execState.Set(r.Context(), stateKeyKilledAt, time.Now().UTC().Format(time.RFC3339)); err != nil {
+				log.Error().Err(err).Msg("api: persist killed_at")
+				// Don't fail the request — in-memory flip already succeeded.
+			}
+		} else {
+			// Re-enable clears the timestamp.
+			if err := s.execState.Set(r.Context(), stateKeyKilledAt, ""); err != nil {
+				log.Error().Err(err).Msg("api: clear killed_at")
+			}
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"kill_switch": body.On})
 }

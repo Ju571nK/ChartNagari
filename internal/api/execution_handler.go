@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -16,16 +18,92 @@ import (
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
+// ── config version helpers ────────────────────────────────────────────────────
+
+const (
+	stateKeyConfigVersion = "config_version"
+	stateKeyKilledAt      = "killed_at"
+)
+
+// readConfigVersion reads the current config_version from execution_state.
+// Returns 1 when the key is absent (first start-up). Never returns 0 to callers.
+func (s *Server) readConfigVersion(ctx context.Context) (int, error) {
+	if s.execState == nil {
+		return 1, nil
+	}
+	v, err := s.execState.Get(ctx, stateKeyConfigVersion)
+	if err != nil {
+		return 0, err
+	}
+	if v == "" {
+		return 1, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("bad config_version: %w", err)
+	}
+	return n, nil
+}
+
+// bumpConfigVersion increments and persists config_version, returning the new value.
+func (s *Server) bumpConfigVersion(ctx context.Context) (int, error) {
+	v, err := s.readConfigVersion(ctx)
+	if err != nil {
+		return 0, err
+	}
+	next := v + 1
+	if s.execState == nil {
+		return next, nil
+	}
+	if err := s.execState.Set(ctx, stateKeyConfigVersion, strconv.Itoa(next)); err != nil {
+		return 0, err
+	}
+	return next, nil
+}
+
 // getExecutionConfig returns the current execution config with plugin secrets
 // redacted (A5). Secrets never leave the server in clear form.
+// The response also includes "version" (config_version from execution_state,
+// ≥1) and "killed_at" (RFC3339 timestamp or empty string).
 func (s *Server) getExecutionConfig(w http.ResponseWriter, r *http.Request) {
 	if s.execHolder == nil {
 		http.Error(w, "execution config not enabled", http.StatusNotFound)
 		return
 	}
+	version, err := s.readConfigVersion(r.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("api: read config_version")
+		http.Error(w, "state", http.StatusInternalServerError)
+		return
+	}
+	killedAt := ""
+	if s.execState != nil {
+		if v, err := s.execState.Get(r.Context(), stateKeyKilledAt); err == nil {
+			killedAt = v
+		}
+	}
+
+	// Marshal the redacted config and then inject the extra fields so we do not
+	// alter the appconfig types.
 	cfg := s.execHolder.Get().RedactSecrets()
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		log.Warn().Err(err).Msg("api: marshal execution config failed")
+		http.Error(w, "encode", http.StatusInternalServerError)
+		return
+	}
+	// Decode into a generic map, inject version + killed_at, re-encode.
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		log.Warn().Err(err).Msg("api: unmarshal execution config map failed")
+		http.Error(w, "encode", http.StatusInternalServerError)
+		return
+	}
+	m["version"] = version
+	m["killed_at"] = killedAt
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+	if err := json.NewEncoder(w).Encode(m); err != nil {
 		log.Warn().Err(err).Msg("api: encode execution config failed")
 	}
 }
@@ -33,18 +111,62 @@ func (s *Server) getExecutionConfig(w http.ResponseWriter, r *http.Request) {
 // updateExecutionConfig accepts a full ExecutionConfig, merges in existing
 // secrets for any plugin field sent as "" or "***" (A5), validates, persists
 // atomically to disk, then flips the in-memory holder.
+//
+// Optimistic concurrency: the request body must include a "version" integer
+// matching the current config_version in execution_state. On mismatch the
+// handler returns 409. On success, config_version is bumped and the new value
+// is included in the response.
 func (s *Server) updateExecutionConfig(w http.ResponseWriter, r *http.Request) {
 	if s.execHolder == nil || s.execPath == "" {
 		http.Error(w, "execution config not enabled", http.StatusNotFound)
 		return
 	}
-	var incoming appconfig.ExecutionConfig
-	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+
+	// Read body once so we can decode it twice (version check + full config).
+	rawBody, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// ── Version gate ──────────────────────────────────────────────────────────
+	var versionEnvelope struct {
+		Version *int `json:"version"`
+	}
+	if err := json.Unmarshal(rawBody, &versionEnvelope); err != nil {
 		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	current := s.execHolder.Get()
-	merged := appconfig.MergeIncomingSecrets(current, incoming)
+	if versionEnvelope.Version == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "version field required"})
+		return
+	}
+	current, err := s.readConfigVersion(r.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("api: read config_version")
+		http.Error(w, "state", http.StatusInternalServerError)
+		return
+	}
+	if *versionEnvelope.Version != current {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":           "version_conflict",
+			"current_version": current,
+		})
+		return
+	}
+
+	// ── Existing merge / validate / persist logic (unchanged) ─────────────────
+	var incoming appconfig.ExecutionConfig
+	if err := json.Unmarshal(rawBody, &incoming); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	existing := s.execHolder.Get()
+	merged := appconfig.MergeIncomingSecrets(existing, incoming)
 	if err := merged.Validate(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -55,8 +177,27 @@ func (s *Server) updateExecutionConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.execHolder.Set(merged)
+
+	// ── Bump version and include in response ──────────────────────────────────
+	next, err := s.bumpConfigVersion(r.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("api: bump config_version")
+		http.Error(w, "version bump", http.StatusInternalServerError)
+		return
+	}
+
+	raw, err := json.Marshal(merged.RedactSecrets())
+	if err != nil {
+		log.Warn().Err(err).Msg("api: marshal execution config response failed")
+		http.Error(w, "encode", http.StatusInternalServerError)
+		return
+	}
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	m["version"] = next
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(merged.RedactSecrets())
+	_ = json.NewEncoder(w).Encode(m)
 }
 
 // toggleExecutionKill flips the kill switch. Disk-first (Codex #10): the

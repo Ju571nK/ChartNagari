@@ -25,6 +25,7 @@ import (
 	"github.com/rs/zerolog/log"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/analyst"
+	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/backtest"
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/storage"
@@ -205,6 +206,7 @@ type Server struct {
 	execDispatcher      ExecutionReleaser                  // optional; set via WithExecutionDispatcher
 	execFeedback        FeedbackRecorder                   // optional; set via WithExecutionFeedback
 	execDB              *sql.DB                            // optional; set via WithExecutionDB for feedback queries
+	execState           *execution.StateStore              // optional; set via WithExecutionState for config versioning
 	mu                  sync.RWMutex
 }
 
@@ -264,6 +266,12 @@ func (s *Server) WithExecutionFeedback(f FeedbackRecorder) {
 // In production this is the same db.Conn() used by FeedbackIdempotency.
 func (s *Server) WithExecutionDB(db *sql.DB) {
 	s.execDB = db
+}
+
+// WithExecutionState wires the key-value state store used for config versioning
+// (config_version) and kill-switch metadata (killed_at).
+func (s *Server) WithExecutionState(store *execution.StateStore) {
+	s.execState = store
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.

@@ -108,14 +108,22 @@ func TestUpdateExecutionConfig_PreservesSecrets(t *testing.T) {
 	}
 	s, _, _, path := newExecTestServer(t, cfg)
 
-	incoming := appconfig.ExecutionConfig{
-		Enabled: true,
-		Plugins: []appconfig.PluginConfig{
-			// Empty secret → preserve old-secret.
-			{ID: "p1", URL: "https://example.com/hook", Secret: "", Enabled: true},
-		},
+	// newExecTestServer has no execState, so readConfigVersion returns 1.
+	type incomingWithVersion struct {
+		appconfig.ExecutionConfig
+		Version int `json:"version"`
 	}
-	body, _ := json.Marshal(incoming)
+	payload := incomingWithVersion{
+		ExecutionConfig: appconfig.ExecutionConfig{
+			Enabled: true,
+			Plugins: []appconfig.PluginConfig{
+				// Empty secret → preserve old-secret.
+				{ID: "p1", URL: "https://example.com/hook", Secret: "", Enabled: true},
+			},
+		},
+		Version: 1,
+	}
+	body, _ := json.Marshal(payload)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/execution/config", bytes.NewReader(body))
 	s.updateExecutionConfig(rec, req)
@@ -143,13 +151,21 @@ func TestUpdateExecutionConfig_AcceptsNewSecret(t *testing.T) {
 	}
 	s, _, _, path := newExecTestServer(t, cfg)
 
-	incoming := appconfig.ExecutionConfig{
-		Enabled: true,
-		Plugins: []appconfig.PluginConfig{
-			{ID: "p1", URL: "https://example.com/hook", Secret: "rotated", Enabled: true},
-		},
+	// newExecTestServer has no execState, so readConfigVersion returns 1.
+	type incomingWithVersion struct {
+		appconfig.ExecutionConfig
+		Version int `json:"version"`
 	}
-	body, _ := json.Marshal(incoming)
+	payload := incomingWithVersion{
+		ExecutionConfig: appconfig.ExecutionConfig{
+			Enabled: true,
+			Plugins: []appconfig.PluginConfig{
+				{ID: "p1", URL: "https://example.com/hook", Secret: "rotated", Enabled: true},
+			},
+		},
+		Version: 1,
+	}
+	body, _ := json.Marshal(payload)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/execution/config", bytes.NewReader(body))
 	s.updateExecutionConfig(rec, req)
@@ -442,10 +458,21 @@ type executionHandlerTestServer struct {
 }
 
 // newExecutionHandlerTestServer creates a test server with a real SQLite DB
-// (the feedback_idempotency schema), a wired execDB, and an API token.
+// (the feedback_idempotency schema + execution_state schema), a wired execDB,
+// execState, and an API token.
 func newExecutionHandlerTestServer(t *testing.T) (*executionHandlerTestServer, func()) {
 	t.Helper()
 	db := newFeedbackTestDB(t)
+
+	// Add the execution_state table (Task 2 schema).
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS execution_state (
+			key        TEXT PRIMARY KEY,
+			value      TEXT NOT NULL DEFAULT '',
+			updated_at INTEGER NOT NULL DEFAULT 0
+		);`); err != nil {
+		t.Fatalf("execution_state schema: %v", err)
+	}
 
 	cfg := appconfig.ExecutionConfig{
 		Enabled: true,
@@ -460,14 +487,55 @@ func newExecutionHandlerTestServer(t *testing.T) (*executionHandlerTestServer, f
 	}
 	holder := appconfig.NewExecutionHolder(path, cfg)
 
+	execState := execution.NewStateStore(db)
+
 	s := &Server{}
 	s.WithExecutionHolder(holder, path)
 	s.WithExecutionDB(db)
 	s.WithAPIToken(testAPIToken)
+	s.WithExecutionState(execState)
 
 	ts := httptest.NewServer(s.Handler())
 	cleanup := func() { ts.Close() }
 	return &executionHandlerTestServer{srv: s, db: db, ts: ts}, cleanup
+}
+
+// execConfigResponse is the shape returned by GET /api/execution/config for
+// version-related assertions. Other fields are ignored.
+type execConfigResponse struct {
+	Version  int    `json:"version"`
+	KilledAt string `json:"killed_at"`
+}
+
+// getConfig sends a GET to /api/execution/config and decodes the version fields.
+func (h *executionHandlerTestServer) getConfig(t *testing.T) execConfigResponse {
+	t.Helper()
+	resp := h.get(t, "/api/execution/config")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("getConfig: status %d", resp.StatusCode)
+	}
+	var cfg execConfigResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		t.Fatalf("getConfig decode: %v", err)
+	}
+	return cfg
+}
+
+// put sends an authenticated PUT to the test server at the given path with body.
+func (h *executionHandlerTestServer) put(t *testing.T, path string, body []byte) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPut, h.ts.URL+path, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testAPIToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT %s: %v", path, err)
+	}
+	return resp
 }
 
 // seedFeedback inserts a row directly into feedback_idempotency.
@@ -711,6 +779,67 @@ func TestPluginStats_Unauthorized(t *testing.T) {
 	defer cleanup()
 	resp := srv.getNoAuth(t, "/api/execution/plugins/stats?window=24h")
 	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+}
+
+// ── Config version tests ──────────────────────────────────────────────────────
+
+func TestUpdateConfig_VersionMatchBumps(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+
+	cfg := srv.getConfig(t)
+	if cfg.Version < 1 {
+		t.Fatalf("initial version: %d", cfg.Version)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"version":        cfg.Version,
+		"enabled":        true,
+		"max_dispatched": 5,
+	})
+	resp := srv.put(t, "/api/execution/config", body)
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: %d; body=%s", resp.StatusCode, b)
+	}
+
+	cfg2 := srv.getConfig(t)
+	if cfg2.Version != cfg.Version+1 {
+		t.Fatalf("version did not bump: %d → %d", cfg.Version, cfg2.Version)
+	}
+}
+
+func TestUpdateConfig_VersionMismatchReturns409(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	cfg := srv.getConfig(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"version": cfg.Version + 99,
+		"enabled": true,
+	})
+	resp := srv.put(t, "/api/execution/config", body)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	var body409 struct {
+		Error          string `json:"error"`
+		CurrentVersion int    `json:"current_version"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body409)
+	if body409.Error != "version_conflict" || body409.CurrentVersion != cfg.Version {
+		t.Fatalf("bad 409 body: %+v", body409)
+	}
+}
+
+func TestUpdateConfig_MissingVersionRejected(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	body, _ := json.Marshal(map[string]any{"enabled": true})
+	resp := srv.put(t, "/api/execution/config", body)
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status: %d", resp.StatusCode)
 	}
 }

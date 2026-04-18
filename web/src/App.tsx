@@ -3708,6 +3708,7 @@ const TAB_KEYS: Record<Tab, string> = {
   settings: 'settings',
   'price-alerts': 'price_alerts',
   calendar: 'calendar',
+  execution: 'execution',
 }
 
 // ── Calendar Tab ─────────────────────────────────────────────────────────────

@@ -47,27 +47,27 @@ beforeEach(() => {
 });
 
 const full: Plugin = {
-	name: 'a', url: 'http://a', enabled: true, symbols: [], min_score: 1, direction_filter: '', secret: '••••',
+	id: 'a', url: 'http://a', enabled: true, symbols: [], min_score: 1, direction_filter: '', secret: '••••',
 };
 
 describe('PluginEditModal', () => {
 	it('requires name and secret in create mode', () => {
 		const onSave = vi.fn();
-		render(<PluginEditModal plugin={null} existingNames={[]} onSave={onSave} onCancel={vi.fn()} />);
+		render(<PluginEditModal plugin={null} existingIds={[]} onSave={onSave} onCancel={vi.fn()} />);
 		fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		expect(onSave).not.toHaveBeenCalled();
 		expect(screen.getByText(/name is required/i)).toBeInTheDocument();
 	});
 
 	it('rejects duplicate name in create mode', () => {
-		render(<PluginEditModal plugin={null} existingNames={['alpaca-paper']} onSave={vi.fn()} onCancel={vi.fn()} />);
+		render(<PluginEditModal plugin={null} existingIds={['alpaca-paper']} onSave={vi.fn()} onCancel={vi.fn()} />);
 		fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'alpaca-paper' } });
 		fireEvent.blur(screen.getByLabelText(/^name/i));
 		expect(screen.getByText(/already exists/i)).toBeInTheDocument();
 	});
 
 	it('rejects non-http URL', () => {
-		render(<PluginEditModal plugin={null} existingNames={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+		render(<PluginEditModal plugin={null} existingIds={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
 		const url = screen.getByLabelText(/url/i);
 		fireEvent.change(url, { target: { value: 'ftp://x' } });
 		fireEvent.blur(url);
@@ -75,7 +75,7 @@ describe('PluginEditModal', () => {
 	});
 
 	it('rejects negative min_score', () => {
-		render(<PluginEditModal plugin={null} existingNames={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+		render(<PluginEditModal plugin={null} existingIds={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
 		const score = screen.getByLabelText(/min score/i);
 		fireEvent.change(score, { target: { value: '-1' } });
 		fireEvent.blur(score);
@@ -83,7 +83,7 @@ describe('PluginEditModal', () => {
 	});
 
 	it('Generate fills secret field and copies to clipboard', async () => {
-		render(<PluginEditModal plugin={null} existingNames={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+		render(<PluginEditModal plugin={null} existingIds={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
 		fireEvent.click(screen.getByRole('button', { name: /generate/i }));
 		await screen.findByText(/copied to clipboard/i);
 		expect(nav.clipboard.writeText).toHaveBeenCalled();
@@ -93,15 +93,15 @@ describe('PluginEditModal', () => {
 
 	it('Generate falls back with manual-copy toast when clipboard rejects', async () => {
 		nav.clipboard.writeText = vi.fn().mockRejectedValue(new Error('no https'));
-		render(<PluginEditModal plugin={null} existingNames={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+		render(<PluginEditModal plugin={null} existingIds={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
 		fireEvent.click(screen.getByRole('button', { name: /generate/i }));
 		await waitFor(() => expect(screen.getByText(/copy the secret manually/i)).toBeInTheDocument());
 	});
 
 	it('resets form when plugin prop changes (useEffect pattern)', () => {
-		const { rerender } = render(<PluginEditModal plugin={full} existingNames={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+		const { rerender } = render(<PluginEditModal plugin={full} existingIds={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
 		expect((screen.getByLabelText(/url/i) as HTMLInputElement).value).toBe('http://a');
-		rerender(<PluginEditModal plugin={{ ...full, name: 'b', url: 'http://b' }} existingNames={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+		rerender(<PluginEditModal plugin={{ ...full, id: 'b', url: 'http://b' }} existingIds={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
 		expect((screen.getByLabelText(/url/i) as HTMLInputElement).value).toBe('http://b');
 	});
 });

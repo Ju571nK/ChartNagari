@@ -114,6 +114,7 @@
   "update": "Update",
   "settings": "Settings",
   "calendar": "Calendar",
+  "execution": "Execution",
   "unknown_error": "Unknown error",
   "confirm_delete": "Delete {{symbol}}?",
   "delete_failed": "Delete failed",

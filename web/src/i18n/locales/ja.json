@@ -114,6 +114,7 @@
   "update": "更新",
   "settings": "設定",
   "calendar": "カレンダー",
+  "execution": "実行",
   "unknown_error": "不明なエラー",
   "confirm_delete": "{{symbol}}を削除しますか？",
   "delete_failed": "削除失敗",

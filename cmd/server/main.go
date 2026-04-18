@@ -256,6 +256,7 @@ func main() {
 	dedupStore := execution.NewDedupStore(db.Conn(), execCfg.DedupWindow())
 	dispatcher := execution.New(execHolder, dedupStore, execution.Options{Logger: log.Logger})
 	feedbackIdem := execution.NewFeedbackIdempotency(db.Conn())
+	execState := execution.NewStateStore(db.Conn())
 	dedupCleaner := execution.NewDedupCleaner(dedupStore, log.Logger)
 	go dedupCleaner.Run(ctx)
 	log.Info().
@@ -343,6 +344,8 @@ func main() {
 	apiSrv.WithExecutionHolder(execHolder, execPath)
 	apiSrv.WithExecutionDispatcher(dispatcher)
 	apiSrv.WithExecutionFeedback(feedbackIdem)
+	apiSrv.WithExecutionDB(db.Conn())
+	apiSrv.WithExecutionState(execState)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

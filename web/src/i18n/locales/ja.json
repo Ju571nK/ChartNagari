@@ -410,5 +410,12 @@
   "execution.err_url": "http:// または https:// で始まる必要があります",
   "execution.err_min_score": "0 以上である必要があります",
   "execution.err_secret_required": "新しいプラグインにはシークレットが必要です",
-  "execution.config_conflict": "他の場所で設定が変更されました。保存前にリロードしてください。"
+  "execution.config_conflict": "他の場所で設定が変更されました。保存前にリロードしてください。",
+  "execution.max_dispatched": "最大同時配信数",
+  "execution.dedup_window": "重複防止ウィンドウ（例: 5m）",
+  "execution.symbol_map": "シンボルマッピング（上級）",
+  "execution.add_row": "行追加",
+  "execution.add_broker": "ブローカー追加",
+  "execution.remove_row": "行削除",
+  "common.discard": "破棄"
 }

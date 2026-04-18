@@ -4,6 +4,7 @@ import KillSwitch from './KillSwitch';
 import PluginCard from './PluginCard';
 import PluginEditModal from './PluginEditModal';
 import FeedbackTable from './FeedbackTable';
+import GlobalConfigForm, { type GlobalConfig } from './GlobalConfigForm';
 
 export type Plugin = {
   name: string;
@@ -61,6 +62,7 @@ export default function ExecutionTab() {
   const [editing, setEditing] = useState<Plugin | null>(null);
   const [editingOpen, setEditingOpen] = useState(false);
   const [versionConflict, setVersionConflict] = useState(false);
+  const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string> | null>(null);
 
   const loadConfig = useCallback(async () => {
     const r = await fetch('/api/execution/config', { credentials: 'include' });
@@ -165,7 +167,42 @@ export default function ExecutionTab() {
         })}
         <button onClick={() => { setEditing(null); setEditingOpen(true); }}>{t('execution.add_plugin')}</button>
       </div>
-      <div data-testid="global-config">{/* GlobalConfigForm — Task 17 */}</div>
+      <div data-testid="global-config">
+        {config && (
+          <GlobalConfigForm
+            config={{
+              max_dispatched: config.max_dispatched,
+              dedup_window: config.dedup_window,
+              symbol_map: config.symbol_map,
+            }}
+            onServerError={serverFieldErrors}
+            onSave={async (partial: GlobalConfig) => {
+              if (!config) return;
+              const next = { ...config, ...partial };
+              const resp = await fetch('/api/execution/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(next),
+              });
+              if (resp.status === 422) {
+                try {
+                  const body = await resp.json();
+                  setServerFieldErrors(body.fields ?? null);
+                } catch { setServerFieldErrors(null); }
+                return;
+              }
+              if (resp.status === 409) {
+                setVersionConflict(true);
+                return;
+              }
+              setServerFieldErrors(null);
+              await loadConfig();
+              await loadStats();
+            }}
+          />
+        )}
+      </div>
       {editingOpen && (
         <PluginEditModal
           plugin={editing}
@@ -178,7 +215,7 @@ export default function ExecutionTab() {
               : [...config.plugins, next];
             const resp = await putConfig({ ...config, plugins });
             if (resp.ok) setEditingOpen(false);
-            // on 409, the banner is shown; modal stays open so user can reload or retry
+            else if (resp.status === 409) setEditingOpen(false); // close so banner is visible
           }}
         />
       )}

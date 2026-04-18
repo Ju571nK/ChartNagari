@@ -410,5 +410,12 @@
   "execution.err_url": "must start with http:// or https://",
   "execution.err_min_score": "must be ≥ 0",
   "execution.err_secret_required": "Secret is required for new plugins",
-  "execution.config_conflict": "Config changed elsewhere. Reload before saving."
+  "execution.config_conflict": "Config changed elsewhere. Reload before saving.",
+  "execution.max_dispatched": "Max dispatched",
+  "execution.dedup_window": "Dedup window (e.g. 5m)",
+  "execution.symbol_map": "Symbol map (advanced)",
+  "execution.add_row": "Add row",
+  "execution.add_broker": "Add broker",
+  "execution.remove_row": "Remove row",
+  "common.discard": "Discard"
 }

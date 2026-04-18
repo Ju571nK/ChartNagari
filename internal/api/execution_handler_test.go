@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -607,9 +608,10 @@ func TestPluginStats_Aggregates24hCounts(t *testing.T) {
 	srv, cleanup := newExecutionHandlerTestServer(t)
 	defer cleanup()
 	now := time.Now()
+	failAt := now.Add(-3 * time.Hour)
 	srv.seedFeedbackAt(t, "alpaca", "s1", "o1", "FILLED", "AAPL", "", now.Add(-1*time.Hour))
 	srv.seedFeedbackAt(t, "alpaca", "s2", "o2", "FILLED", "AAPL", "", now.Add(-2*time.Hour))
-	srv.seedFeedbackAt(t, "alpaca", "s3", "o3", "REJECTED", "TSLA", "denied", now.Add(-3*time.Hour))
+	srv.seedFeedbackAt(t, "alpaca", "s3", "o3", "REJECTED", "TSLA", "denied", failAt)
 	srv.seedFeedbackAt(t, "alpaca", "s4", "o4", "FILLED", "AAPL", "", now.Add(-25*time.Hour)) // outside window
 
 	resp := srv.get(t, "/api/execution/plugins/stats?window=24h")
@@ -619,22 +621,77 @@ func TestPluginStats_Aggregates24hCounts(t *testing.T) {
 	if cc := resp.Header.Get("Cache-Control"); cc != "max-age=60" {
 		t.Errorf("Cache-Control = %q, want max-age=60", cc)
 	}
+
+	// Capture raw body for JSON key checks later.
+	rawBody, _ := io.ReadAll(resp.Body)
+
 	var out struct {
 		Plugins []struct {
 			PluginID       string `json:"plugin_id"`
 			Submitted      int    `json:"submitted"`
 			Filled         int    `json:"filled"`
 			Rejected       int    `json:"rejected"`
+			LastFailureAt  *int64 `json:"last_failure_at,omitempty"`
 			LastFailureMsg string `json:"last_failure_msg"`
 		} `json:"plugins"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&out)
+	_ = json.Unmarshal(rawBody, &out)
 	if len(out.Plugins) != 1 {
 		t.Fatalf("plugins: %d", len(out.Plugins))
 	}
 	p := out.Plugins[0]
 	if p.Filled != 2 || p.Rejected != 1 || p.LastFailureMsg != "denied" {
 		t.Fatalf("aggregation wrong: %+v", p)
+	}
+
+	// LastFailureAt must be non-nil (has a REJECTED row) and within ±1s of failAt.
+	if p.LastFailureAt == nil {
+		t.Fatal("LastFailureAt should be non-nil for plugin with REJECTED rows")
+	}
+	diff := *p.LastFailureAt - failAt.Unix()
+	if diff < -1 || diff > 1 {
+		t.Fatalf("LastFailureAt = %d, want ~%d (±1s)", *p.LastFailureAt, failAt.Unix())
+	}
+	// Raw JSON must contain the key.
+	if !bytes.Contains(rawBody, []byte(`"last_failure_at"`)) {
+		t.Fatal("JSON missing last_failure_at key for plugin with failures")
+	}
+}
+
+// TestPluginStats_NoFailuresOmitsLastFailureAt verifies that when a plugin has
+// no REJECTED or ERROR rows, last_failure_at is nil and absent from the JSON.
+func TestPluginStats_NoFailuresOmitsLastFailureAt(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	now := time.Now()
+	srv.seedFeedbackAt(t, "alpaca", "s1", "o1", "FILLED", "AAPL", "", now.Add(-1*time.Hour))
+	srv.seedFeedbackAt(t, "alpaca", "s2", "o2", "FILLED", "TSLA", "", now.Add(-2*time.Hour))
+
+	resp := srv.get(t, "/api/execution/plugins/stats?window=24h")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	rawBody, _ := io.ReadAll(resp.Body)
+
+	var out struct {
+		Plugins []struct {
+			PluginID      string `json:"plugin_id"`
+			Filled        int    `json:"filled"`
+			LastFailureAt *int64 `json:"last_failure_at,omitempty"`
+		} `json:"plugins"`
+	}
+	_ = json.Unmarshal(rawBody, &out)
+	if len(out.Plugins) != 1 {
+		t.Fatalf("plugins: %d", len(out.Plugins))
+	}
+	p := out.Plugins[0]
+	if p.LastFailureAt != nil {
+		t.Fatalf("LastFailureAt should be nil for plugin with no failures; got %d", *p.LastFailureAt)
+	}
+	// The key must be absent from the raw JSON (omitempty).
+	if bytes.Contains(rawBody, []byte(`"last_failure_at"`)) {
+		t.Fatal("JSON must not contain last_failure_at key when there are no failures")
 	}
 }
 

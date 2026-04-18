@@ -222,6 +222,7 @@ func (s *Server) getExecutionPluginStats(w http.ResponseWriter, r *http.Request)
 		cutoff, cutoff,
 	)
 	if err != nil {
+		log.Error().Err(err).Msg("api: plugin stats query failed")
 		http.Error(w, "query", http.StatusInternalServerError)
 		return
 	}
@@ -240,6 +241,7 @@ func (s *Server) getExecutionPluginStats(w http.ResponseWriter, r *http.Request)
 		var st stat
 		var lastFailAt sql.NullInt64
 		if err := rows.Scan(&st.PluginID, &st.Submitted, &st.Filled, &st.Rejected, &lastFailAt, &st.LastFailureMsg); err != nil {
+			log.Error().Err(err).Msg("api: plugin stats scan failed")
 			http.Error(w, "scan", http.StatusInternalServerError)
 			return
 		}
@@ -302,6 +304,7 @@ func (s *Server) listExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 		plugin, plugin, status, status, symbol, symbol, limit,
 	)
 	if err != nil {
+		log.Error().Err(err).Msg("api: list feedback query failed")
 		http.Error(w, "query", http.StatusInternalServerError)
 		return
 	}
@@ -320,6 +323,7 @@ func (s *Server) listExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it feedbackItem
 		if err := rows.Scan(&it.PluginID, &it.SignalID, &it.OrderID, &it.Status, &it.Symbol, &it.Message, &it.ReceivedAt); err != nil {
+			log.Error().Err(err).Msg("api: list feedback scan failed")
 			http.Error(w, "scan", http.StatusInternalServerError)
 			return
 		}

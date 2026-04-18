@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import KillSwitch from './KillSwitch';
 import PluginCard from './PluginCard';
+import PluginEditModal from './PluginEditModal';
 import FeedbackTable from './FeedbackTable';
 
 export type Plugin = {
@@ -57,6 +58,9 @@ export default function ExecutionTab() {
   const [filters, setFilters] = useState<FeedbackFilters>({ plugin: '', status: '', symbol: '' });
   const filtersRef = useRef<FeedbackFilters>(filters);
   useEffect(() => { filtersRef.current = filters; }, [filters]);
+  const [editing, setEditing] = useState<Plugin | null>(null);
+  const [editingOpen, setEditingOpen] = useState(false);
+  const [versionConflict, setVersionConflict] = useState(false);
 
   const loadConfig = useCallback(async () => {
     const r = await fetch('/api/execution/config', { credentials: 'include' });
@@ -101,6 +105,10 @@ export default function ExecutionTab() {
       credentials: 'include',
       body: JSON.stringify(next),
     });
+    if (resp.status === 409) {
+      setVersionConflict(true);
+      return resp;
+    }
     if (resp.ok) {
       await loadConfig();
       await loadStats();
@@ -108,11 +116,14 @@ export default function ExecutionTab() {
     return resp;
   }, [loadConfig, loadStats]);
 
-  // putConfig exposed for child components in future tasks
-  void putConfig;
-
   return (
     <div className="execution-tab">
+      {versionConflict && (
+        <div role="alert" style={{ background: 'var(--danger)', color: '#fff', padding: 12, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{t('execution.config_conflict')}</span>
+          <button onClick={async () => { await loadConfig(); setVersionConflict(false); }}>{t('common.refresh')}</button>
+        </div>
+      )}
       <div data-testid="kill-switch">
         <KillSwitch
           killed={!!config?.killed_at}
@@ -138,7 +149,7 @@ export default function ExecutionTab() {
               key={p.name}
               plugin={p}
               stats={s}
-              onEdit={() => { /* Task 16 wires modal open */ }}
+              onEdit={() => { setEditing(p); setEditingOpen(true); }}
               onDelete={async () => {
                 if (!config) return;
                 const nextPlugins = config.plugins.filter(x => x.name !== p.name);
@@ -152,9 +163,25 @@ export default function ExecutionTab() {
             />
           );
         })}
-        <button onClick={() => { /* Task 16 wires Add modal */ }}>{t('execution.add_plugin')}</button>
+        <button onClick={() => { setEditing(null); setEditingOpen(true); }}>{t('execution.add_plugin')}</button>
       </div>
       <div data-testid="global-config">{/* GlobalConfigForm — Task 17 */}</div>
+      {editingOpen && (
+        <PluginEditModal
+          plugin={editing}
+          existingNames={(config?.plugins ?? []).map(p => p.name).filter(n => n !== editing?.name)}
+          onCancel={() => setEditingOpen(false)}
+          onSave={async next => {
+            if (!config) return;
+            const plugins = editing && editing.name
+              ? config.plugins.map(p => p.name === editing.name ? next : p)
+              : [...config.plugins, next];
+            const resp = await putConfig({ ...config, plugins });
+            if (resp.ok) setEditingOpen(false);
+            // on 409, the banner is shown; modal stays open so user can reload or retry
+          }}
+        />
+      )}
       <div data-testid="feedback-table">
         <FeedbackTable
           feedback={feedback}

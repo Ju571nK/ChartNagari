@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import KillSwitch from './KillSwitch';
 
 export type Plugin = {
   name: string;
@@ -88,13 +89,28 @@ export default function ExecutionTab() {
 
   // Expose setFilters for child components in future tasks
   void setFilters;
-  void config;
   void stats;
   void feedback;
 
   return (
     <div className="execution-tab">
-      <div data-testid="kill-switch">{/* KillSwitch — Task 13 */}</div>
+      <div data-testid="kill-switch">
+        <KillSwitch
+          killed={!!config?.killed_at}
+          killedAt={config?.killed_at || null}
+          onToggle={async () => {
+            const currentlyKilled = !!config?.killed_at;
+            const on = !currentlyKilled;
+            await fetch('/api/execution/kill', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ on }),
+            });
+            await loadConfig();
+          }}
+        />
+      </div>
       <div data-testid="plugins-area">{/* PluginCard list + Add — Tasks 14/16 */}</div>
       <div data-testid="global-config">{/* GlobalConfigForm — Task 17 */}</div>
       <div data-testid="feedback-table">{/* FeedbackTable — Task 15 */}</div>

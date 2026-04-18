@@ -363,5 +363,13 @@
   "coiled_bonus": "코일드 보너스",
   "coiled_status": "코일드 — 돌파 임박",
   "realized_vol": "실현 변동성 (20일)",
-  "not_coiled": "정상"
+  "not_coiled": "정상",
+  "execution.kill_switch": "킬 스위치",
+  "execution.reenable": "재활성화",
+  "execution.killed_banner": "실행 중단됨 — 시그널이 디스패치되지 않습니다",
+  "execution.last_killed": "마지막 중단",
+  "execution.confirm_kill": "정말 모든 플러그인 디스패치를 중단하시겠습니까?",
+  "execution.confirm_reenable": "정말 모든 플러그인 디스패치를 재활성화하시겠습니까?",
+  "common.cancel": "취소",
+  "common.confirm": "확인"
 }

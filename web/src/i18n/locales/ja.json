@@ -363,5 +363,13 @@
   "coiled_bonus": "コイルドボーナス",
   "coiled_status": "コイルド — ブレイクアウト間近",
   "realized_vol": "実現ボラ（20日）",
-  "not_coiled": "通常"
+  "not_coiled": "通常",
+  "execution.kill_switch": "キルスイッチ",
+  "execution.reenable": "再有効化",
+  "execution.killed_banner": "実行停止中 — シグナルは配信されません",
+  "execution.last_killed": "停止時刻",
+  "execution.confirm_kill": "本当にすべてのプラグイン配信を停止しますか？",
+  "execution.confirm_reenable": "本当にすべてのプラグイン配信を再有効化しますか？",
+  "common.cancel": "キャンセル",
+  "common.confirm": "確認"
 }

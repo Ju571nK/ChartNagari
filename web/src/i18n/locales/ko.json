@@ -371,5 +371,10 @@
   "execution.confirm_kill": "정말 모든 플러그인 디스패치를 중단하시겠습니까?",
   "execution.confirm_reenable": "정말 모든 플러그인 디스패치를 재활성화하시겠습니까?",
   "common.cancel": "취소",
-  "common.confirm": "확인"
+  "common.confirm": "확인",
+  "common.edit": "편집",
+  "common.delete": "삭제",
+  "execution.no_activity": "활동 없음",
+  "execution.confirm_delete_plugin": "플러그인 {{name}}을(를) 삭제하시겠습니까?",
+  "execution.add_plugin": "+ 플러그인 추가"
 }

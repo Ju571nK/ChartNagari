@@ -371,5 +371,10 @@
   "execution.confirm_kill": "本当にすべてのプラグイン配信を停止しますか？",
   "execution.confirm_reenable": "本当にすべてのプラグイン配信を再有効化しますか？",
   "common.cancel": "キャンセル",
-  "common.confirm": "確認"
+  "common.confirm": "確認",
+  "common.edit": "編集",
+  "common.delete": "削除",
+  "execution.no_activity": "アクティビティなし",
+  "execution.confirm_delete_plugin": "プラグイン {{name}} を削除しますか？",
+  "execution.add_plugin": "+ プラグイン追加"
 }

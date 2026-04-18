@@ -371,5 +371,10 @@
   "execution.confirm_kill": "Really disable all plugin dispatch?",
   "execution.confirm_reenable": "Really re-enable all plugin dispatch?",
   "common.cancel": "Cancel",
-  "common.confirm": "Confirm"
+  "common.confirm": "Confirm",
+  "common.edit": "Edit",
+  "common.delete": "Delete",
+  "execution.no_activity": "no activity",
+  "execution.confirm_delete_plugin": "Delete plugin {{name}}?",
+  "execution.add_plugin": "+ Add plugin"
 }

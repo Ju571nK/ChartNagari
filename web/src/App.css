@@ -781,6 +781,41 @@ input:checked + .slider::before {
 }
 .calendar-retry-btn:hover { border-color: var(--mint); color: var(--mint); }
 
+/* ── Execution Tab — Plugin Cards ────────────────────────────────────────── */
+.plugin-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	border: 1px solid var(--slate, #888);
+	border-radius: 6px;
+	margin-bottom: 6px;
+}
+.plugin-card--disabled {
+	opacity: 0.4;
+}
+.plugin-card--has-failure {
+	border-left: 3px solid var(--danger);
+}
+.plugin-name {
+	font-weight: 600;
+}
+.plugin-url {
+	color: var(--muted);
+	font-family: monospace;
+	font-size: 0.9em;
+}
+.plugin-stats {
+	margin-left: auto;
+	margin-right: 12px;
+	font-size: 0.9em;
+}
+.plugin-failure-tooltip {
+	color: var(--danger);
+	font-weight: 700;
+	cursor: help;
+}
+
 /* ── Onboarding Modal ─────────────────────────────────────────────────────── */
 .ob-overlay {
   position: fixed;

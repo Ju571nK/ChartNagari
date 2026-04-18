@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import KillSwitch from './KillSwitch';
+import PluginCard from './PluginCard';
 
 export type Plugin = {
   name: string;
@@ -47,6 +49,7 @@ export type FeedbackFilters = {
 };
 
 export default function ExecutionTab() {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<ExecutionConfig | null>(null);
   const [stats, setStats] = useState<PluginStat[]>([]);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
@@ -87,9 +90,23 @@ export default function ExecutionTab() {
     return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
   }, [loadStats, loadFeedback]);
 
-  // Expose setFilters for child components in future tasks
+  const putConfig = useCallback(async (next: ExecutionConfig): Promise<Response> => {
+    const resp = await fetch('/api/execution/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(next),
+    });
+    if (resp.ok) {
+      await loadConfig();
+      await loadStats();
+    }
+    return resp;
+  }, [loadConfig, loadStats]);
+
+  // Expose setFilters and putConfig for child components in future tasks
   void setFilters;
-  void stats;
+  void putConfig;
   void feedback;
 
   return (
@@ -111,7 +128,30 @@ export default function ExecutionTab() {
           }}
         />
       </div>
-      <div data-testid="plugins-area">{/* PluginCard list + Add — Tasks 14/16 */}</div>
+      <div data-testid="plugins-area">
+        {config?.plugins.map(p => {
+          const s = stats.find(x => x.plugin_id === p.name);
+          return (
+            <PluginCard
+              key={p.name}
+              plugin={p}
+              stats={s}
+              onEdit={() => { /* Task 16 wires modal open */ }}
+              onDelete={async () => {
+                if (!config) return;
+                const nextPlugins = config.plugins.filter(x => x.name !== p.name);
+                await putConfig({ ...config, plugins: nextPlugins });
+              }}
+              onToggleEnabled={async next => {
+                if (!config) return;
+                const nextPlugins = config.plugins.map(x => x.name === p.name ? { ...x, enabled: next } : x);
+                await putConfig({ ...config, plugins: nextPlugins });
+              }}
+            />
+          );
+        })}
+        <button onClick={() => { /* Task 16 wires Add modal */ }}>{t('execution.add_plugin')}</button>
+      </div>
       <div data-testid="global-config">{/* GlobalConfigForm — Task 17 */}</div>
       <div data-testid="feedback-table">{/* FeedbackTable — Task 15 */}</div>
     </div>

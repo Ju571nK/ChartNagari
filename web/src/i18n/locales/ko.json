@@ -376,5 +376,18 @@
   "common.delete": "삭제",
   "execution.no_activity": "활동 없음",
   "execution.confirm_delete_plugin": "플러그인 {{name}}을(를) 삭제하시겠습니까?",
-  "execution.add_plugin": "+ 플러그인 추가"
+  "execution.add_plugin": "+ 플러그인 추가",
+  "execution.filter_plugin": "플러그인",
+  "execution.filter_status": "상태",
+  "execution.filter_symbol": "심볼",
+  "execution.col_time": "시각",
+  "execution.col_plugin": "플러그인",
+  "execution.col_signal": "시그널",
+  "execution.col_symbol": "심볼",
+  "execution.col_status": "상태",
+  "execution.col_order": "주문",
+  "execution.col_message": "메시지",
+  "execution.no_feedback": "주문 내역 없음",
+  "common.all": "전체",
+  "common.refresh": "새로고침"
 }

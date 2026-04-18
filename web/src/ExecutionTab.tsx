@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import KillSwitch from './KillSwitch';
 import PluginCard from './PluginCard';
+import FeedbackTable from './FeedbackTable';
 
 export type Plugin = {
   name: string;
@@ -54,6 +55,8 @@ export default function ExecutionTab() {
   const [stats, setStats] = useState<PluginStat[]>([]);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [filters, setFilters] = useState<FeedbackFilters>({ plugin: '', status: '', symbol: '' });
+  const filtersRef = useRef<FeedbackFilters>(filters);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
 
   const loadConfig = useCallback(async () => {
     const r = await fetch('/api/execution/config', { credentials: 'include' });
@@ -65,7 +68,8 @@ export default function ExecutionTab() {
     if (r.ok) { const b = await r.json(); setStats(b.plugins ?? []); }
   }, []);
 
-  const loadFeedback = useCallback(async (f: FeedbackFilters = filters) => {
+  const loadFeedback = useCallback(async () => {
+    const f = filtersRef.current;
     const qs = new URLSearchParams();
     if (f.plugin) qs.set('plugin', f.plugin);
     if (f.status) qs.set('status', f.status);
@@ -73,7 +77,7 @@ export default function ExecutionTab() {
     qs.set('limit', '100');
     const r = await fetch('/api/execution/feedback?' + qs.toString(), { credentials: 'include' });
     if (r.ok) { const b = await r.json(); setFeedback(b.items ?? []); }
-  }, [filters]);
+  }, []);
 
   useEffect(() => {
     void Promise.allSettled([loadConfig(), loadStats(), loadFeedback()]);
@@ -104,10 +108,8 @@ export default function ExecutionTab() {
     return resp;
   }, [loadConfig, loadStats]);
 
-  // Expose setFilters and putConfig for child components in future tasks
-  void setFilters;
+  // putConfig exposed for child components in future tasks
   void putConfig;
-  void feedback;
 
   return (
     <div className="execution-tab">
@@ -153,7 +155,20 @@ export default function ExecutionTab() {
         <button onClick={() => { /* Task 16 wires Add modal */ }}>{t('execution.add_plugin')}</button>
       </div>
       <div data-testid="global-config">{/* GlobalConfigForm — Task 17 */}</div>
-      <div data-testid="feedback-table">{/* FeedbackTable — Task 15 */}</div>
+      <div data-testid="feedback-table">
+        <FeedbackTable
+          feedback={feedback}
+          filters={filters}
+          onFiltersChange={f => {
+            filtersRef.current = f;  // sync ref FIRST so loadFeedback reads new filters
+            setFilters(f);
+            setFeedback([]);         // v2.4.0.2 regression guard — synchronous clear
+            void loadFeedback();
+          }}
+          onRefresh={() => loadFeedback()}
+          pluginNames={(config?.plugins ?? []).map(p => p.name)}
+        />
+      </div>
     </div>
   );
 }

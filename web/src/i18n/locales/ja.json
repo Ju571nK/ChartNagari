@@ -376,5 +376,18 @@
   "common.delete": "削除",
   "execution.no_activity": "アクティビティなし",
   "execution.confirm_delete_plugin": "プラグイン {{name}} を削除しますか？",
-  "execution.add_plugin": "+ プラグイン追加"
+  "execution.add_plugin": "+ プラグイン追加",
+  "execution.filter_plugin": "プラグイン",
+  "execution.filter_status": "ステータス",
+  "execution.filter_symbol": "シンボル",
+  "execution.col_time": "時刻",
+  "execution.col_plugin": "プラグイン",
+  "execution.col_signal": "シグナル",
+  "execution.col_symbol": "シンボル",
+  "execution.col_status": "ステータス",
+  "execution.col_order": "注文",
+  "execution.col_message": "メッセージ",
+  "execution.no_feedback": "まだ注文はありません",
+  "common.all": "全て",
+  "common.refresh": "更新"
 }

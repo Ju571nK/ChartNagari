@@ -191,13 +191,8 @@ func (s *Server) listExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enforce bearer-token auth for this sensitive GET endpoint.
-	if s.apiToken != "" {
-		authHeader := r.Header.Get("Authorization")
-		const prefix = "Bearer "
-		if len(authHeader) <= len(prefix) || authHeader[:len(prefix)] != prefix || authHeader[len(prefix):] != s.apiToken {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
+	if !s.requireBearer(w, r) {
+		return
 	}
 
 	q := r.URL.Query()

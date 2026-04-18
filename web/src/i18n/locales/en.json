@@ -412,7 +412,7 @@
   "execution.err_secret_required": "Secret is required for new plugins",
   "execution.config_conflict": "Config changed elsewhere. Reload before saving.",
   "execution.max_dispatched": "Max dispatched",
-  "execution.dedup_window": "Dedup window (e.g. 5m)",
+  "execution.dedup_window": "Dedup window (seconds)",
   "execution.symbol_map": "Symbol map (advanced)",
   "execution.add_row": "Add row",
   "execution.add_broker": "Add broker",

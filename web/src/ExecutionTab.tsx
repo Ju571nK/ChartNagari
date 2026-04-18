@@ -7,7 +7,7 @@ import FeedbackTable from './FeedbackTable';
 import GlobalConfigForm, { type GlobalConfig } from './GlobalConfigForm';
 
 export type Plugin = {
-  name: string;
+  id: string;
   url: string;
   enabled: boolean;
   symbols: string[];
@@ -22,8 +22,8 @@ export type ExecutionConfig = {
   killed_at: string;
   plugins: Plugin[];
   max_dispatched: number;
-  dedup_window: string;
-  symbol_map: Record<string, Record<string, string>>;
+  dedup_window_sec: number;
+  symbol_map?: Record<string, string>;
 };
 
 export type PluginStat = {
@@ -144,22 +144,22 @@ export default function ExecutionTab() {
         />
       </div>
       <div data-testid="plugins-area">
-        {config?.plugins.map(p => {
-          const s = stats.find(x => x.plugin_id === p.name);
+        {(config?.plugins ?? []).map(p => {
+          const s = stats.find(x => x.plugin_id === p.id);
           return (
             <PluginCard
-              key={p.name}
+              key={p.id}
               plugin={p}
               stats={s}
               onEdit={() => { setEditing(p); setEditingOpen(true); }}
               onDelete={async () => {
                 if (!config) return;
-                const nextPlugins = config.plugins.filter(x => x.name !== p.name);
+                const nextPlugins = config.plugins.filter(x => x.id !== p.id);
                 await putConfig({ ...config, plugins: nextPlugins });
               }}
               onToggleEnabled={async next => {
                 if (!config) return;
-                const nextPlugins = config.plugins.map(x => x.name === p.name ? { ...x, enabled: next } : x);
+                const nextPlugins = config.plugins.map(x => x.id === p.id ? { ...x, enabled: next } : x);
                 await putConfig({ ...config, plugins: nextPlugins });
               }}
             />
@@ -172,7 +172,7 @@ export default function ExecutionTab() {
           <GlobalConfigForm
             config={{
               max_dispatched: config.max_dispatched,
-              dedup_window: config.dedup_window,
+              dedup_window_sec: config.dedup_window_sec,
               symbol_map: config.symbol_map,
             }}
             onServerError={serverFieldErrors}
@@ -206,12 +206,12 @@ export default function ExecutionTab() {
       {editingOpen && (
         <PluginEditModal
           plugin={editing}
-          existingNames={(config?.plugins ?? []).map(p => p.name).filter(n => n !== editing?.name)}
+          existingIds={(config?.plugins ?? []).map(p => p.id).filter(n => n !== editing?.id)}
           onCancel={() => setEditingOpen(false)}
           onSave={async next => {
             if (!config) return;
-            const plugins = editing && editing.name
-              ? config.plugins.map(p => p.name === editing.name ? next : p)
+            const plugins = editing && editing.id
+              ? config.plugins.map(p => p.id === editing.id ? next : p)
               : [...config.plugins, next];
             const resp = await putConfig({ ...config, plugins });
             if (resp.ok) setEditingOpen(false);
@@ -230,7 +230,7 @@ export default function ExecutionTab() {
             void loadFeedback();
           }}
           onRefresh={() => loadFeedback()}
-          pluginNames={(config?.plugins ?? []).map(p => p.name)}
+          pluginNames={(config?.plugins ?? []).map(p => p.id)}
         />
       </div>
     </div>

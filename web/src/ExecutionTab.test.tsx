@@ -7,7 +7,7 @@ beforeEach(() => {
 		const u = typeof url === 'string' ? url : url.toString();
 		if (u.includes('/api/execution/config')) {
 			return Promise.resolve(new Response(JSON.stringify({
-				version: 1, enabled: false, killed_at: '', plugins: [], max_dispatched: 3, dedup_window: '5m', symbol_map: {},
+				version: 1, enabled: false, killed_at: '', plugins: [], max_dispatched: 3, dedup_window_sec: 300, symbol_map: {},
 			})));
 		}
 		if (u.includes('/api/execution/plugins/stats')) {

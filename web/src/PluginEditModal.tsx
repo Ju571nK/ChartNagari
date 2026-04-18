@@ -4,13 +4,13 @@ import type { Plugin } from './ExecutionTab';
 
 type Props = {
 	plugin: Plugin | null;
-	existingNames: string[];
+	existingIds: string[];
 	onSave: (p: Plugin) => Promise<void>;
 	onCancel: () => void;
 };
 
 const EMPTY: Plugin = {
-	name: '', url: '', enabled: true, symbols: [], min_score: 0, direction_filter: '', secret: '',
+	id: '', url: '', enabled: true, symbols: [], min_score: 0, direction_filter: '', secret: '',
 };
 
 function genHex32(): string {
@@ -19,9 +19,9 @@ function genHex32(): string {
 	return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export default function PluginEditModal({ plugin, existingNames, onSave, onCancel }: Props) {
+export default function PluginEditModal({ plugin, existingIds, onSave, onCancel }: Props) {
 	const { t } = useTranslation();
-	const isCreate = plugin == null || !plugin.name;
+	const isCreate = plugin == null || !plugin.id;
 	const [form, setForm] = useState<Plugin>(plugin ?? EMPTY);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [toast, setToast] = useState<string | null>(null);
@@ -33,10 +33,10 @@ export default function PluginEditModal({ plugin, existingNames, onSave, onCance
 		setErrors({});
 	}, [plugin]);
 
-	const validateName = (): string => {
+	const validateId = (): string => {
 		if (!isCreate) return '';
-		if (!form.name.trim()) return t('execution.err_name_required');
-		if (existingNames.includes(form.name)) return t('execution.err_name_exists');
+		if (!form.id.trim()) return t('execution.err_name_required');
+		if (existingIds.includes(form.id)) return t('execution.err_name_exists');
 		return '';
 	};
 	const validateURL = (): string =>
@@ -48,7 +48,7 @@ export default function PluginEditModal({ plugin, existingNames, onSave, onCance
 
 	const runValidators = (): Record<string, string> => {
 		const e: Record<string, string> = {};
-		const n = validateName(); if (n) e.name = n;
+		const n = validateId(); if (n) e.id = n;
 		const u = validateURL(); if (u) e.url = u;
 		const m = validateMinScore(); if (m) e.min_score = m;
 		const s = validateSecret(); if (s) e.secret = s;
@@ -82,13 +82,13 @@ export default function PluginEditModal({ plugin, existingNames, onSave, onCance
 					{t('execution.field_name')}
 					<input
 						aria-label={t('execution.field_name')}
-						value={form.name}
+						value={form.id}
 						readOnly={!isCreate}
-						onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-						onBlur={() => setErrors(p => ({ ...p, name: validateName() }))}
+						onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
+						onBlur={() => setErrors(p => ({ ...p, id: validateId() }))}
 						style={{ display: 'block', width: '100%' }}
 					/>
-					{errors.name && <span className="error" style={{ color: 'var(--danger)', fontSize: '0.85em' }}>{errors.name}</span>}
+					{errors.id && <span className="error" style={{ color: 'var(--danger)', fontSize: '0.85em' }}>{errors.id}</span>}
 				</label>
 
 				<label style={{ display: 'block', marginBottom: 12 }}>

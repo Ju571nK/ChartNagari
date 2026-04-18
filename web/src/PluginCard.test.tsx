@@ -27,7 +27,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('./i18n/index', () => ({ default: { language: 'en' } }));
 
 const basePlugin = {
-	name: 'alpaca-paper',
+	id: 'alpaca-paper',
 	url: 'http://localhost:9100',
 	enabled: true,
 	symbols: [],

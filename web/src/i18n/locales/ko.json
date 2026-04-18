@@ -412,7 +412,7 @@
   "execution.err_secret_required": "새 플러그인에는 비밀키가 필요합니다",
   "execution.config_conflict": "설정이 다른 곳에서 변경되었습니다. 저장 전에 새로고침하세요.",
   "execution.max_dispatched": "최대 디스패치 수",
-  "execution.dedup_window": "중복 방지 시간창 (예: 5m)",
+  "execution.dedup_window": "중복 방지 시간창 (초)",
   "execution.symbol_map": "심볼 매핑 (고급)",
   "execution.add_row": "행 추가",
   "execution.add_broker": "브로커 추가",

@@ -180,6 +180,23 @@ func TestServer_Webhook_HappyPath(t *testing.T) {
 	}
 }
 
+func TestServer_Webhook_FeedbackIncludesSymbol(t *testing.T) {
+	t.Parallel()
+	fx := newServerFixture(t)
+	body := validSignalBody(t, "sig-symbol")
+	req := signedRequest(t, fx.cfg, http.MethodPost, "/webhook", body, nil)
+	rr := httptest.NewRecorder()
+	fx.srv.Routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	got := fx.feedback.wait(t)
+	if got.Symbol != "AAPL" {
+		t.Errorf("feedback Symbol = %q, want AAPL", got.Symbol)
+	}
+}
+
 func TestServer_Webhook_DuplicateSignal(t *testing.T) {
 	t.Parallel()
 	fx := newServerFixture(t)

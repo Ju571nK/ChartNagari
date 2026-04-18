@@ -781,6 +781,79 @@ input:checked + .slider::before {
 }
 .calendar-retry-btn:hover { border-color: var(--mint); color: var(--mint); }
 
+/* ── Execution Tab — Plugin Cards ────────────────────────────────────────── */
+.plugin-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	border: 1px solid var(--slate, #888);
+	border-radius: 6px;
+	margin-bottom: 6px;
+}
+.plugin-card--disabled {
+	opacity: 0.4;
+}
+.plugin-card--has-failure {
+	border-left: 3px solid var(--danger);
+}
+.plugin-name {
+	font-weight: 600;
+}
+.plugin-url {
+	color: var(--muted);
+	font-family: monospace;
+	font-size: 0.9em;
+}
+.plugin-stats {
+	margin-left: auto;
+	margin-right: 12px;
+	font-size: 0.9em;
+}
+.plugin-failure-tooltip {
+	color: var(--danger);
+	font-weight: 700;
+	cursor: help;
+}
+
+/* ── Feedback Table ──────────────────────────────────────────────────────── */
+.feedback-table {
+	margin-top: 16px;
+}
+.feedback-filters {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin-bottom: 8px;
+	flex-wrap: wrap;
+}
+.feedback-filters label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.9em;
+}
+.feedback-table table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9em;
+}
+.feedback-table th,
+.feedback-table td {
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--slate);
+	text-align: left;
+}
+.feedback-table code {
+	font-family: monospace;
+	font-size: 0.85em;
+	color: var(--muted);
+}
+.status-filled    { color: var(--safe); font-weight: 600; }
+.status-rejected  { color: var(--danger); font-weight: 600; }
+.status-cancelled { color: var(--slate); }
+.status-muted     { color: var(--muted); }
+
 /* ── Onboarding Modal ─────────────────────────────────────────────────────── */
 .ob-overlay {
   position: fixed;

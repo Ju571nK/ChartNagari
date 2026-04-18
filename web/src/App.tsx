@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
+import ExecutionTab from './ExecutionTab'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
@@ -17,7 +18,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar' | 'execution'
 
 type UIMode = 'beginner' | 'expert'
 const UI_MODE_KEY = 'chartnagari_ui_mode'
@@ -3707,6 +3708,7 @@ const TAB_KEYS: Record<Tab, string> = {
   settings: 'settings',
   'price-alerts': 'price_alerts',
   calendar: 'calendar',
+  execution: 'execution',
 }
 
 // ── Calendar Tab ─────────────────────────────────────────────────────────────
@@ -3978,6 +3980,7 @@ export function App() {
           <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>{t('paper')}</button>
           <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
           <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>{t('calendar')}</button>
+          <button className={`tab-btn${tab === 'execution' ? ' active' : ''}`} onClick={() => setTab('execution')}>{t('execution')}</button>
         </nav>
       </header>
       <main>
@@ -3995,6 +3998,7 @@ export function App() {
         {tab === 'settings' && <SettingsTab uiMode={uiMode} onSetUiMode={handleSetUiMode} />}
         {tab === 'price-alerts' && <PriceAlertsTab />}
         {tab === 'calendar' && <CalendarTab />}
+        {tab === 'execution' && <ExecutionTab />}
       </main>
       {showOnboarding && (
         <OnboardingModal

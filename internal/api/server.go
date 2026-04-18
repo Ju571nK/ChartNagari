@@ -25,6 +25,7 @@ import (
 	"github.com/rs/zerolog/log"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/analyst"
+	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/backtest"
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/storage"
@@ -204,7 +205,10 @@ type Server struct {
 	execPath            string                             // path to execution.yaml; set via WithExecutionPath
 	execDispatcher      ExecutionReleaser                  // optional; set via WithExecutionDispatcher
 	execFeedback        FeedbackRecorder                   // optional; set via WithExecutionFeedback
+	execDB              *sql.DB                            // optional; set via WithExecutionDB for feedback queries
+	execState           *execution.StateStore              // optional; set via WithExecutionState for config versioning
 	mu                  sync.RWMutex
+	configUpdateOnce    sync.Once                          // guards the one-shot "execState nil" startup warning
 }
 
 // ExecutionReleaser is the minimal dispatcher surface the feedback handler
@@ -217,7 +221,7 @@ type ExecutionReleaser interface {
 // FeedbackRecorder records inbound plugin feedback idempotently.
 // *execution.FeedbackIdempotency satisfies this.
 type FeedbackRecorder interface {
-	RecordOnce(ctx context.Context, pluginID, signalID, orderID, status string, at time.Time) (bool, error)
+	RecordOnce(ctx context.Context, pluginID, signalID, orderID, status, symbol, message string, at time.Time) (bool, error)
 }
 
 // New creates a Server.
@@ -257,6 +261,18 @@ func (s *Server) WithExecutionDispatcher(d ExecutionReleaser) {
 // WithExecutionFeedback wires the idempotency recorder.
 func (s *Server) WithExecutionFeedback(f FeedbackRecorder) {
 	s.execFeedback = f
+}
+
+// WithExecutionDB wires a shared *sql.DB for feedback queries (e.g. listExecutionFeedback).
+// In production this is the same db.Conn() used by FeedbackIdempotency.
+func (s *Server) WithExecutionDB(db *sql.DB) {
+	s.execDB = db
+}
+
+// WithExecutionState wires the key-value state store used for config versioning
+// (config_version) and kill-switch metadata (killed_at).
+func (s *Server) WithExecutionState(store *execution.StateStore) {
+	s.execState = store
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
@@ -477,6 +493,8 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("PUT /api/execution/config", s.updateExecutionConfig)
 		mux.HandleFunc("POST /api/execution/kill", s.toggleExecutionKill)
 		mux.HandleFunc("POST /api/execution/feedback", s.postExecutionFeedback)
+		mux.HandleFunc("GET /api/execution/feedback", s.listExecutionFeedback)
+		mux.HandleFunc("GET /api/execution/plugins/stats", s.getExecutionPluginStats)
 	}
 
 	// Static frontend (SPA)

@@ -29,18 +29,28 @@ func newTestDB(t *testing.T) *sql.DB {
 		ON execution_dedup(dispatched_at);
 
 	CREATE TABLE feedback_idempotency (
-		plugin_id   TEXT    NOT NULL,
-		signal_id   TEXT    NOT NULL,
-		order_id    TEXT    NOT NULL DEFAULT '',
-		status      TEXT    NOT NULL,
-		received_at INTEGER NOT NULL,
+		plugin_id    TEXT    NOT NULL,
+		signal_id    TEXT    NOT NULL,
+		order_id     TEXT    NOT NULL DEFAULT '',
+		status       TEXT    NOT NULL,
+		received_at  INTEGER NOT NULL,
+		symbol       TEXT    NOT NULL DEFAULT '',
+		message      TEXT    NOT NULL DEFAULT '',
 		UNIQUE(plugin_id, signal_id, order_id, status)
 	);
 	CREATE INDEX idx_feedback_idempotency_lookup
 		ON feedback_idempotency(plugin_id, signal_id);
+	CREATE INDEX idx_feedback_received_at
+		ON feedback_idempotency(received_at);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("schema create: %v", err)
 	}
 	return db
+}
+
+// newExecTestDB is an alias for newTestDB used by feedback-specific tests.
+func newExecTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	return newTestDB(t)
 }

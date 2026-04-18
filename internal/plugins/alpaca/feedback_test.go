@@ -1,6 +1,7 @@
 package alpaca
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -90,5 +91,48 @@ func TestFeedbackSender_BadURL(t *testing.T) {
 	t.Parallel()
 	if _, err := NewFeedbackSender("://bad", "p", "s"); err == nil {
 		t.Fatal("expected parse error")
+	}
+}
+
+func TestFeedbackSender_Send_IncludesSymbol(t *testing.T) {
+	t.Parallel()
+
+	const (
+		pluginID = "alpaca-paper"
+		secret   = "super-secret"
+	)
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	sender, err := NewFeedbackSender(srv.URL+"/api/execution/feedback", pluginID, secret)
+	if err != nil {
+		t.Fatalf("NewFeedbackSender: %v", err)
+	}
+
+	fb := models.OrderFeedback{
+		SignalID: "sig-2",
+		OrderID:  "ord-2",
+		Status:   models.OrderStatusSubmitted,
+		Symbol:   "AAPL",
+	}
+	if err := sender.Send(context.Background(), fb); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	if !bytes.Contains(gotBody, []byte(`"symbol":"AAPL"`)) {
+		t.Errorf("outbound feedback body missing symbol; got: %s", gotBody)
+	}
+
+	var decoded models.OrderFeedback
+	if err := json.Unmarshal(gotBody, &decoded); err != nil {
+		t.Fatalf("decode feedback: %v", err)
+	}
+	if decoded.Symbol != "AAPL" {
+		t.Errorf("decoded Symbol = %q, want AAPL", decoded.Symbol)
 	}
 }

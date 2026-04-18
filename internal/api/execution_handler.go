@@ -1,9 +1,13 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,18 +15,95 @@ import (
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/execution"
+	"github.com/Ju571nK/Chatter/pkg/models"
 )
+
+// ── config version helpers ────────────────────────────────────────────────────
+
+const (
+	stateKeyConfigVersion = "config_version"
+	stateKeyKilledAt      = "killed_at"
+)
+
+// readConfigVersion reads the current config_version from execution_state.
+// Returns 1 when the key is absent (first start-up). Never returns 0 to callers.
+func (s *Server) readConfigVersion(ctx context.Context) (int, error) {
+	if s.execState == nil {
+		return 1, nil
+	}
+	v, err := s.execState.Get(ctx, stateKeyConfigVersion)
+	if err != nil {
+		return 0, err
+	}
+	if v == "" {
+		return 1, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("bad config_version: %w", err)
+	}
+	return n, nil
+}
+
+// bumpConfigVersion increments and persists config_version, returning the new value.
+func (s *Server) bumpConfigVersion(ctx context.Context) (int, error) {
+	v, err := s.readConfigVersion(ctx)
+	if err != nil {
+		return 0, err
+	}
+	next := v + 1
+	if s.execState == nil {
+		return next, nil
+	}
+	if err := s.execState.Set(ctx, stateKeyConfigVersion, strconv.Itoa(next)); err != nil {
+		return 0, err
+	}
+	return next, nil
+}
 
 // getExecutionConfig returns the current execution config with plugin secrets
 // redacted (A5). Secrets never leave the server in clear form.
+// The response also includes "version" (config_version from execution_state,
+// ≥1) and "killed_at" (RFC3339 timestamp or empty string).
 func (s *Server) getExecutionConfig(w http.ResponseWriter, r *http.Request) {
 	if s.execHolder == nil {
 		http.Error(w, "execution config not enabled", http.StatusNotFound)
 		return
 	}
+	version, err := s.readConfigVersion(r.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("api: read config_version")
+		http.Error(w, "state", http.StatusInternalServerError)
+		return
+	}
+	killedAt := ""
+	if s.execState != nil {
+		if v, err := s.execState.Get(r.Context(), stateKeyKilledAt); err == nil {
+			killedAt = v
+		}
+	}
+
+	// Marshal the redacted config and then inject the extra fields so we do not
+	// alter the appconfig types.
 	cfg := s.execHolder.Get().RedactSecrets()
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		log.Warn().Err(err).Msg("api: marshal execution config failed")
+		http.Error(w, "encode", http.StatusInternalServerError)
+		return
+	}
+	// Decode into a generic map, inject version + killed_at, re-encode.
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		log.Warn().Err(err).Msg("api: unmarshal execution config map failed")
+		http.Error(w, "encode", http.StatusInternalServerError)
+		return
+	}
+	m["version"] = version
+	m["killed_at"] = killedAt
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+	if err := json.NewEncoder(w).Encode(m); err != nil {
 		log.Warn().Err(err).Msg("api: encode execution config failed")
 	}
 }
@@ -30,30 +111,114 @@ func (s *Server) getExecutionConfig(w http.ResponseWriter, r *http.Request) {
 // updateExecutionConfig accepts a full ExecutionConfig, merges in existing
 // secrets for any plugin field sent as "" or "***" (A5), validates, persists
 // atomically to disk, then flips the in-memory holder.
+//
+// Optimistic concurrency: the request body must include a "version" integer
+// matching the current config_version in execution_state. On mismatch the
+// handler returns 409. On success, config_version is bumped and the new value
+// is included in the response.
 func (s *Server) updateExecutionConfig(w http.ResponseWriter, r *http.Request) {
 	if s.execHolder == nil || s.execPath == "" {
 		http.Error(w, "execution config not enabled", http.StatusNotFound)
 		return
 	}
-	var incoming appconfig.ExecutionConfig
-	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+
+	// One-shot warning: if the holder is wired but the state store is not, the
+	// optimistic-concurrency version gate is effectively disabled (silent-success
+	// mode). Log once at startup so the operator notices the misconfiguration.
+	s.configUpdateOnce.Do(func() {
+		if s.execHolder != nil && s.execState == nil {
+			log.Warn().Msg("api: execution config version control disabled — execState not wired (silent-success mode); wire WithExecutionState to enable TOCTOU protection")
+		}
+	})
+
+	// Read body and do pure-computation JSON parsing OUTSIDE the lock — these
+	// do not touch shared state and blocking them under the lock would penalise
+	// concurrent reads unnecessarily.
+	rawBody, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var versionEnvelope struct {
+		Version *int `json:"version"`
+	}
+	if err := json.Unmarshal(rawBody, &versionEnvelope); err != nil {
 		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	current := s.execHolder.Get()
-	merged := appconfig.MergeIncomingSecrets(current, incoming)
+	if versionEnvelope.Version == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "version field required"})
+		return
+	}
+
+	var incoming appconfig.ExecutionConfig
+	if err := json.Unmarshal(rawBody, &incoming); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// ── Serialised critical section: version-read → version-check → save → bump
+	// Holding s.mu.Lock() for the entire sequence closes the TOCTOU window where
+	// two concurrent PUTs both read the same version N, both pass the gate, and
+	// both write — making the last-write-wins silently discard the first update.
+	s.mu.Lock()
+
+	current, err := s.readConfigVersion(r.Context())
+	if err != nil {
+		s.mu.Unlock()
+		log.Error().Err(err).Msg("api: read config_version")
+		http.Error(w, "state", http.StatusInternalServerError)
+		return
+	}
+	if *versionEnvelope.Version != current {
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":           "version_conflict",
+			"current_version": current,
+		})
+		return
+	}
+
+	existing := s.execHolder.Get()
+	merged := appconfig.MergeIncomingSecrets(existing, incoming)
 	if err := merged.Validate(); err != nil {
+		s.mu.Unlock()
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := appconfig.SaveExecutionConfig(s.execPath, merged); err != nil {
+		s.mu.Unlock()
 		log.Error().Err(err).Msg("api: save execution config failed")
 		http.Error(w, "persist failed", http.StatusInternalServerError)
 		return
 	}
 	s.execHolder.Set(merged)
+
+	next, err := s.bumpConfigVersion(r.Context())
+	s.mu.Unlock()
+	if err != nil {
+		log.Error().Err(err).Msg("api: bump config_version")
+		http.Error(w, "version bump", http.StatusInternalServerError)
+		return
+	}
+
+	raw, err := json.Marshal(merged.RedactSecrets())
+	if err != nil {
+		log.Warn().Err(err).Msg("api: marshal execution config response failed")
+		http.Error(w, "encode", http.StatusInternalServerError)
+		return
+	}
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	m["version"] = next
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(merged.RedactSecrets())
+	_ = json.NewEncoder(w).Encode(m)
 }
 
 // toggleExecutionKill flips the kill switch. Disk-first (Codex #10): the
@@ -76,6 +241,19 @@ func (s *Server) toggleExecutionKill(w http.ResponseWriter, r *http.Request) {
 		log.Error().Err(err).Msg("api: kill switch persist failed")
 		http.Error(w, "persist failed", http.StatusInternalServerError)
 		return
+	}
+	if s.execState != nil {
+		if body.On {
+			if err := s.execState.Set(r.Context(), stateKeyKilledAt, time.Now().UTC().Format(time.RFC3339)); err != nil {
+				log.Error().Err(err).Msg("api: persist killed_at")
+				// Don't fail the request — in-memory flip already succeeded.
+			}
+		} else {
+			// Re-enable clears the timestamp.
+			if err := s.execState.Set(r.Context(), stateKeyKilledAt, ""); err != nil {
+				log.Error().Err(err).Msg("api: clear killed_at")
+			}
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"kill_switch": body.On})
@@ -131,11 +309,7 @@ func (s *Server) postExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse the feedback payload AFTER authentication succeeds.
-	var fb struct {
-		SignalID string `json:"signal_id"`
-		OrderID  string `json:"order_id"`
-		Status   string `json:"status"`
-	}
+	var fb models.OrderFeedback
 	if err := json.Unmarshal(body, &fb); err != nil {
 		http.Error(w, "invalid feedback JSON: "+err.Error(), http.StatusBadRequest)
 		return
@@ -145,7 +319,12 @@ func (s *Server) postExecutionFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fresh, err := s.execFeedback.RecordOnce(r.Context(), pluginID, fb.SignalID, fb.OrderID, fb.Status, time.Now())
+	fresh, err := s.execFeedback.RecordOnce(
+		r.Context(),
+		pluginID, fb.SignalID, fb.OrderID, fb.Status,
+		strings.ToUpper(fb.Symbol), fb.Message,
+		time.Now(),
+	)
 	if err != nil {
 		log.Error().Err(err).Msg("api: feedback idempotency insert failed")
 		http.Error(w, "persist failed", http.StatusInternalServerError)
@@ -175,4 +354,157 @@ func isTerminalFeedbackStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+// getExecutionPluginStats returns 24h aggregated counts per plugin (filled,
+// rejected, submitted) together with the most recent failure message.
+// Only plugins that have at least one feedback row in the window appear.
+// Cache-Control: max-age=60 is set so UI pollers stay cheap.
+func (s *Server) getExecutionPluginStats(w http.ResponseWriter, r *http.Request) {
+	if !s.requireBearer(w, r) {
+		return
+	}
+	if s.execDB == nil {
+		http.Error(w, "not enabled", http.StatusNotFound)
+		return
+	}
+	window := r.URL.Query().Get("window")
+	if window == "" {
+		window = "24h"
+	}
+	if window != "24h" {
+		http.Error(w, "only window=24h is supported", http.StatusBadRequest)
+		return
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+
+	rows, err := s.execDB.QueryContext(r.Context(), `
+		SELECT plugin_id,
+		       SUM(CASE WHEN status IN ('SUBMITTED','RECEIVED') THEN 1 ELSE 0 END) AS submitted,
+		       SUM(CASE WHEN status IN ('FILLED','PARTIAL_FILL')  THEN 1 ELSE 0 END) AS filled,
+		       SUM(CASE WHEN status IN ('REJECTED','ERROR')       THEN 1 ELSE 0 END) AS rejected,
+		       MAX(CASE WHEN status IN ('REJECTED','ERROR') THEN received_at END)   AS last_fail_at,
+		       COALESCE(
+		         (SELECT message FROM feedback_idempotency f2
+		          WHERE f2.plugin_id = f1.plugin_id
+		            AND f2.status IN ('REJECTED','ERROR')
+		            AND f2.received_at >= ?
+		          ORDER BY f2.received_at DESC LIMIT 1), '') AS last_fail_msg
+		FROM feedback_idempotency f1
+		WHERE received_at >= ?
+		GROUP BY plugin_id`,
+		cutoff, cutoff,
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("api: plugin stats query failed")
+		http.Error(w, "query", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type stat struct {
+		PluginID       string `json:"plugin_id"`
+		Submitted      int    `json:"submitted"`
+		Filled         int    `json:"filled"`
+		Rejected       int    `json:"rejected"`
+		LastFailureAt  *int64 `json:"last_failure_at,omitempty"`
+		LastFailureMsg string `json:"last_failure_msg"`
+	}
+	out := []stat{}
+	for rows.Next() {
+		var st stat
+		var lastFailAt sql.NullInt64
+		if err := rows.Scan(&st.PluginID, &st.Submitted, &st.Filled, &st.Rejected, &lastFailAt, &st.LastFailureMsg); err != nil {
+			log.Error().Err(err).Msg("api: plugin stats scan failed")
+			http.Error(w, "scan", http.StatusInternalServerError)
+			return
+		}
+		if lastFailAt.Valid {
+			v := lastFailAt.Int64
+			st.LastFailureAt = &v
+		}
+		out = append(out, st)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "max-age=60")
+	_ = json.NewEncoder(w).Encode(map[string]any{"window": "24h", "plugins": out})
+}
+
+// listExecutionFeedback returns recent feedback rows, newest first, with
+// optional plugin/status/symbol filters and a limit (default 100, max 500).
+// Unlike most GET endpoints, this one enforces bearer-token auth when s.apiToken
+// is configured, because feedback rows may contain sensitive trade data.
+func (s *Server) listExecutionFeedback(w http.ResponseWriter, r *http.Request) {
+	if s.execDB == nil {
+		http.Error(w, "not enabled", http.StatusNotFound)
+		return
+	}
+
+	// Enforce bearer-token auth for this sensitive GET endpoint.
+	if !s.requireBearer(w, r) {
+		return
+	}
+
+	q := r.URL.Query()
+	plugin := q.Get("plugin")
+	status := q.Get("status")
+	symbol := strings.ToUpper(strings.TrimSpace(q.Get("symbol")))
+
+	limit := 100
+	if ls := q.Get("limit"); ls != "" {
+		n, err := strconv.Atoi(ls)
+		if err != nil {
+			http.Error(w, "bad limit", http.StatusBadRequest)
+			return
+		}
+		if n < 0 || n > 500 {
+			http.Error(w, "limit out of range (0..500)", http.StatusBadRequest)
+			return
+		}
+		if n > 0 {
+			limit = n
+		}
+	}
+
+	rows, err := s.execDB.QueryContext(r.Context(), `
+		SELECT plugin_id, signal_id, order_id, status, COALESCE(symbol,''), COALESCE(message,''), received_at
+		FROM feedback_idempotency
+		WHERE (? = '' OR plugin_id = ?)
+		  AND (? = '' OR status = ?)
+		  AND (? = '' OR symbol = ?)
+		ORDER BY received_at DESC
+		LIMIT ?`,
+		plugin, plugin, status, status, symbol, symbol, limit,
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("api: list feedback query failed")
+		http.Error(w, "query", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type feedbackItem struct {
+		PluginID   string `json:"plugin_id"`
+		SignalID   string `json:"signal_id"`
+		OrderID    string `json:"order_id"`
+		Status     string `json:"status"`
+		Symbol     string `json:"symbol"`
+		Message    string `json:"message"`
+		ReceivedAt int64  `json:"received_at"`
+	}
+	items := []feedbackItem{}
+	for rows.Next() {
+		var it feedbackItem
+		if err := rows.Scan(&it.PluginID, &it.SignalID, &it.OrderID, &it.Status, &it.Symbol, &it.Message, &it.ReceivedAt); err != nil {
+			log.Error().Err(err).Msg("api: list feedback scan failed")
+			http.Error(w, "scan", http.StatusInternalServerError)
+			return
+		}
+		items = append(items, it)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "count": len(items)})
 }

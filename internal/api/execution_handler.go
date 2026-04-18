@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -178,6 +179,80 @@ func isTerminalFeedbackStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+// getExecutionPluginStats returns 24h aggregated counts per plugin (filled,
+// rejected, submitted) together with the most recent failure message.
+// Only plugins that have at least one feedback row in the window appear.
+// Cache-Control: max-age=60 is set so UI pollers stay cheap.
+func (s *Server) getExecutionPluginStats(w http.ResponseWriter, r *http.Request) {
+	if !s.requireBearer(w, r) {
+		return
+	}
+	if s.execDB == nil {
+		http.Error(w, "not enabled", http.StatusNotFound)
+		return
+	}
+	window := r.URL.Query().Get("window")
+	if window == "" {
+		window = "24h"
+	}
+	if window != "24h" {
+		http.Error(w, "only window=24h is supported", http.StatusBadRequest)
+		return
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+
+	rows, err := s.execDB.QueryContext(r.Context(), `
+		SELECT plugin_id,
+		       SUM(CASE WHEN status IN ('SUBMITTED','RECEIVED') THEN 1 ELSE 0 END) AS submitted,
+		       SUM(CASE WHEN status IN ('FILLED','PARTIAL_FILL')  THEN 1 ELSE 0 END) AS filled,
+		       SUM(CASE WHEN status IN ('REJECTED','ERROR')       THEN 1 ELSE 0 END) AS rejected,
+		       MAX(CASE WHEN status IN ('REJECTED','ERROR') THEN received_at END)   AS last_fail_at,
+		       COALESCE(
+		         (SELECT message FROM feedback_idempotency f2
+		          WHERE f2.plugin_id = f1.plugin_id
+		            AND f2.status IN ('REJECTED','ERROR')
+		            AND f2.received_at >= ?
+		          ORDER BY f2.received_at DESC LIMIT 1), '') AS last_fail_msg
+		FROM feedback_idempotency f1
+		WHERE received_at >= ?
+		GROUP BY plugin_id`,
+		cutoff, cutoff,
+	)
+	if err != nil {
+		http.Error(w, "query", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type stat struct {
+		PluginID       string `json:"plugin_id"`
+		Submitted      int    `json:"submitted"`
+		Filled         int    `json:"filled"`
+		Rejected       int    `json:"rejected"`
+		LastFailureAt  *int64 `json:"last_failure_at,omitempty"`
+		LastFailureMsg string `json:"last_failure_msg"`
+	}
+	out := []stat{}
+	for rows.Next() {
+		var st stat
+		var lastFailAt sql.NullInt64
+		if err := rows.Scan(&st.PluginID, &st.Submitted, &st.Filled, &st.Rejected, &lastFailAt, &st.LastFailureMsg); err != nil {
+			http.Error(w, "scan", http.StatusInternalServerError)
+			return
+		}
+		if lastFailAt.Valid {
+			v := lastFailAt.Int64
+			st.LastFailureAt = &v
+		}
+		out = append(out, st)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "max-age=60")
+	_ = json.NewEncoder(w).Encode(map[string]any{"window": "24h", "plugins": out})
 }
 
 // listExecutionFeedback returns recent feedback rows, newest first, with

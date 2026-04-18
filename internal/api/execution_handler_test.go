@@ -589,6 +589,75 @@ func TestListFeedback_Unauthorized(t *testing.T) {
 	}
 }
 
+// seedFeedbackAt inserts a row with an explicit timestamp into feedback_idempotency.
+func (h *executionHandlerTestServer) seedFeedbackAt(t *testing.T, pluginID, signalID, orderID, status, symbol, message string, at time.Time) {
+	t.Helper()
+	_, err := h.db.Exec(
+		`INSERT INTO feedback_idempotency(plugin_id, signal_id, order_id, status, received_at, symbol, message) VALUES(?,?,?,?,?,?,?)`,
+		pluginID, signalID, orderID, status, at.Unix(), symbol, message,
+	)
+	if err != nil {
+		t.Fatalf("seedFeedbackAt: %v", err)
+	}
+}
+
+// ── PluginStats tests ─────────────────────────────────────────────────────────
+
+func TestPluginStats_Aggregates24hCounts(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	now := time.Now()
+	srv.seedFeedbackAt(t, "alpaca", "s1", "o1", "FILLED", "AAPL", "", now.Add(-1*time.Hour))
+	srv.seedFeedbackAt(t, "alpaca", "s2", "o2", "FILLED", "AAPL", "", now.Add(-2*time.Hour))
+	srv.seedFeedbackAt(t, "alpaca", "s3", "o3", "REJECTED", "TSLA", "denied", now.Add(-3*time.Hour))
+	srv.seedFeedbackAt(t, "alpaca", "s4", "o4", "FILLED", "AAPL", "", now.Add(-25*time.Hour)) // outside window
+
+	resp := srv.get(t, "/api/execution/plugins/stats?window=24h")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	if cc := resp.Header.Get("Cache-Control"); cc != "max-age=60" {
+		t.Errorf("Cache-Control = %q, want max-age=60", cc)
+	}
+	var out struct {
+		Plugins []struct {
+			PluginID       string `json:"plugin_id"`
+			Submitted      int    `json:"submitted"`
+			Filled         int    `json:"filled"`
+			Rejected       int    `json:"rejected"`
+			LastFailureMsg string `json:"last_failure_msg"`
+		} `json:"plugins"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if len(out.Plugins) != 1 {
+		t.Fatalf("plugins: %d", len(out.Plugins))
+	}
+	p := out.Plugins[0]
+	if p.Filled != 2 || p.Rejected != 1 || p.LastFailureMsg != "denied" {
+		t.Fatalf("aggregation wrong: %+v", p)
+	}
+}
+
+func TestPluginStats_ZeroActivityPluginOmitted(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	resp := srv.get(t, "/api/execution/plugins/stats?window=24h")
+	var out struct{ Plugins []any `json:"plugins"` }
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if len(out.Plugins) != 0 {
+		t.Fatalf("expected empty, got %d", len(out.Plugins))
+	}
+}
+
+func TestPluginStats_Unauthorized(t *testing.T) {
+	srv, cleanup := newExecutionHandlerTestServer(t)
+	defer cleanup()
+	resp := srv.getNoAuth(t, "/api/execution/plugins/stats?window=24h")
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+}
+
 // isTerminalFeedbackStatus coverage.
 func TestIsTerminalFeedbackStatus(t *testing.T) {
 	for _, s := range []string{"FILLED", "filled", " REJECTED ", "CANCELLED", "CANCELED", "ERROR"} {

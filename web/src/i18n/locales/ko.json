@@ -428,6 +428,7 @@
   "ollama.start_ollama": "Ollama 시작",
   "ollama.install_ollama": "Ollama 설치",
   "ollama.enable_sidecar": "Docker 사이드카 활성화",
+  "ollama.loading": "불러오는 중\u2026",
   "ollama.test_connection": "연결 테스트",
   "ollama.retry_status": "상태 새로고침",
   "ollama.detector_not_configured": "서버에 Ollama 감지기가 설정되지 않았습니다",

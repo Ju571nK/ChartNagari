@@ -428,6 +428,7 @@
   "ollama.start_ollama": "Ollama起動",
   "ollama.install_ollama": "Ollamaインストール",
   "ollama.enable_sidecar": "Dockerサイドカーを有効化",
+  "ollama.loading": "読み込み中\u2026",
   "ollama.test_connection": "接続テスト",
   "ollama.retry_status": "ステータス更新",
   "ollama.detector_not_configured": "サーバーにOllamaデテクターが設定されていません",

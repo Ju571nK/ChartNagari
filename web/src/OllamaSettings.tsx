@@ -37,7 +37,7 @@ const pillStyles: Record<OllamaStatus['state'], React.CSSProperties> = {
   READY_NO_MODEL: { ...pillBase, background: 'rgba(255,180,50,0.18)', color: 'var(--warning, #ffb432)' },
   INSTALLED_NOT_RUNNING: { ...pillBase, background: 'rgba(255,200,50,0.18)', color: 'var(--warning, #ffc832)' },
   NOT_INSTALLED: { ...pillBase, background: 'rgba(255,68,68,0.18)', color: 'var(--danger, #ff4444)' },
-  DOCKER_SIDECAR_AVAILABLE: { ...pillBase, background: 'rgba(80,160,255,0.18)', color: '#50a0ff' },
+  DOCKER_SIDECAR_AVAILABLE: { ...pillBase, background: 'rgba(148,163,184,0.18)', color: 'var(--slate)' },
 };
 
 const pillLabels: Record<OllamaStatus['state'], string> = {
@@ -55,7 +55,7 @@ function StateCard({ status, t }: { status: OllamaStatus; t: (k: string, o?: Rec
     return (
       <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={pillStyles.READY}>{t(pillLabels.READY)}</span>
-        <button className="tab-btn" disabled style={{ opacity: 0.55 }}>
+        <button className="tab-btn" disabled style={{ opacity: 0.4 }}>
           {t('ollama.test_connection')}
         </button>
       </div>
@@ -67,7 +67,7 @@ function StateCard({ status, t }: { status: OllamaStatus; t: (k: string, o?: Rec
     return (
       <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={pillStyles.READY_NO_MODEL}>{t(pillLabels.READY_NO_MODEL)}</span>
-        <button className="tab-btn" disabled style={{ opacity: 0.55 }}>
+        <button className="tab-btn" disabled style={{ opacity: 0.4 }}>
           {t('ollama.pull_model')}
         </button>
         {sizeStr && (
@@ -83,7 +83,7 @@ function StateCard({ status, t }: { status: OllamaStatus; t: (k: string, o?: Rec
     return (
       <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={pillStyles.INSTALLED_NOT_RUNNING}>{t(pillLabels.INSTALLED_NOT_RUNNING)}</span>
-        <button className="tab-btn" disabled style={{ opacity: 0.55 }}>
+        <button className="tab-btn" disabled style={{ opacity: 0.4 }}>
           {t('ollama.start_ollama')}
         </button>
       </div>
@@ -94,7 +94,7 @@ function StateCard({ status, t }: { status: OllamaStatus; t: (k: string, o?: Rec
     return (
       <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={pillStyles.DOCKER_SIDECAR_AVAILABLE}>{t(pillLabels.DOCKER_SIDECAR_AVAILABLE)}</span>
-        <button className="tab-btn" disabled style={{ opacity: 0.55 }}>
+        <button className="tab-btn" disabled style={{ opacity: 0.4 }}>
           {t('ollama.enable_sidecar')}
         </button>
       </div>
@@ -212,7 +212,7 @@ export default function OllamaSettings() {
 
   const renderContent = () => {
     if (result === null) {
-      return <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Loading...</p>;
+      return <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{t('ollama.loading')}</p>;
     }
 
     if (result.kind === 'error') {
@@ -275,8 +275,6 @@ export default function OllamaSettings() {
           <button
             className="tab-btn"
             onClick={fetchStatus}
-            disabled
-            style={{ opacity: 0.55 }}
           >
             {t('ollama.retry_status')}
           </button>

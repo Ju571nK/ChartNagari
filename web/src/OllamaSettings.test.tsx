@@ -16,6 +16,7 @@ vi.mock('react-i18next', () => ({
         'ollama.start_ollama': 'Start Ollama',
         'ollama.install_ollama': 'Install Ollama',
         'ollama.enable_sidecar': 'Enable Docker sidecar',
+        'ollama.loading': 'Loading\u2026',
         'ollama.test_connection': 'Test connection',
         'ollama.retry_status': 'Refresh status',
         'ollama.detector_not_configured': 'Ollama detector not configured on the server',

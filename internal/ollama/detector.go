@@ -213,7 +213,10 @@ func (d *Detector) fetchTags(ctx context.Context) ([]string, bool) {
 	if err != nil {
 		return nil, false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, false

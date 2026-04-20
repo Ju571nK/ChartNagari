@@ -248,3 +248,66 @@ func TestDetect_HTTPTimeout(t *testing.T) {
 		t.Errorf("State = %q; want %q", status.State, StateInstalledNotRunning)
 	}
 }
+
+// TestDetect_Http500FallsThrough — /api/tags returns 500; with no installed binary
+// the state must not be READY or READY_NO_MODEL.
+func TestDetect_Http500FallsThrough(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal"}`))
+	}))
+	defer srv.Close()
+
+	// Ollama is "running" but /api/tags is 500ing. fakeRuntime reports NO installed binary
+	// so we fall through to NOT_INSTALLED (vs. INSTALLED_NOT_RUNNING).
+	det := NewDetector(srv.URL, "gemma4:4b", &fakeRuntime{
+		ollamaErr: errors.New("ollama: command not found"),
+	})
+	st := det.Detect(context.Background())
+	if st.State == StateReady || st.State == StateReadyNoModel {
+		t.Fatalf("HTTP 500 should NOT produce a READY state, got %s", st.State)
+	}
+}
+
+// TestDetect_MalformedJSONFallsThrough — /api/tags returns 200 with invalid JSON;
+// treated as unreachable → INSTALLED_NOT_RUNNING because ollama --version succeeds.
+func TestDetect_MalformedJSONFallsThrough(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json at all"))
+	}))
+	defer srv.Close()
+
+	det := NewDetector(srv.URL, "gemma4:4b", &fakeRuntime{
+		ollamaVer: "ollama version 0.3.14",
+	})
+	st := det.Detect(context.Background())
+	// Malformed 200 response is treated as unreachable → INSTALLED_NOT_RUNNING because ollama --version succeeds.
+	if st.State != StateInstalledNotRunning {
+		t.Fatalf("malformed JSON should fall through to INSTALLED_NOT_RUNNING, got %s", st.State)
+	}
+}
+
+// TestDetect_EmptyModelsList — /api/tags returns 200 with an empty models array;
+// server is reachable but no model is present → READY_NO_MODEL.
+func TestDetect_EmptyModelsList(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	defer srv.Close()
+
+	det := NewDetector(srv.URL, "gemma4:4b", &fakeRuntime{})
+	st := det.Detect(context.Background())
+	if st.State != StateReadyNoModel {
+		t.Fatalf("empty models list with 200 should be READY_NO_MODEL, got %s", st.State)
+	}
+	if st.Suggest.Action != "pull_model" {
+		t.Fatalf("suggest action: want pull_model, got %q", st.Suggest.Action)
+	}
+	if st.Suggest.Command != "ollama pull gemma4:4b" {
+		t.Fatalf("suggest command: %q", st.Suggest.Command)
+	}
+	if st.Suggest.SizeBytes != 2_600_000_000 {
+		t.Fatalf("size bytes: %d", st.Suggest.SizeBytes)
+	}
+}

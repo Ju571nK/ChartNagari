@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// minimalConfigDir writes the minimum set of config files that Load() requires
+// ollamaMinimalConfigDir writes the minimum set of config files that Load() requires
 // and returns the temp directory path.
-func minimalConfigDir(t *testing.T) string {
+func ollamaMinimalConfigDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	must := func(name, content string) {
@@ -24,11 +24,11 @@ func minimalConfigDir(t *testing.T) string {
 }
 
 func TestLoad_OllamaDefaults(t *testing.T) {
-	os.Unsetenv("OLLAMA_HOST")
-	os.Unsetenv("OLLAMA_MODEL")
-	os.Unsetenv("OLLAMA_TIMEOUT_SEC")
+	t.Setenv("OLLAMA_HOST", "")
+	t.Setenv("OLLAMA_MODEL", "")
+	t.Setenv("OLLAMA_TIMEOUT_SEC", "")
 
-	cfg, err := Load("", minimalConfigDir(t))
+	cfg, err := Load("", ollamaMinimalConfigDir(t))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestLoad_OllamaEnvOverrides(t *testing.T) {
 	t.Setenv("OLLAMA_MODEL", "gemma4:12b")
 	t.Setenv("OLLAMA_TIMEOUT_SEC", "60")
 
-	cfg, err := Load("", minimalConfigDir(t))
+	cfg, err := Load("", ollamaMinimalConfigDir(t))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -64,24 +64,18 @@ func TestLoad_OllamaEnvOverrides(t *testing.T) {
 }
 
 func TestLoad_OllamaYAMLOverrides(t *testing.T) {
-	os.Unsetenv("OLLAMA_HOST")
-	os.Unsetenv("OLLAMA_MODEL")
-	os.Unsetenv("OLLAMA_TIMEOUT_SEC")
+	t.Setenv("OLLAMA_HOST", "")
+	t.Setenv("OLLAMA_MODEL", "")
+	t.Setenv("OLLAMA_TIMEOUT_SEC", "")
 
-	dir := t.TempDir()
+	dir := ollamaMinimalConfigDir(t)
 	settings := `ollama:
   host: http://yaml:11434
   model: gemma4:27b
   timeout_sec: 300
 `
 	if err := os.WriteFile(filepath.Join(dir, "settings.yaml"), []byte(settings), 0644); err != nil {
-		t.Fatalf("write settings.yaml: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "rules.yaml"), []byte("rules: []\nscoring:\n  thresholds: {}\ntimeframe_weights: {}\n"), 0644); err != nil {
-		t.Fatalf("write rules.yaml: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "watchlist.yaml"), []byte("symbols:\n  crypto: []\n  stocks: []\n  indices: []\ntimeframes: []\n"), 0644); err != nil {
-		t.Fatalf("write watchlist.yaml: %v", err)
+		t.Fatalf("overwrite settings.yaml: %v", err)
 	}
 
 	cfg, err := Load("", dir)
@@ -96,6 +90,34 @@ func TestLoad_OllamaYAMLOverrides(t *testing.T) {
 	}
 	if cfg.Ollama.Timeout != 300*time.Second {
 		t.Fatalf("yaml timeout: %v", cfg.Ollama.Timeout)
+	}
+}
+
+func TestLoad_OllamaTimeoutZeroFallback(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "")
+	t.Setenv("OLLAMA_MODEL", "")
+	t.Setenv("OLLAMA_TIMEOUT_SEC", "0")
+
+	cfg, err := Load("", ollamaMinimalConfigDir(t))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Ollama.Timeout != 120*time.Second {
+		t.Fatalf("expected 120s fallback on TIMEOUT_SEC=0, got %v", cfg.Ollama.Timeout)
+	}
+}
+
+func TestLoad_OllamaTimeoutNegativeFallback(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "")
+	t.Setenv("OLLAMA_MODEL", "")
+	t.Setenv("OLLAMA_TIMEOUT_SEC", "-5")
+
+	cfg, err := Load("", ollamaMinimalConfigDir(t))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Ollama.Timeout != 120*time.Second {
+		t.Fatalf("expected 120s fallback on TIMEOUT_SEC=-5, got %v", cfg.Ollama.Timeout)
 	}
 }
 

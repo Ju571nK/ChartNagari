@@ -387,6 +387,11 @@ func Load(envFile, configDir string) (*Config, error) {
 	// Legacy fallback: load .env (sets env vars only if not already set by OS)
 	_ = godotenv.Load(envFile)
 
+	ollamaTimeout := getEnvOrDuration("OLLAMA_TIMEOUT_SEC", s.Ollama.TimeoutSec, 120, time.Second)
+	if ollamaTimeout <= 0 {
+		ollamaTimeout = 120 * time.Second
+	}
+
 	cfg := &Config{
 		Env:        getEnvOr("ENV", s.Server.Env, "development"),
 		ServerHost: getEnvOr("SERVER_HOST", s.Server.Host, "127.0.0.1"),
@@ -447,7 +452,7 @@ func Load(envFile, configDir string) (*Config, error) {
 		Ollama: OllamaConfig{
 			Host:    getEnvOr("OLLAMA_HOST", s.Ollama.Host, "http://localhost:11434"),
 			Model:   getEnvOr("OLLAMA_MODEL", s.Ollama.Model, "gemma4:4b"),
-			Timeout: getEnvOrDuration("OLLAMA_TIMEOUT_SEC", s.Ollama.TimeoutSec, 120, time.Second),
+			Timeout: ollamaTimeout,
 		},
 		LLMProvider: getEnvOr("LLM_PROVIDER", s.LLM.Provider, ""),
 		Language:    getEnvOr("LLM_LANGUAGE", s.LLM.Language, "en"),

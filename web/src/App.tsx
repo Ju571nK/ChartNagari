@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
 import ExecutionTab from './ExecutionTab'
+import OllamaSettings from './OllamaSettings'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
@@ -3261,7 +3262,7 @@ const ENV_GROUPS: EnvGroup[] = [
   {
     label: 'AI / LLM',
     fields: [
-      { key: 'LLM_PROVIDER',     label: 'LLM Provider',    type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini'] },
+      { key: 'LLM_PROVIDER',     label: 'LLM Provider',    type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini', 'ollama'] },
       { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', type: 'password' },
       { key: 'OPENAI_API_KEY',    label: 'OpenAI API Key',    type: 'password' },
       { key: 'GROQ_API_KEY',      label: 'Groq API Key',      type: 'password' },
@@ -3432,6 +3433,10 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
           ))}
         </div>
       ))}
+      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(91,146,121,0.2)' }}>
+        <OllamaSettings />
+      </div>
+
       <button className="run-btn" onClick={handleSave} disabled={saving}>
         {saving ? 'Saving…' : 'Save to .env'}
       </button>

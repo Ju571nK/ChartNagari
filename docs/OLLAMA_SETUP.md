@@ -93,9 +93,9 @@ Check Ollama logs: `docker logs chart-ollama` (Docker path) or `journalctl -u ol
 
 ### Docker
 ```bash
-rm docker-compose.override.yml
 docker compose down ollama
-docker volume rm chartter_data_ollama  # deletes the model
+rm docker-compose.override.yml
+rm -rf ./data/ollama  # deletes pulled models (bind-mount path)
 ```
 
 ### Native

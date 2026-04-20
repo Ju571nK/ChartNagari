@@ -384,6 +384,14 @@ func main() {
 			llmProvider = llm.NewGeminiProvider(cfg.Gemini.APIKey)
 			log.Info().Msg("Multi-analyst AI: using Google Gemini 1.5 Flash")
 		}
+	case "ollama":
+		if cfg.Ollama.Host != "" && cfg.Ollama.Model != "" {
+			llmProvider = llm.NewOllamaProvider(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.Timeout)
+			log.Info().
+				Str("host", cfg.Ollama.Host).
+				Str("model", cfg.Ollama.Model).
+				Msg("Multi-analyst AI: using Ollama (local)")
+		}
 	}
 	var director *analyst.Director
 	if llmProvider != nil {
@@ -392,7 +400,7 @@ func main() {
 		apiSrv.WithAnalystDirector(director)
 		log.Info().Str("provider", selectedProvider).Msg("Multi-analyst AI analysis enabled")
 	} else {
-		log.Info().Msg("Multi-analyst AI disabled (no API key — set ANTHROPIC/OPENAI/GROQ/GEMINI_API_KEY)")
+		log.Info().Msg("Multi-analyst AI disabled (no API key — set ANTHROPIC/OPENAI/GROQ/GEMINI_API_KEY or LLM_PROVIDER=ollama)")
 	}
 
 	// ── Telegram 봇 명령어 수신 (/analysis SYMBOL) ────────────────────

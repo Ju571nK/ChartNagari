@@ -443,5 +443,6 @@
   "ollama.pull_progress": "ダウンロード進捗",
   "ollama.cancel_pull": "キャンセル",
   "ollama.pull_try_again": "再試行",
-  "ollama.pull_in_progress": "ダウンロード中"
+  "ollama.pull_in_progress": "ダウンロード中",
+  "ollama.unknown_size": "サイズ不明"
 }

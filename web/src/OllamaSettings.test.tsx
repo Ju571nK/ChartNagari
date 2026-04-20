@@ -32,6 +32,7 @@ vi.mock('react-i18next', () => ({
         'ollama.cancel_pull': 'Cancel',
         'ollama.pull_try_again': 'Try again',
         'ollama.pull_in_progress': 'Pull in progress',
+        'ollama.unknown_size': 'unknown size',
       };
       let s = map[k] ?? k;
       if (o) for (const [key, val] of Object.entries(o)) s = s.replace(`{{${key}}}`, val);

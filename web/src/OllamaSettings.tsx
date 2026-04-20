@@ -124,8 +124,9 @@ function StateCard({ status, t, pulling, onPull, onCancelPull, onResetPullError,
             </div>
             <button
               type="button"
+              className="tab-btn"
               onClick={onCancelPull}
-              style={{ marginTop: 8, padding: '4px 10px', fontSize: '0.78rem' }}
+              style={{ marginTop: 8 }}
             >
               {t('ollama.cancel_pull')}
             </button>
@@ -137,8 +138,9 @@ function StateCard({ status, t, pulling, onPull, onCancelPull, onResetPullError,
             {pulling.errorMessage || 'Pull failed'}
             <button
               type="button"
+              className="tab-btn"
               onClick={onResetPullError}
-              style={{ marginLeft: 8, padding: '4px 10px', fontSize: '0.78rem' }}
+              style={{ marginLeft: 8 }}
             >
               {t('ollama.pull_try_again')}
             </button>
@@ -263,10 +265,19 @@ export default function OllamaSettings() {
     };
   }, [fetchStatus]);
 
+  useEffect(() => {
+    return () => {
+      pullAbortRef.current?.abort();
+    };
+  }, []);
+
   const handlePull = useCallback(async () => {
+    if (pullAbortRef.current) return; // already pulling
     if (!result || result.kind !== 'ok') return;
     const status = result.data;
-    const sizeFormatted = formatBytes(status.suggest.size_bytes ?? 0) || 'unknown size';
+    const sizeFormatted = status.suggest.size_bytes != null && status.suggest.size_bytes > 0
+      ? formatBytes(status.suggest.size_bytes)
+      : t('ollama.unknown_size');
     const confirmMsg = t('ollama.pull_confirm', { model: status.model, size: sizeFormatted });
     if (!window.confirm(confirmMsg)) return;
 
@@ -305,7 +316,8 @@ export default function OllamaSettings() {
           buf = buf.slice(frameEnd + 2);
 
           // Detect 'event: done' frames
-          if (frame.includes('event: done')) { done = true; succeeded = true; break; }
+          const lines = frame.split('\n');
+          if (lines.some(l => l.trim() === 'event: done')) { done = true; succeeded = true; break; }
 
           // Extract data: <payload>
           const dataLine = frame.split('\n').find(l => l.startsWith('data: '));

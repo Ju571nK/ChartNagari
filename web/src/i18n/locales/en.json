@@ -443,5 +443,6 @@
   "ollama.pull_progress": "Pull progress",
   "ollama.cancel_pull": "Cancel",
   "ollama.pull_try_again": "Try again",
-  "ollama.pull_in_progress": "Pull in progress"
+  "ollama.pull_in_progress": "Pull in progress",
+  "ollama.unknown_size": "unknown size"
 }

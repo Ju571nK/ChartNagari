@@ -365,6 +365,219 @@ func TestOllamaPull_AuthorizedWithBearer(t *testing.T) {
 	}
 }
 
+// ── Start tests ───────────────────────────────────────────────────────────────
+
+// fakeStarter records spawn calls and returns a preset pid/err.
+type fakeStarter struct {
+	pid    int
+	err    error
+	called int
+	mu     sync.Mutex
+}
+
+func (f *fakeStarter) Start(_ context.Context) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.called++
+	return f.pid, f.err
+}
+
+// dynamicDetector returns different Status values on successive Detect() calls —
+// used to simulate "not running → running" transition during the polling loop.
+type dynamicDetector struct {
+	sequence []ollama.Status
+	calls    int
+	mu       sync.Mutex
+}
+
+func (d *dynamicDetector) Detect(_ context.Context) ollama.Status {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.calls >= len(d.sequence) {
+		// Stay on the last value.
+		return d.sequence[len(d.sequence)-1]
+	}
+	s := d.sequence[d.calls]
+	d.calls++
+	return s
+}
+
+func newOllamaStartServer(t *testing.T, det OllamaStatusProvider, starter OllamaStarter, apiToken string) *httptest.Server {
+	t.Helper()
+	s := &Server{}
+	s.WithOllamaDetector(det)
+	s.WithOllamaStarter(starter)
+	if apiToken != "" {
+		s.WithAPIToken(apiToken)
+	}
+	return httptest.NewServer(s.Handler())
+}
+
+// Detector returns READY → 409 before even attempting to spawn.
+func TestOllamaStart_AlreadyRunning409(t *testing.T) {
+	det := &fakeDetector{status: ollama.Status{State: ollama.StateReady}}
+	starter := &fakeStarter{pid: 1234}
+	srv := newOllamaStartServer(t, det, starter, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409, got %d", resp.StatusCode)
+	}
+	starter.mu.Lock()
+	called := starter.called
+	starter.mu.Unlock()
+	if called != 0 {
+		t.Fatal("starter should not be called when already running")
+	}
+}
+
+// Detector reports docker deployment → 400 (sidecar must be enabled instead).
+func TestOllamaStart_Docker400(t *testing.T) {
+	det := &fakeDetector{status: ollama.Status{
+		State: ollama.StateDockerSidecarAvailable, Deployment: ollama.DeploymentDocker,
+	}}
+	starter := &fakeStarter{}
+	srv := newOllamaStartServer(t, det, starter, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", resp.StatusCode)
+	}
+	starter.mu.Lock()
+	called := starter.called
+	starter.mu.Unlock()
+	if called != 0 {
+		t.Fatal("starter should not be called for docker deployment")
+	}
+}
+
+// Not running → spawn → becomes READY on 3rd Detect call → 200.
+func TestOllamaStart_Success(t *testing.T) {
+	det := &dynamicDetector{sequence: []ollama.Status{
+		{State: ollama.StateInstalledNotRunning, Deployment: ollama.DeploymentNative}, // pre-spawn check
+		{State: ollama.StateInstalledNotRunning, Deployment: ollama.DeploymentNative}, // first poll
+		{State: ollama.StateReady, Deployment: ollama.DeploymentNative},               // becomes ready
+	}}
+	starter := &fakeStarter{pid: 4242}
+	srv := newOllamaStartServer(t, det, starter, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var body struct {
+		PID       int    `json:"pid"`
+		StartedAt string `json:"started_at"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body.PID != 4242 {
+		t.Fatalf("pid: %d", body.PID)
+	}
+	if body.StartedAt == "" {
+		t.Fatal("started_at missing")
+	}
+	starter.mu.Lock()
+	called := starter.called
+	starter.mu.Unlock()
+	if called != 1 {
+		t.Fatalf("starter called %d times, want 1", called)
+	}
+}
+
+// Spawn succeeds but never becomes READY → 500 after timeout.
+// Uses package-level vars to keep the test fast.
+func TestOllamaStart_NeverBecomesReady500(t *testing.T) {
+	origTimeout := startReadinessTimeout
+	origInterval := startReadinessInterval
+	startReadinessTimeout = 200 * time.Millisecond
+	startReadinessInterval = 50 * time.Millisecond
+	defer func() {
+		startReadinessTimeout = origTimeout
+		startReadinessInterval = origInterval
+	}()
+
+	det := &fakeDetector{status: ollama.Status{
+		State: ollama.StateInstalledNotRunning, Deployment: ollama.DeploymentNative,
+	}}
+	starter := &fakeStarter{pid: 99}
+	srv := newOllamaStartServer(t, det, starter, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "within") {
+		t.Fatalf("error msg missing 'within': %s", body)
+	}
+}
+
+func TestOllamaStart_SpawnFailure500(t *testing.T) {
+	det := &fakeDetector{status: ollama.Status{
+		State: ollama.StateInstalledNotRunning, Deployment: ollama.DeploymentNative,
+	}}
+	starter := &fakeStarter{err: errors.New("exec: \"ollama\": executable file not found in $PATH")}
+	srv := newOllamaStartServer(t, det, starter, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestOllamaStart_NoStarter503(t *testing.T) {
+	s := &Server{}
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestOllamaStart_Unauthorized(t *testing.T) {
+	det := &fakeDetector{status: ollama.Status{State: ollama.StateInstalledNotRunning}}
+	srv := newOllamaStartServer(t, det, &fakeStarter{}, "secret-token")
+	defer srv.Close()
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/start", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", resp.StatusCode)
+	}
+}
+
 // TestOllamaPull_ClientDisconnectCancelsSubprocess — when the client cancels
 // its request mid-stream, the runner must observe ctx.Done so real subprocesses
 // are killed instead of orphaned.

@@ -209,6 +209,7 @@ type Server struct {
 	execState           *execution.StateStore              // optional; set via WithExecutionState for config versioning
 	ollamaDetector      OllamaStatusProvider               // optional; set via WithOllamaDetector
 	ollamaPullRunner    OllamaPullRunner                   // optional; set via WithOllamaPullRunner
+	ollamaStarter       OllamaStarter                      // optional; set via WithOllamaStarter
 	mu                  sync.RWMutex
 	configUpdateOnce    sync.Once                          // guards the one-shot "execState nil" startup warning
 }
@@ -287,6 +288,12 @@ func (s *Server) WithOllamaDetector(d OllamaStatusProvider) {
 // returns 503.
 func (s *Server) WithOllamaPullRunner(r OllamaPullRunner) {
 	s.ollamaPullRunner = r
+}
+
+// WithOllamaStarter wires the subprocess launcher. When unset, the start
+// endpoint returns 503.
+func (s *Server) WithOllamaStarter(st OllamaStarter) {
+	s.ollamaStarter = st
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
@@ -514,6 +521,7 @@ func (s *Server) Handler() http.Handler {
 	// Ollama local-LLM status (detection state machine)
 	mux.HandleFunc("GET /api/ai/ollama/status", s.getOllamaStatus)
 	mux.HandleFunc("POST /api/ai/ollama/pull", s.pullOllamaModel)
+	mux.HandleFunc("POST /api/ai/ollama/start", s.startOllama)
 
 	// Static frontend (SPA)
 	if s.static != nil {

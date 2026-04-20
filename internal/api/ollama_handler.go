@@ -4,11 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/Ju571nK/Chatter/internal/ollama"
 )
+
+// Readiness poll parameters for the start handler. Overridable in tests.
+var (
+	startReadinessTimeout  = 10 * time.Second
+	startReadinessInterval = 500 * time.Millisecond
+)
+
+// OllamaStarter spawns `ollama serve` as a detached background subprocess.
+// *ollama.osStarter satisfies this interface via ollama.DefaultStarter().
+type OllamaStarter interface {
+	// Start spawns `ollama serve` as a detached subprocess and returns its PID.
+	// An error means the spawn itself failed (e.g., binary missing).
+	Start(ctx context.Context) (pid int, err error)
+}
+
+// writeJSONError writes a JSON {"error": msg} body with the given HTTP status code.
+// It follows the same pattern as writeUnauthorized in auth.go.
+func writeJSONError(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
 
 // OllamaPullRunner streams progress from `ollama pull <model>`. Each stdout
 // line (JSONL from Ollama) is delivered to onLine in arrival order. Returns
@@ -100,4 +123,65 @@ func (s *Server) pullOllamaModel(w http.ResponseWriter, r *http.Request) {
 	// Clean exit — signal EOS via a conventional done event.
 	_, _ = w.Write([]byte("event: done\ndata: {}\n\n"))
 	flusher.Flush()
+}
+
+// startOllama handles POST /api/ai/ollama/start.
+// It checks if Ollama is already running, rejects docker deployments, spawns
+// `ollama serve` as a detached subprocess, and polls until ready (up to 10s).
+func (s *Server) startOllama(w http.ResponseWriter, r *http.Request) {
+	if !s.requireBearer(w, r) {
+		return
+	}
+	if s.ollamaStarter == nil || s.ollamaDetector == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "ollama start not configured")
+		return
+	}
+
+	// Step 1: already running?
+	status := s.ollamaDetector.Detect(r.Context())
+	if status.State == ollama.StateReady || status.State == ollama.StateReadyNoModel {
+		writeJSONError(w, http.StatusConflict, "already running")
+		return
+	}
+
+	// Step 2: native only — docker deployments must use enable-sidecar.
+	if status.Deployment == ollama.DeploymentDocker {
+		writeJSONError(w, http.StatusBadRequest, "docker sidecar detected; use sidecar/enable instead")
+		return
+	}
+
+	// Step 3: spawn.
+	pid, err := s.ollamaStarter.Start(r.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("api: ollama start spawn failed")
+		writeJSONError(w, http.StatusInternalServerError, "spawn failed: "+err.Error())
+		return
+	}
+	startedAt := time.Now().UTC().Format(time.RFC3339)
+
+	// Step 4: poll readiness.
+	deadline := time.Now().Add(startReadinessTimeout)
+	tick := time.NewTicker(startReadinessInterval)
+	defer tick.Stop()
+	for {
+		st := s.ollamaDetector.Detect(r.Context())
+		if st.State == ollama.StateReady || st.State == ollama.StateReadyNoModel {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"pid":        pid,
+				"started_at": startedAt,
+			})
+			return
+		}
+		if time.Now().After(deadline) {
+			writeJSONError(w, http.StatusInternalServerError, "ollama did not become ready within 10s")
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			writeJSONError(w, http.StatusRequestTimeout, "client cancelled")
+			return
+		case <-tick.C:
+		}
+	}
 }

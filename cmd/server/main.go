@@ -352,6 +352,7 @@ func main() {
 	ollamaDet := ollama.NewDetector(cfg.Ollama.Host, cfg.Ollama.Model, ollama.DefaultRuntime())
 	apiSrv.WithOllamaDetector(ollamaDet)
 	apiSrv.WithOllamaPullRunner(ollama.DefaultPullRunner())
+	apiSrv.WithOllamaStarter(ollama.DefaultStarter())
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

@@ -49,6 +49,9 @@ func TestOllamaStatus_Ready(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		t.Fatalf("content-type: %q", ct)
 	}
+	if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("cache-control: %q", cc)
+	}
 	var body ollama.Status
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)

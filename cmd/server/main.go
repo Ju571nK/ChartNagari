@@ -25,6 +25,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
+	"github.com/Ju571nK/Chatter/internal/ollama"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
@@ -346,6 +347,10 @@ func main() {
 	apiSrv.WithExecutionFeedback(feedbackIdem)
 	apiSrv.WithExecutionDB(db.Conn())
 	apiSrv.WithExecutionState(execState)
+
+	// Ollama detector (opt-in local LLM status endpoint).
+	ollamaDet := ollama.NewDetector(cfg.Ollama.Host, cfg.Ollama.Model, ollama.DefaultRuntime())
+	apiSrv.WithOllamaDetector(ollamaDet)
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

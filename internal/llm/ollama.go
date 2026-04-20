@@ -66,7 +66,10 @@ func (p *OllamaProvider) Complete(ctx context.Context, systemPrompt, userPrompt 
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4 MiB cap
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4 MiB cap
+	if err != nil {
+		return "", fmt.Errorf("ollama: read response: %w", err)
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Try to surface Ollama's own error message.

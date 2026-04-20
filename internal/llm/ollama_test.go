@@ -100,3 +100,23 @@ func TestOllamaProvider_HonorsContextCancel(t *testing.T) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
+
+func TestOllamaProvider_EmptySystemPrompt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Prompt string `json:"prompt"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Prompt != "only user" {
+			t.Fatalf("expected prompt to be exactly %q (no leading separator), got %q", "only user", body.Prompt)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "ok"})
+	}))
+	defer srv.Close()
+
+	p := NewOllamaProvider(srv.URL, "gemma4:4b", 1*time.Second)
+	_, err := p.Complete(context.Background(), "", "only user")
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+}

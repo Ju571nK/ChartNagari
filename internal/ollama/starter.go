@@ -23,8 +23,9 @@ func DefaultStarter() Starter { return osStarter{} }
 // outlives the request that triggered it. Returns the spawned PID.
 func (osStarter) Start(_ context.Context) (int, error) {
 	cmd := exec.Command("ollama", "serve")
-	// Redirect stdout/stderr to avoid tying us to the parent's stdio lifetime.
-	// The subprocess will write to its own fds; we don't read them.
+	// cmd.Stdout/Stderr are left nil — Go's os/exec defaults unset fds to
+	// os.DevNull, so the subprocess writes to /dev/null. If logs are desired,
+	// redirect to a file here in a future task.
 	if err := cmd.Start(); err != nil {
 		return 0, fmt.Errorf("ollama serve: start: %w", err)
 	}

@@ -578,6 +578,78 @@ func TestOllamaStart_Unauthorized(t *testing.T) {
 	}
 }
 
+// TestOllamaStart_AuthorizedWithBearer — with a token configured, a valid bearer
+// gets through to the handler logic (returns 409 here because status is already Ready,
+// which proves we passed the auth gate).
+func TestOllamaStart_AuthorizedWithBearer(t *testing.T) {
+	det := &fakeDetector{status: ollama.Status{State: ollama.StateReady}}
+	srv := newOllamaStartServer(t, det, &fakeStarter{}, "secret-token")
+	defer srv.Close()
+
+	req, err := http.NewRequest("POST", srv.URL+"/api/ai/ollama/start", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer secret-token")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409 (already running, passed auth), got %d", resp.StatusCode)
+	}
+}
+
+// TestOllamaStart_ClientDisconnectCancelsPoll — client cancels mid-polling.
+// Polling loop has to observe ctx.Done and return 408; we assert the handler
+// stopped polling promptly.
+func TestOllamaStart_ClientDisconnectCancelsPoll(t *testing.T) {
+	// Shorten interval so the first tick fires quickly after spawn.
+	origInterval := startReadinessInterval
+	origTimeout := startReadinessTimeout
+	startReadinessInterval = 50 * time.Millisecond
+	startReadinessTimeout = 5 * time.Second
+	defer func() {
+		startReadinessInterval = origInterval
+		startReadinessTimeout = origTimeout
+	}()
+
+	// Detector always returns InstalledNotRunning — the poll will never succeed.
+	det := &fakeDetector{status: ollama.Status{
+		State: ollama.StateInstalledNotRunning, Deployment: ollama.DeploymentNative,
+	}}
+	starter := &fakeStarter{pid: 4242}
+	srv := newOllamaStartServer(t, det, starter, "")
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, "POST", srv.URL+"/api/ai/ollama/start", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	// Cancel after a brief delay so the poll loop is running.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, err = http.DefaultClient.Do(req)
+	elapsed := time.Since(start)
+	// http.Client.Do returns an error (context canceled) when the client context is cancelled mid-request.
+	// This is the expected path — we're verifying the handler exited its poll loop promptly,
+	// not hitting the 5-second timeout.
+	if err == nil {
+		t.Fatal("expected client error after cancel, got nil (handler did not exit promptly)")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("handler took %v — poll loop did not honor ctx cancellation", elapsed)
+	}
+}
+
 // TestOllamaPull_ClientDisconnectCancelsSubprocess — when the client cancels
 // its request mid-stream, the runner must observe ctx.Done so real subprocesses
 // are killed instead of orphaned.

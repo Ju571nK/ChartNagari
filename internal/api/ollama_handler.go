@@ -174,6 +174,7 @@ func (s *Server) startOllama(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if time.Now().After(deadline) {
+			log.Warn().Int("pid", pid).Dur("timeout", startReadinessTimeout).Msg("api: ollama did not become ready within timeout")
 			writeJSONError(w, http.StatusInternalServerError, "ollama did not become ready within 10s")
 			return
 		}

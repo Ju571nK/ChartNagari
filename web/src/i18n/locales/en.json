@@ -449,5 +449,7 @@
   "ollama.start_success": "Started (pid {{pid}})",
   "ollama.sidecar_success": "Sidecar configured — run command copied to clipboard",
   "ollama.sidecar_already_configured": "Already configured",
-  "ollama.try_again": "Try again"
+  "ollama.try_again": "Try again",
+  "ollama.test_ok": "OK ({{ms}} ms)",
+  "ollama.testing": "Testing\u2026"
 }

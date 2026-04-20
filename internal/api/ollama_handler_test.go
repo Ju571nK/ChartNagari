@@ -856,3 +856,138 @@ func TestOllamaSidecarEnable_AuthorizedWithBearer(t *testing.T) {
 		t.Fatalf("want 200, got %d", resp.StatusCode)
 	}
 }
+
+// ── Test connection tests ─────────────────────────────────────────────────────
+
+// fakeTester implements OllamaTester for unit tests.
+type fakeTester struct {
+	resp    string
+	err     error
+	blockCh chan struct{} // when non-nil, Complete blocks until ctx.Done or channel close
+}
+
+func (f *fakeTester) Complete(ctx context.Context, _, _ string) (string, error) {
+	if f.blockCh != nil {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-f.blockCh:
+		}
+	}
+	return f.resp, f.err
+}
+
+func newOllamaTestServer(t *testing.T, tester OllamaTester, apiToken string) *httptest.Server {
+	t.Helper()
+	s := &Server{}
+	s.WithOllamaTester(tester)
+	if apiToken != "" {
+		s.WithAPIToken(apiToken)
+	}
+	return httptest.NewServer(s.Handler())
+}
+
+func TestOllamaTest_Success(t *testing.T) {
+	tester := &fakeTester{resp: "1"}
+	srv := newOllamaTestServer(t, tester, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != true {
+		t.Fatalf("want ok=true, got %v", body["ok"])
+	}
+	if _, hasLatency := body["latency_ms"]; !hasLatency {
+		t.Fatal("latency_ms field missing")
+	}
+}
+
+func TestOllamaTest_ErrorReturns500(t *testing.T) {
+	tester := &fakeTester{err: errors.New("connection refused")}
+	srv := newOllamaTestServer(t, tester, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != false {
+		t.Fatalf("want ok=false, got %v", body["ok"])
+	}
+	if body["error"] != "connection refused" {
+		t.Fatalf("want error='connection refused', got %v", body["error"])
+	}
+	if _, hasLatency := body["latency_ms"]; !hasLatency {
+		t.Fatal("latency_ms field missing")
+	}
+}
+
+func TestOllamaTest_NoTester503(t *testing.T) {
+	s := &Server{}
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestOllamaTest_Unauthorized(t *testing.T) {
+	tester := &fakeTester{resp: "1"}
+	srv := newOllamaTestServer(t, tester, "secret-token")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestOllamaTest_Timeout(t *testing.T) {
+	// blockCh is never closed — Complete blocks until ctx is cancelled (5s handler timeout).
+	// We cancel the request client-side almost immediately to keep the test fast.
+	tester := &fakeTester{blockCh: make(chan struct{})}
+	srv := newOllamaTestServer(t, tester, "")
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", srv.URL+"/api/ai/ollama/test", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	// The client context times out — we expect an error from http.DefaultClient.Do.
+	_, err = http.DefaultClient.Do(req)
+	if err == nil {
+		t.Fatal("expected client-side timeout error, got nil")
+	}
+}

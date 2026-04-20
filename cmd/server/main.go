@@ -356,6 +356,11 @@ func main() {
 	if cwd, err := os.Getwd(); err == nil {
 		apiSrv.WithOllamaRepoRoot(cwd)
 	}
+	// Tester is always wired (regardless of active LLM provider) so users
+	// can verify connectivity before switching to Ollama as their provider.
+	if cfg.Ollama.Host != "" && cfg.Ollama.Model != "" {
+		apiSrv.WithOllamaTester(llm.NewOllamaProvider(cfg.Ollama.Host, cfg.Ollama.Model, 5*time.Second))
+	}
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

@@ -55,11 +55,53 @@ const pillLabels: Record<OllamaStatus['state'], string> = {
   DOCKER_SIDECAR_AVAILABLE: 'ollama.state_sidecar_available',
 };
 
+// Polish 7: tightened ActionState — pending can carry an optional message.
 type ActionState =
   | null
-  | { status: 'pending' }
+  | { status: 'pending'; message?: string }
   | { status: 'success'; message?: string; code?: string }
   | { status: 'error'; message: string };
+
+// Polish 1: ActionFeedback helper component — replaces inline feedback blocks.
+function ActionFeedback({
+  action,
+  onReset,
+  t,
+  extraCode,
+}: {
+  action: ActionState;
+  onReset: () => void;
+  t: (k: string, p?: Record<string, string | number>) => string;
+  extraCode?: string;
+}) {
+  if (!action) return null;
+  if (action.status === 'pending') {
+    return (
+      <div role="status" aria-live="polite" style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+        {action.message ?? t('ollama.starting')}
+      </div>
+    );
+  }
+  if (action.status === 'success') {
+    return (
+      <div role="status" aria-live="polite" style={{ color: 'var(--safe)', fontSize: '0.85rem', marginTop: 4 }}>
+        {action.message}
+        {extraCode && (
+          <pre style={{ background: 'rgba(255,255,255,0.06)', padding: 8, borderRadius: 4, marginTop: 6, fontSize: '0.78rem' }}>{extraCode}</pre>
+        )}
+      </div>
+    );
+  }
+  // error
+  return (
+    <div role="alert" style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 4 }}>
+      {action.message}
+      <button type="button" className="tab-btn" style={{ marginLeft: 8 }} onClick={onReset}>
+        {t('ollama.try_again')}
+      </button>
+    </div>
+  );
+}
 
 type StateCardProps = {
   status: OllamaStatus;
@@ -68,30 +110,47 @@ type StateCardProps = {
   onPull: () => void;
   onCancelPull: () => void;
   onResetPullError: () => void;
-  pullInFlight: boolean;
   startAction: ActionState;
   onStart: () => void;
   onResetStart: () => void;
   sidecarAction: ActionState;
   onEnableSidecar: () => void;
   onResetSidecar: () => void;
+  testAction: ActionState;
+  onTestConnection: () => void;
+  onResetTest: () => void;
 };
 
 function StateCard({
   status, t,
-  pulling, onPull, onCancelPull, onResetPullError, pullInFlight: _pullInFlight,
+  pulling, onPull, onCancelPull, onResetPullError,
   startAction, onStart, onResetStart,
   sidecarAction, onEnableSidecar, onResetSidecar,
+  testAction, onTestConnection, onResetTest,
 }: StateCardProps) {
   const { state, suggest } = status;
 
   if (state === 'READY') {
     return (
-      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <span style={pillStyles.READY}>{t(pillLabels.READY)}</span>
-        <button className="tab-btn" disabled style={{ opacity: 0.4 }}>
-          {t('ollama.test_connection')}
-        </button>
+      <div style={{ marginTop: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={pillStyles.READY}>{t(pillLabels.READY)}</span>
+          {testAction?.status !== 'pending' && (
+            <button className="tab-btn" onClick={onTestConnection}>
+              {t('ollama.test_connection')}
+            </button>
+          )}
+          {testAction?.status === 'pending' && (
+            <div role="status" aria-live="polite" style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+              {t('ollama.testing')}
+            </div>
+          )}
+        </div>
+        {(testAction?.status === 'success' || testAction?.status === 'error') && (
+          <div style={{ marginTop: 4 }}>
+            <ActionFeedback action={testAction} onReset={onResetTest} t={t} />
+          </div>
+        )}
       </div>
     );
   }
@@ -181,29 +240,7 @@ function StateCard({
               {t('ollama.start_ollama')}
             </button>
           )}
-          {startAction?.status === 'pending' && (
-            <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-              {t('ollama.starting')}
-            </div>
-          )}
-          {startAction?.status === 'success' && (
-            <div style={{ color: 'var(--safe)', fontSize: '0.85rem', marginTop: 4 }}>
-              {startAction.message}
-            </div>
-          )}
-          {startAction?.status === 'error' && (
-            <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 4 }}>
-              {startAction.message}
-              <button
-                type="button"
-                className="tab-btn"
-                style={{ marginLeft: 8 }}
-                onClick={onResetStart}
-              >
-                {t('ollama.try_again')}
-              </button>
-            </div>
-          )}
+          <ActionFeedback action={startAction} onReset={onResetStart} t={t} />
         </div>
       </div>
     );
@@ -223,43 +260,12 @@ function StateCard({
               {t('ollama.enable_sidecar')}
             </button>
           )}
-          {sidecarAction?.status === 'pending' && (
-            <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-              {t('ollama.starting')}
-            </div>
-          )}
-          {sidecarAction?.status === 'success' && (
-            <div style={{ fontSize: '0.85rem', marginTop: 4 }}>
-              <div style={{ color: 'var(--safe)' }}>{sidecarAction.message}</div>
-              {sidecarAction.code && (
-                <code style={{
-                  display: 'block',
-                  marginTop: 6,
-                  background: 'rgba(255,255,255,0.06)',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontFamily: 'monospace',
-                  fontSize: '0.82rem',
-                  color: 'var(--text)',
-                }}>
-                  {sidecarAction.code}
-                </code>
-              )}
-            </div>
-          )}
-          {sidecarAction?.status === 'error' && (
-            <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 4 }}>
-              {sidecarAction.message}
-              <button
-                type="button"
-                className="tab-btn"
-                style={{ marginLeft: 8 }}
-                onClick={onResetSidecar}
-              >
-                {t('ollama.try_again')}
-              </button>
-            </div>
-          )}
+          <ActionFeedback
+            action={sidecarAction}
+            onReset={onResetSidecar}
+            t={t}
+            extraCode={sidecarAction?.status === 'success' ? sidecarAction.code : undefined}
+          />
         </div>
       </div>
     );
@@ -303,6 +309,19 @@ export default function OllamaSettings() {
   const pullAbortRef = useRef<AbortController | null>(null);
   const [startAction, setStartAction] = useState<ActionState>(null);
   const [sidecarAction, setSidecarAction] = useState<ActionState>(null);
+  const [testAction, setTestAction] = useState<ActionState>(null);
+
+  // Polish 3: timer cleanup on unmount.
+  const timerRef = useRef<number[]>([]);
+  const scheduleClear = useCallback((setter: React.Dispatch<React.SetStateAction<ActionState>>, ms: number) => {
+    const id = window.setTimeout(() => setter(null), ms);
+    timerRef.current.push(id);
+  }, []);
+
+  useEffect(() => () => {
+    for (const id of timerRef.current) clearTimeout(id);
+    timerRef.current = [];
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -365,6 +384,19 @@ export default function OllamaSettings() {
       pullAbortRef.current?.abort();
     };
   }, []);
+
+  // Polish 2: clear all action states whenever the detector state transitions.
+  const prevStateRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (result?.kind !== 'ok') return;
+    const curr = result.data.state;
+    if (prevStateRef.current !== undefined && prevStateRef.current !== curr) {
+      setStartAction(null);
+      setSidecarAction(null);
+      setTestAction(null);
+    }
+    prevStateRef.current = curr;
+  }, [result]);
 
   const handlePull = useCallback(async () => {
     if (pullAbortRef.current) return; // already pulling
@@ -465,13 +497,16 @@ export default function OllamaSettings() {
   }, []);
 
   const handleStart = useCallback(async () => {
+    // Polish 4: concurrent-click guard.
+    if (startAction?.status === 'pending') return;
     setStartAction({ status: 'pending' });
     try {
       const res = await fetch('/api/ai/ollama/start', { method: 'POST', credentials: 'include' });
       if (res.ok) {
-        const body = await res.json();
-        setStartAction({ status: 'success', message: t('ollama.start_success', { pid: String(body.pid) }) });
-        setTimeout(() => setStartAction(null), 3000);
+        const body = await res.json() as { pid: number; started_at: string };
+        // Polish 7: pass body.pid directly (number) — no String() wrapper needed.
+        setStartAction({ status: 'success', message: t('ollama.start_success', { pid: body.pid }) });
+        scheduleClear(setStartAction, 3000);
         await fetchStatus();
       } else if (res.status === 409) {
         setStartAction(null);
@@ -483,14 +518,16 @@ export default function OllamaSettings() {
     } catch (e) {
       setStartAction({ status: 'error', message: (e as Error).message });
     }
-  }, [t, fetchStatus]);
+  }, [t, fetchStatus, startAction, scheduleClear]);
 
   const handleEnableSidecar = useCallback(async () => {
+    // Polish 4: concurrent-click guard.
+    if (sidecarAction?.status === 'pending') return;
     setSidecarAction({ status: 'pending' });
     try {
       const res = await fetch('/api/ai/ollama/sidecar/enable', { method: 'POST', credentials: 'include' });
       if (res.ok) {
-        const body = await res.json() as { run_command: string };
+        const body = await res.json() as { override_path: string; run_command: string };
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
           try { await navigator.clipboard.writeText(body.run_command); } catch { /* no-op */ }
         }
@@ -504,7 +541,33 @@ export default function OllamaSettings() {
     } catch (e) {
       setSidecarAction({ status: 'error', message: (e as Error).message });
     }
-  }, [t]);
+  }, [t, sidecarAction]);
+
+  type TestResult = { ok: true; latency_ms: number } | { ok: false; error: string; latency_ms: number };
+
+  const handleTestConnection = useCallback(async () => {
+    // Polish 4: concurrent-click guard.
+    if (testAction?.status === 'pending') return;
+    setTestAction({ status: 'pending' });
+    try {
+      const res = await fetch('/api/ai/ollama/test', { method: 'POST', credentials: 'include' });
+      const body = await res.json() as TestResult;
+      if (res.ok && body.ok) {
+        setTestAction({
+          status: 'success',
+          message: t('ollama.test_ok', { ms: body.latency_ms }),
+        });
+        scheduleClear(setTestAction, 5000);
+      } else {
+        setTestAction({
+          status: 'error',
+          message: 'error' in body ? body.error : `HTTP ${res.status}`,
+        });
+      }
+    } catch (e) {
+      setTestAction({ status: 'error', message: (e as Error).message });
+    }
+  }, [t, testAction, scheduleClear]);
 
   const cardStyle: React.CSSProperties = {
     background: 'rgba(255,255,255,0.03)',
@@ -590,13 +653,15 @@ export default function OllamaSettings() {
           onPull={handlePull}
           onCancelPull={handleCancelPull}
           onResetPullError={handleResetPullError}
-          pullInFlight={pulling !== null}
           startAction={startAction}
           onStart={handleStart}
           onResetStart={() => setStartAction(null)}
           sidecarAction={sidecarAction}
           onEnableSidecar={handleEnableSidecar}
           onResetSidecar={() => setSidecarAction(null)}
+          testAction={testAction}
+          onTestConnection={handleTestConnection}
+          onResetTest={() => setTestAction(null)}
         />
 
         <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem' }}>

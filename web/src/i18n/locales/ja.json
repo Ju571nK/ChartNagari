@@ -449,5 +449,7 @@
   "ollama.start_success": "起動しました (pid {{pid}})",
   "ollama.sidecar_success": "Sidecar を設定しました — 実行コマンドをクリップボードにコピーしました",
   "ollama.sidecar_already_configured": "既に設定済み",
-  "ollama.try_again": "再試行"
+  "ollama.try_again": "再試行",
+  "ollama.test_ok": "OK ({{ms}} ms)",
+  "ollama.testing": "テスト中\u2026"
 }

@@ -38,6 +38,8 @@ vi.mock('react-i18next', () => ({
         'ollama.sidecar_success': 'Sidecar configured — run command copied to clipboard',
         'ollama.sidecar_already_configured': 'Already configured',
         'ollama.try_again': 'Try again',
+        'ollama.test_ok': 'OK ({{ms}} ms)',
+        'ollama.testing': 'Testing\u2026',
       };
       let s = map[k] ?? k;
       if (o) for (const [key, val] of Object.entries(o)) s = s.replace(`{{${key}}}`, String(val));
@@ -532,6 +534,145 @@ describe('OllamaSettings', () => {
       expect(screen.getByText('internal sidecar error')).toBeInTheDocument()
     );
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+  });
+
+  // ── Test connection button tests ─────────────────────────────────────────
+
+  it('TestConnection_Success: shows OK with latency on 200 response', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(readyStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, latency_ms: 1342 }), { status: 200 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /test connection/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('OK (1342 ms)')).toBeInTheDocument()
+    );
+
+    // role=status present for accessibility
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('TestConnection_Error: shows error text, Try again, and role=alert on 500', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(readyStatus), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: false, error: 'timeout', latency_ms: 5003 }), { status: 500 })
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /test connection/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('timeout')).toBeInTheDocument()
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it('TestConnection_NetworkError: shows graceful error on fetch rejection', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(readyStatus), { status: 200 }))
+      .mockRejectedValueOnce(new Error('Failed to fetch'));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /test connection/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Failed to fetch')).toBeInTheDocument()
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('TestConnection_ConcurrentClickGuard: only one fetch call on rapid double-click', async () => {
+    let resolveTest!: (v: Response) => void;
+    const pendingTest = new Promise<Response>(res => { resolveTest = res; });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(readyStatus), { status: 200 }))
+      .mockReturnValueOnce(pendingTest); // test call stays pending
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /test connection/i })).toBeInTheDocument()
+    );
+
+    // Click once — enters pending, button hidden
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/testing/i)).toBeInTheDocument()
+    );
+
+    // Second click should be a no-op (concurrent guard)
+    fireEvent.click(screen.queryByRole('button', { name: /test connection/i }) ?? document.body);
+
+    // Resolve the pending fetch to clean up
+    resolveTest(new Response(JSON.stringify({ ok: true, latency_ms: 10 }), { status: 200 }));
+
+    await waitFor(() =>
+      expect(screen.getByText('OK (10 ms)')).toBeInTheDocument()
+    );
+
+    // status fetch (1) + one test fetch (2) = 2 total; no third call
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('TestActionStateClearsOnTransition: stale startAction error clears when state changes', async () => {
+    // Start with INSTALLED_NOT_RUNNING, trigger a start error, then
+    // simulate a poll returning READY — expect the error to be cleared.
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(notRunningStatus), { status: 200 })) // initial
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'did not become ready' }), { status: 500 })) // start POST
+      .mockResolvedValueOnce(new Response(JSON.stringify(readyStatus), { status: 200 })); // next poll
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start ollama/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('did not become ready')).toBeInTheDocument()
+    );
+
+    // Simulate the next status poll returning READY (state transition)
+    await act(async () => {
+      // Trigger fetchStatus manually to simulate the interval poll
+      await fetchMock.mock.results[2]?.value; // the READY response is available
+      // Directly call fetchStatus by clicking the Refresh status button
+      fireEvent.click(screen.getByRole('button', { name: /refresh status/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText('did not become ready')).not.toBeInTheDocument()
+    );
   });
 
   it('polls every 5s only when document is visible', async () => {

@@ -449,5 +449,7 @@
   "ollama.start_success": "시작됨 (pid {{pid}})",
   "ollama.sidecar_success": "Sidecar 구성됨 — 실행 명령이 클립보드에 복사되었습니다",
   "ollama.sidecar_already_configured": "이미 구성됨",
-  "ollama.try_again": "다시 시도"
+  "ollama.try_again": "다시 시도",
+  "ollama.test_ok": "OK ({{ms}} ms)",
+  "ollama.testing": "테스트 중\u2026"
 }

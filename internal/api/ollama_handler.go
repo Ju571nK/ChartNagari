@@ -13,6 +13,46 @@ import (
 	"github.com/Ju571nK/Chatter/internal/ollama"
 )
 
+// OllamaTester is a minimal interface for testing the Ollama connection.
+// *llm.OllamaProvider satisfies this structurally.
+type OllamaTester interface {
+	Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+}
+
+// testOllamaConnection handles POST /api/ai/ollama/test.
+// It sends a minimal prompt to Ollama and reports round-trip latency.
+func (s *Server) testOllamaConnection(w http.ResponseWriter, r *http.Request) {
+	if !s.requireBearer(w, r) {
+		return
+	}
+	if s.ollamaTester == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "ollama tester not configured")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	_, err := s.ollamaTester.Complete(ctx, "", "1")
+	latency := time.Since(start)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":         false,
+			"error":      err.Error(),
+			"latency_ms": latency.Milliseconds(),
+		})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":         true,
+		"latency_ms": latency.Milliseconds(),
+	})
+}
+
 // Readiness poll parameters for the start handler. Overridable in tests.
 var (
 	startReadinessTimeout  = 10 * time.Second

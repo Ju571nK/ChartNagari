@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Ju571nK/Chatter/internal/ollama"
 )
@@ -167,17 +169,39 @@ func TestOllamaStatus_ReadyNoModelSurfacesSuggestSize(t *testing.T) {
 
 // ── Pull tests ────────────────────────────────────────────────────────────────
 
-// fakePullRunner lets tests control the stream + exit error.
+// fakePullRunner lets tests control the stream + exit error. It records whether
+// the provided context was cancelled so tests can assert client-disconnect handling.
 type fakePullRunner struct {
-	lines []string
-	err   error
+	lines       []string
+	err         error
+	blockCh     chan struct{} // when non-nil, Pull waits on ctx.Done OR blockCh
+	ctxObserved bool         // set true if Pull returned because ctx was cancelled
+	mu          sync.Mutex
 }
 
-func (f *fakePullRunner) Pull(_ context.Context, _ string, onLine func(line []byte)) error {
+func (f *fakePullRunner) Pull(ctx context.Context, _ string, onLine func(line []byte)) error {
 	for _, l := range f.lines {
 		onLine([]byte(l))
 	}
-	return f.err
+	if f.blockCh == nil {
+		return f.err
+	}
+	// Block until either the test unblocks us OR the ctx is cancelled.
+	select {
+	case <-ctx.Done():
+		f.mu.Lock()
+		f.ctxObserved = true
+		f.mu.Unlock()
+		return ctx.Err()
+	case <-f.blockCh:
+		return f.err
+	}
+}
+
+func (f *fakePullRunner) sawCtxCancel() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ctxObserved
 }
 
 func newOllamaPullServer(t *testing.T, runner OllamaPullRunner, apiToken string) *httptest.Server {
@@ -307,4 +331,90 @@ func TestOllamaPull_Unauthorized(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("want 401, got %d", resp.StatusCode)
 	}
+}
+
+// TestOllamaPull_AuthorizedWithBearer — with a token configured, a valid bearer
+// must receive the 200 + SSE stream (not a 401).
+func TestOllamaPull_AuthorizedWithBearer(t *testing.T) {
+	runner := &fakePullRunner{lines: []string{`{"status":"ok"}`}}
+	srv := newOllamaPullServer(t, runner, "secret-token")
+	defer srv.Close()
+
+	req, err := http.NewRequest("POST", srv.URL+"/api/ai/ollama/pull",
+		bytes.NewBufferString(`{"model":"gemma4:4b"}`))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer secret-token")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content-type: %s", ct)
+	}
+	out, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(out), "event: done") {
+		t.Fatalf("missing done event: %q", string(out))
+	}
+}
+
+// TestOllamaPull_ClientDisconnectCancelsSubprocess — when the client cancels
+// its request mid-stream, the runner must observe ctx.Done so real subprocesses
+// are killed instead of orphaned.
+func TestOllamaPull_ClientDisconnectCancelsSubprocess(t *testing.T) {
+	runner := &fakePullRunner{
+		lines:   []string{`{"status":"pulling manifest"}`},
+		blockCh: make(chan struct{}),
+	}
+	srv := newOllamaPullServer(t, runner, "")
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, "POST", srv.URL+"/api/ai/ollama/pull",
+		bytes.NewBufferString(`{"model":"gemma4:4b"}`))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Kick off the streaming request in a goroutine so we can cancel from the test.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return // expected after cancel
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	// Give the server a moment to start streaming, then cancel.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	// Wait for the in-flight request goroutine to unwind.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("client request did not unwind within 2s after cancel")
+	}
+
+	// Poll briefly — the server may still be in the runner's select block when
+	// our goroutine returns; give it up to 1s to observe the cancellation.
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if runner.sawCtxCancel() {
+			return // pass
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("runner did not observe ctx cancellation after client disconnect")
 }

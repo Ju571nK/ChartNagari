@@ -1,0 +1,26 @@
+# Enable: POST /api/ai/ollama/sidecar/enable copies this file to
+# docker-compose.override.yml, then run:
+#   docker compose up -d ollama
+# Uninstall: delete docker-compose.override.yml and run docker compose up -d.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chart-ollama
+    restart: unless-stopped
+    volumes:
+      - ./data/ollama:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  server:
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy

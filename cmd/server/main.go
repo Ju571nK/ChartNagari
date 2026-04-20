@@ -353,6 +353,9 @@ func main() {
 	apiSrv.WithOllamaDetector(ollamaDet)
 	apiSrv.WithOllamaPullRunner(ollama.DefaultPullRunner())
 	apiSrv.WithOllamaStarter(ollama.DefaultStarter())
+	if cwd, err := os.Getwd(); err == nil {
+		apiSrv.WithOllamaRepoRoot(cwd)
+	}
 
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider

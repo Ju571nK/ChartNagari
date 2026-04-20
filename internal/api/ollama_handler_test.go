@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -702,4 +704,155 @@ func TestOllamaPull_ClientDisconnectCancelsSubprocess(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("runner did not observe ctx cancellation after client disconnect")
+}
+
+// ── Sidecar enable tests ──────────────────────────────────────────────────────
+
+// templateYAML is the canonical sidecar compose file — tests write this into
+// a temp repo root to exercise the handler.
+const templateYAML = `services:
+  ollama:
+    image: ollama/ollama:latest
+`
+
+func newSidecarServer(t *testing.T, repoRoot, apiToken string) *httptest.Server {
+	t.Helper()
+	s := &Server{}
+	s.WithOllamaRepoRoot(repoRoot)
+	if apiToken != "" {
+		s.WithAPIToken(apiToken)
+	}
+	return httptest.NewServer(s.Handler())
+}
+
+func TestOllamaSidecarEnable_Success(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.ollama.yml.template"),
+		[]byte(templateYAML), 0644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+	srv := newSidecarServer(t, dir, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/sidecar/enable", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["override_path"] != "./docker-compose.override.yml" {
+		t.Fatalf("override_path: %q", body["override_path"])
+	}
+	if body["run_command"] != "docker compose up -d ollama" {
+		t.Fatalf("run_command: %q", body["run_command"])
+	}
+
+	// Verify override file now exists with template content.
+	written, err := os.ReadFile(filepath.Join(dir, "docker-compose.override.yml"))
+	if err != nil {
+		t.Fatalf("read override: %v", err)
+	}
+	if string(written) != templateYAML {
+		t.Fatalf("override content mismatch: got %q", string(written))
+	}
+}
+
+func TestOllamaSidecarEnable_OverrideExists409(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.ollama.yml.template"),
+		[]byte(templateYAML), 0644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+	// Pre-create the override so the handler hits 409.
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.override.yml"),
+		[]byte("existing: yes\n"), 0644); err != nil {
+		t.Fatalf("pre-create override: %v", err)
+	}
+	srv := newSidecarServer(t, dir, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/sidecar/enable", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409, got %d", resp.StatusCode)
+	}
+
+	// Verify override was NOT overwritten.
+	written, _ := os.ReadFile(filepath.Join(dir, "docker-compose.override.yml"))
+	if string(written) != "existing: yes\n" {
+		t.Fatalf("override was clobbered: %q", string(written))
+	}
+}
+
+func TestOllamaSidecarEnable_TemplateMissing500(t *testing.T) {
+	dir := t.TempDir() // no template written
+	srv := newSidecarServer(t, dir, "")
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/sidecar/enable", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "template not found") {
+		t.Fatalf("error msg: %s", string(body))
+	}
+}
+
+func TestOllamaSidecarEnable_NoRoot503(t *testing.T) {
+	s := &Server{}
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/sidecar/enable", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestOllamaSidecarEnable_Unauthorized(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "docker-compose.ollama.yml.template"), []byte(templateYAML), 0644)
+	srv := newSidecarServer(t, dir, "secret-token")
+	defer srv.Close()
+	resp, err := http.Post(srv.URL+"/api/ai/ollama/sidecar/enable", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestOllamaSidecarEnable_AuthorizedWithBearer(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "docker-compose.ollama.yml.template"), []byte(templateYAML), 0644)
+	srv := newSidecarServer(t, dir, "secret-token")
+	defer srv.Close()
+
+	req, _ := http.NewRequest("POST", srv.URL+"/api/ai/ollama/sidecar/enable", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
 }

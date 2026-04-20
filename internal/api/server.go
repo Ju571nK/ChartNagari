@@ -210,6 +210,7 @@ type Server struct {
 	ollamaDetector      OllamaStatusProvider               // optional; set via WithOllamaDetector
 	ollamaPullRunner    OllamaPullRunner                   // optional; set via WithOllamaPullRunner
 	ollamaStarter       OllamaStarter                      // optional; set via WithOllamaStarter
+	ollamaRepoRoot      string                             // optional; set via WithOllamaRepoRoot
 	mu                  sync.RWMutex
 	configUpdateOnce    sync.Once                          // guards the one-shot "execState nil" startup warning
 }
@@ -294,6 +295,14 @@ func (s *Server) WithOllamaPullRunner(r OllamaPullRunner) {
 // endpoint returns 503.
 func (s *Server) WithOllamaStarter(st OllamaStarter) {
 	s.ollamaStarter = st
+}
+
+// WithOllamaRepoRoot sets the filesystem root used by the sidecar/enable
+// handler to locate the compose template and write the override file.
+// In production this is the working directory of the server process.
+// Tests pass t.TempDir() to avoid writing to the real repo root.
+func (s *Server) WithOllamaRepoRoot(root string) {
+	s.ollamaRepoRoot = root
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
@@ -522,6 +531,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/ai/ollama/status", s.getOllamaStatus)
 	mux.HandleFunc("POST /api/ai/ollama/pull", s.pullOllamaModel)
 	mux.HandleFunc("POST /api/ai/ollama/start", s.startOllama)
+	mux.HandleFunc("POST /api/ai/ollama/sidecar/enable", s.enableOllamaSidecar)
 
 	// Static frontend (SPA)
 	if s.static != nil {

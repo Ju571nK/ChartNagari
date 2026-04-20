@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -185,4 +187,56 @@ func (s *Server) startOllama(w http.ResponseWriter, r *http.Request) {
 		case <-tick.C:
 		}
 	}
+}
+
+// enableOllamaSidecar handles POST /api/ai/ollama/sidecar/enable.
+// It copies docker-compose.ollama.yml.template to docker-compose.override.yml
+// in the repo root so the user can then run `docker compose up -d ollama`.
+func (s *Server) enableOllamaSidecar(w http.ResponseWriter, r *http.Request) {
+	if !s.requireBearer(w, r) {
+		return
+	}
+	if s.ollamaRepoRoot == "" {
+		writeJSONError(w, http.StatusServiceUnavailable, "sidecar enable not configured")
+		return
+	}
+
+	overridePath := filepath.Join(s.ollamaRepoRoot, "docker-compose.override.yml")
+	templatePath := filepath.Join(s.ollamaRepoRoot, "docker-compose.ollama.yml.template")
+
+	// 1. Already enabled?
+	if _, err := os.Stat(overridePath); err == nil {
+		writeJSONError(w, http.StatusConflict, "override file already exists")
+		return
+	} else if !os.IsNotExist(err) {
+		log.Error().Err(err).Str("path", overridePath).Msg("api: stat override")
+		writeJSONError(w, http.StatusInternalServerError, "filesystem error")
+		return
+	}
+
+	// 2. Template readable?
+	content, err := os.ReadFile(templatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSONError(w, http.StatusInternalServerError, "template not found")
+			return
+		}
+		log.Error().Err(err).Str("path", templatePath).Msg("api: read template")
+		writeJSONError(w, http.StatusInternalServerError, "cannot read template")
+		return
+	}
+
+	// 3. Write override.
+	if err := os.WriteFile(overridePath, content, 0644); err != nil {
+		log.Error().Err(err).Str("path", overridePath).Msg("api: write override")
+		writeJSONError(w, http.StatusInternalServerError, "cannot write override")
+		return
+	}
+
+	// 4. Success.
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"override_path": "./docker-compose.override.yml",
+		"run_command":   "docker compose up -d ollama",
+	})
 }

@@ -55,17 +55,34 @@ const pillLabels: Record<OllamaStatus['state'], string> = {
   DOCKER_SIDECAR_AVAILABLE: 'ollama.state_sidecar_available',
 };
 
+type ActionState =
+  | null
+  | { status: 'pending' }
+  | { status: 'success'; message?: string; code?: string }
+  | { status: 'error'; message: string };
+
 type StateCardProps = {
   status: OllamaStatus;
-  t: (k: string, o?: Record<string, string>) => string;
+  t: (k: string, o?: Record<string, string | number>) => string;
   pulling: PullProgress | null;
   onPull: () => void;
   onCancelPull: () => void;
   onResetPullError: () => void;
   pullInFlight: boolean;
+  startAction: ActionState;
+  onStart: () => void;
+  onResetStart: () => void;
+  sidecarAction: ActionState;
+  onEnableSidecar: () => void;
+  onResetSidecar: () => void;
 };
 
-function StateCard({ status, t, pulling, onPull, onCancelPull, onResetPullError, pullInFlight }: StateCardProps) {
+function StateCard({
+  status, t,
+  pulling, onPull, onCancelPull, onResetPullError, pullInFlight: _pullInFlight,
+  startAction, onStart, onResetStart,
+  sidecarAction, onEnableSidecar, onResetSidecar,
+}: StateCardProps) {
   const { state, suggest } = status;
 
   if (state === 'READY') {
@@ -154,9 +171,40 @@ function StateCard({ status, t, pulling, onPull, onCancelPull, onResetPullError,
     return (
       <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={pillStyles.INSTALLED_NOT_RUNNING}>{t(pillLabels.INSTALLED_NOT_RUNNING)}</span>
-        <button className="tab-btn" disabled={pullInFlight} style={{ opacity: pullInFlight ? 0.4 : 1 }}>
-          {t('ollama.start_ollama')}
-        </button>
+        <div style={{ marginTop: 0 }}>
+          {startAction?.status !== 'pending' && (
+            <button
+              type="button"
+              className="tab-btn"
+              onClick={onStart}
+            >
+              {t('ollama.start_ollama')}
+            </button>
+          )}
+          {startAction?.status === 'pending' && (
+            <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+              {t('ollama.starting')}
+            </div>
+          )}
+          {startAction?.status === 'success' && (
+            <div style={{ color: 'var(--safe)', fontSize: '0.85rem', marginTop: 4 }}>
+              {startAction.message}
+            </div>
+          )}
+          {startAction?.status === 'error' && (
+            <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 4 }}>
+              {startAction.message}
+              <button
+                type="button"
+                className="tab-btn"
+                style={{ marginLeft: 8 }}
+                onClick={onResetStart}
+              >
+                {t('ollama.try_again')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -165,9 +213,54 @@ function StateCard({ status, t, pulling, onPull, onCancelPull, onResetPullError,
     return (
       <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span style={pillStyles.DOCKER_SIDECAR_AVAILABLE}>{t(pillLabels.DOCKER_SIDECAR_AVAILABLE)}</span>
-        <button className="tab-btn" disabled={pullInFlight} style={{ opacity: pullInFlight ? 0.4 : 1 }}>
-          {t('ollama.enable_sidecar')}
-        </button>
+        <div style={{ marginTop: 0 }}>
+          {sidecarAction?.status !== 'pending' && sidecarAction?.status !== 'success' && (
+            <button
+              type="button"
+              className="tab-btn"
+              onClick={onEnableSidecar}
+            >
+              {t('ollama.enable_sidecar')}
+            </button>
+          )}
+          {sidecarAction?.status === 'pending' && (
+            <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+              {t('ollama.starting')}
+            </div>
+          )}
+          {sidecarAction?.status === 'success' && (
+            <div style={{ fontSize: '0.85rem', marginTop: 4 }}>
+              <div style={{ color: 'var(--safe)' }}>{sidecarAction.message}</div>
+              {sidecarAction.code && (
+                <code style={{
+                  display: 'block',
+                  marginTop: 6,
+                  background: 'rgba(255,255,255,0.06)',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontFamily: 'monospace',
+                  fontSize: '0.82rem',
+                  color: 'var(--text)',
+                }}>
+                  {sidecarAction.code}
+                </code>
+              )}
+            </div>
+          )}
+          {sidecarAction?.status === 'error' && (
+            <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 4 }}>
+              {sidecarAction.message}
+              <button
+                type="button"
+                className="tab-btn"
+                style={{ marginLeft: 8 }}
+                onClick={onResetSidecar}
+              >
+                {t('ollama.try_again')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -208,6 +301,8 @@ export default function OllamaSettings() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [pulling, setPulling] = useState<PullProgress | null>(null);
   const pullAbortRef = useRef<AbortController | null>(null);
+  const [startAction, setStartAction] = useState<ActionState>(null);
+  const [sidecarAction, setSidecarAction] = useState<ActionState>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -369,6 +464,48 @@ export default function OllamaSettings() {
     setPulling(null);
   }, []);
 
+  const handleStart = useCallback(async () => {
+    setStartAction({ status: 'pending' });
+    try {
+      const res = await fetch('/api/ai/ollama/start', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const body = await res.json();
+        setStartAction({ status: 'success', message: t('ollama.start_success', { pid: String(body.pid) }) });
+        setTimeout(() => setStartAction(null), 3000);
+        await fetchStatus();
+      } else if (res.status === 409) {
+        setStartAction(null);
+        await fetchStatus();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setStartAction({ status: 'error', message: (body as { error?: string }).error || `HTTP ${res.status}` });
+      }
+    } catch (e) {
+      setStartAction({ status: 'error', message: (e as Error).message });
+    }
+  }, [t, fetchStatus]);
+
+  const handleEnableSidecar = useCallback(async () => {
+    setSidecarAction({ status: 'pending' });
+    try {
+      const res = await fetch('/api/ai/ollama/sidecar/enable', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const body = await res.json() as { run_command: string };
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          try { await navigator.clipboard.writeText(body.run_command); } catch { /* no-op */ }
+        }
+        setSidecarAction({ status: 'success', message: t('ollama.sidecar_success'), code: body.run_command });
+      } else if (res.status === 409) {
+        setSidecarAction({ status: 'success', message: t('ollama.sidecar_already_configured'), code: 'docker compose up -d ollama' });
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setSidecarAction({ status: 'error', message: (body as { error?: string }).error || `HTTP ${res.status}` });
+      }
+    } catch (e) {
+      setSidecarAction({ status: 'error', message: (e as Error).message });
+    }
+  }, [t]);
+
   const cardStyle: React.CSSProperties = {
     background: 'rgba(255,255,255,0.03)',
     border: '1px solid rgba(91,146,121,0.2)',
@@ -454,6 +591,12 @@ export default function OllamaSettings() {
           onCancelPull={handleCancelPull}
           onResetPullError={handleResetPullError}
           pullInFlight={pulling !== null}
+          startAction={startAction}
+          onStart={handleStart}
+          onResetStart={() => setStartAction(null)}
+          sidecarAction={sidecarAction}
+          onEnableSidecar={handleEnableSidecar}
+          onResetSidecar={() => setSidecarAction(null)}
         />
 
         <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem' }}>

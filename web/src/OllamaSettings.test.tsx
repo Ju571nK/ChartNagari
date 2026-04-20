@@ -4,7 +4,7 @@ import OllamaSettings from './OllamaSettings';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (k: string, o?: Record<string, string>) => {
+    t: (k: string, o?: Record<string, string | number>) => {
       const map: Record<string, string> = {
         'settings.ai_provider_ollama': 'AI Provider (Ollama)',
         'ollama.state_ready': 'Ready — model loaded',
@@ -33,9 +33,14 @@ vi.mock('react-i18next', () => ({
         'ollama.pull_try_again': 'Try again',
         'ollama.pull_in_progress': 'Pull in progress',
         'ollama.unknown_size': 'unknown size',
+        'ollama.starting': 'Starting…',
+        'ollama.start_success': 'Started (pid {{pid}})',
+        'ollama.sidecar_success': 'Sidecar configured — run command copied to clipboard',
+        'ollama.sidecar_already_configured': 'Already configured',
+        'ollama.try_again': 'Try again',
       };
       let s = map[k] ?? k;
-      if (o) for (const [key, val] of Object.entries(o)) s = s.replace(`{{${key}}}`, val);
+      if (o) for (const [key, val] of Object.entries(o)) s = s.replace(`{{${key}}}`, String(val));
       return s;
     },
   }),
@@ -89,6 +94,13 @@ beforeEach(() => {
   // jsdom's window.confirm throws "Not implemented" and returns undefined (falsy).
   // Override it directly so pull handlers proceed past the confirmation gate.
   window.confirm = vi.fn(() => true);
+
+  // Provide a clipboard stub for sidecar tests.
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    writable: true,
+    configurable: true,
+  });
 });
 
 afterEach(() => {
@@ -360,6 +372,166 @@ describe('OllamaSettings', () => {
       { timeout: 3000 }
     );
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  // ── Start button tests ───────────────────────────────────────────────────
+
+  it('Start 200: shows success message then refetches status', async () => {
+    const readyAfterStart = { ...notRunningStatus, state: 'READY', suggest: { action: 'none' } };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(notRunningStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // POST /start
+      .mockResolvedValueOnce(new Response(JSON.stringify(readyAfterStart), { status: 200 })); // refetch
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start ollama/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/started \(pid/i)).toBeInTheDocument()
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/ai/ollama/start', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('Start 409: no error shown, silently refetches status', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(notRunningStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'already running' }), { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(notRunningStatus), { status: 200 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start ollama/i }));
+
+    // Wait for refetch to settle — button is back, no error text
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/already running/i)).not.toBeInTheDocument();
+  });
+
+  it('Start 500: shows inline error with Try again button', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(notRunningStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'did not become ready' }), { status: 500 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start ollama/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('did not become ready')).toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it('Start Try again: resets error and shows Start button again', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(notRunningStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'did not become ready' }), { status: 500 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /start ollama/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /start ollama/i })).toBeInTheDocument()
+    );
+    expect(screen.queryByText('did not become ready')).not.toBeInTheDocument();
+  });
+
+  // ── Sidecar button tests ──────────────────────────────────────────────────
+
+  it('Sidecar 200: copies run_command to clipboard and shows success with code block', async () => {
+    const runCommand = 'docker compose up -d ollama';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(sidecarStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ override_path: '/docker-compose.yml', run_command: runCommand }), { status: 200 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /enable docker sidecar/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /enable docker sidecar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Sidecar configured — run command copied to clipboard')).toBeInTheDocument()
+    );
+
+    expect(screen.getByText(runCommand)).toBeInTheDocument();
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(runCommand);
+  });
+
+  it('Sidecar 409: shows already-configured message with run command', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(sidecarStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'override file already exists' }), { status: 409 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /enable docker sidecar/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /enable docker sidecar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Already configured')).toBeInTheDocument()
+    );
+
+    expect(screen.getByText('docker compose up -d ollama')).toBeInTheDocument();
+  });
+
+  it('Sidecar 500: shows inline error with Try again button', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(sidecarStatus), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'internal sidecar error' }), { status: 500 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /enable docker sidecar/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /enable docker sidecar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('internal sidecar error')).toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
   it('polls every 5s only when document is visible', async () => {

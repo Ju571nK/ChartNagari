@@ -444,5 +444,10 @@
   "ollama.cancel_pull": "Cancel",
   "ollama.pull_try_again": "Try again",
   "ollama.pull_in_progress": "Pull in progress",
-  "ollama.unknown_size": "unknown size"
+  "ollama.unknown_size": "unknown size",
+  "ollama.starting": "Starting…",
+  "ollama.start_success": "Started (pid {{pid}})",
+  "ollama.sidecar_success": "Sidecar configured — run command copied to clipboard",
+  "ollama.sidecar_already_configured": "Already configured",
+  "ollama.try_again": "Try again"
 }

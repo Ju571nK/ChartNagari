@@ -444,5 +444,10 @@
   "ollama.cancel_pull": "キャンセル",
   "ollama.pull_try_again": "再試行",
   "ollama.pull_in_progress": "ダウンロード中",
-  "ollama.unknown_size": "サイズ不明"
+  "ollama.unknown_size": "サイズ不明",
+  "ollama.starting": "起動中…",
+  "ollama.start_success": "起動しました (pid {{pid}})",
+  "ollama.sidecar_success": "Sidecar を設定しました — 実行コマンドをクリップボードにコピーしました",
+  "ollama.sidecar_already_configured": "既に設定済み",
+  "ollama.try_again": "再試行"
 }

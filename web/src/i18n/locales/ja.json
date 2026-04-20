@@ -438,5 +438,10 @@
   "ollama.version_label": "バージョン",
   "ollama.deployment_native": "ネイティブ",
   "ollama.deployment_docker": "Docker",
-  "ollama.download_size": "ダウンロードサイズ: {{size}}"
+  "ollama.download_size": "ダウンロードサイズ: {{size}}",
+  "ollama.pull_confirm": "{{model}} モデルをダウンロードします (約 {{size}})。続行しますか?",
+  "ollama.pull_progress": "ダウンロード進捗",
+  "ollama.cancel_pull": "キャンセル",
+  "ollama.pull_try_again": "再試行",
+  "ollama.pull_in_progress": "ダウンロード中"
 }

@@ -438,5 +438,10 @@
   "ollama.version_label": "버전",
   "ollama.deployment_native": "네이티브",
   "ollama.deployment_docker": "Docker",
-  "ollama.download_size": "다운로드 크기: {{size}}"
+  "ollama.download_size": "다운로드 크기: {{size}}",
+  "ollama.pull_confirm": "{{model}} 모델을 다운로드합니다 (약 {{size}}). 계속하시겠습니까?",
+  "ollama.pull_progress": "다운로드 진행률",
+  "ollama.cancel_pull": "취소",
+  "ollama.pull_try_again": "다시 시도",
+  "ollama.pull_in_progress": "다운로드 중"
 }

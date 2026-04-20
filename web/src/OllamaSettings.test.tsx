@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import OllamaSettings from './OllamaSettings';
 
 vi.mock('react-i18next', () => ({
@@ -27,6 +27,11 @@ vi.mock('react-i18next', () => ({
         'ollama.deployment_native': 'Native',
         'ollama.deployment_docker': 'Docker',
         'ollama.download_size': 'Download size: {{size}}',
+        'ollama.pull_confirm': 'This will download {{model}} (≈{{size}}). Continue?',
+        'ollama.pull_progress': 'Pull progress',
+        'ollama.cancel_pull': 'Cancel',
+        'ollama.pull_try_again': 'Try again',
+        'ollama.pull_in_progress': 'Pull in progress',
       };
       let s = map[k] ?? k;
       if (o) for (const [key, val] of Object.entries(o)) s = s.replace(`{{${key}}}`, val);
@@ -80,6 +85,9 @@ const notInstalledStatus = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom's window.confirm throws "Not implemented" and returns undefined (falsy).
+  // Override it directly so pull handlers proceed past the confirmation gate.
+  window.confirm = vi.fn(() => true);
 });
 
 afterEach(() => {
@@ -189,6 +197,168 @@ describe('OllamaSettings', () => {
     });
 
     expect(screen.getByRole('button', { name: /refresh status/i })).toBeInTheDocument();
+  });
+
+  it('Pull streams SSE frames and updates progress', async () => {
+    function sseResponse(chunks: string[]): Response {
+      const stream = new ReadableStream({
+        async start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }
+
+    const readyAfterPull = {
+      state: 'READY',
+      host: 'http://localhost:11434',
+      model: 'gemma4:4b',
+      deployment: 'native',
+      version: '0.3.1',
+      suggest: { action: 'none' },
+    };
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(noModelStatus), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          'data: {"status":"pulling manifest"}\n\n',
+          'data: {"status":"downloading","completed":25,"total":100}\n\n',
+          'data: {"status":"downloading","completed":75,"total":100}\n\n',
+          'data: {"status":"success"}\n\nevent: done\ndata: {}\n\n',
+        ])
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(readyAfterPull), { status: 200 })
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    // Wait for initial status to render the Pull model button
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /pull model/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /pull model/i }));
+
+    // Progress bar should appear
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    );
+
+    // Final state: READY card renders after status refetch
+    await waitFor(() =>
+      expect(screen.getByText('Ready — model loaded')).toBeInTheDocument(),
+      { timeout: 3000 }
+    );
+  });
+
+  it('Pull shows error on {"error":...} frame', async () => {
+    function sseResponse(chunks: string[]): Response {
+      const stream = new ReadableStream({
+        async start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(noModelStatus), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          'data: {"status":"pulling manifest"}\n\n',
+          'data: {"error":"disk quota exceeded"}\n\n',
+        ])
+      )
+      // Persistent fallback for interval polls after the pull completes
+      .mockResolvedValue(
+        new Response(JSON.stringify(noModelStatus), { status: 200 })
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /pull model/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /pull model/i }));
+
+    // Error message and Try again button should appear
+    await waitFor(() =>
+      expect(screen.getByText('disk quota exceeded')).toBeInTheDocument(),
+      { timeout: 3000 }
+    );
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it('Pull cancel aborts the request and clears progress UI', async () => {
+    // In jsdom, aborting a fetch signal after reader.read() is pending does not
+    // throw AbortError through the ReadableStream reader. Instead we simulate
+    // abort by making the pull fetch return a promise that rejects with AbortError
+    // when the signal fires — matching real browser behaviour.
+    const fetchMock = vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
+      if (url === '/api/ai/ollama/status') {
+        return Promise.resolve(new Response(JSON.stringify(noModelStatus), { status: 200 }));
+      }
+      // Pull endpoint: return a promise that rejects with AbortError on abort
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = opts?.signal as AbortSignal | undefined;
+        if (signal?.aborted) {
+          const err = new DOMException('Aborted', 'AbortError');
+          reject(err);
+          return;
+        }
+        signal?.addEventListener('abort', () => {
+          const err = new DOMException('Aborted', 'AbortError');
+          reject(err);
+        });
+      });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OllamaSettings />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /pull model/i })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /pull model/i }));
+
+    // While fetch is pending, pulling state is 'starting' — progress bar and
+    // Cancel button both appear immediately (indeterminate state, width: 20%)
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+
+    // Click Cancel — triggers abort
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    // Progress UI should disappear and Pull button should come back
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /pull model/i })).toBeInTheDocument(),
+      { timeout: 3000 }
+    );
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
   it('polls every 5s only when document is visible', async () => {

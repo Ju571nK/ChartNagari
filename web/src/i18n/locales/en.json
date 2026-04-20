@@ -438,5 +438,10 @@
   "ollama.version_label": "Version",
   "ollama.deployment_native": "Native",
   "ollama.deployment_docker": "Docker",
-  "ollama.download_size": "Download size: {{size}}"
+  "ollama.download_size": "Download size: {{size}}",
+  "ollama.pull_confirm": "This will download {{model}} (≈{{size}}). Continue?",
+  "ollama.pull_progress": "Pull progress",
+  "ollama.cancel_pull": "Cancel",
+  "ollama.pull_try_again": "Try again",
+  "ollama.pull_in_progress": "Pull in progress"
 }

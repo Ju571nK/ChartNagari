@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
 import ExecutionTab from './ExecutionTab'
+import MCPSettings from './MCPSettings'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
@@ -3435,6 +3436,14 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
       <button className="run-btn" onClick={handleSave} disabled={saving}>
         {saving ? 'Saving…' : 'Save to .env'}
       </button>
+
+      <MCPSettings
+        apiToken={(edits['API_TOKEN'] || env['API_TOKEN'] || '') === ENV_SENTINEL
+          ? '<YOUR_API_TOKEN>'
+          : (edits['API_TOKEN'] || env['API_TOKEN'] || '<YOUR_API_TOKEN>')}
+        endpointURL={`${window.location.protocol}//${window.location.host}/api/mcp`}
+        toolNames={['list_watchlist','get_analysis','get_signal_history','get_ohlcv','get_economic_calendar']}
+      />
 
       <DataManagementSection />
     </div>

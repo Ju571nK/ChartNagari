@@ -129,3 +129,62 @@ func (r *Registry) Dispatch(ctx context.Context, name string, params json.RawMes
 	}
 	return t.Call(ctx, params)
 }
+
+// ── JSON-RPC 2.0 envelope types ───────────────────────────────────────────
+
+// RPCRequest is a JSON-RPC 2.0 request envelope.
+// `ID` is kept as RawMessage to preserve the caller's type (number or string)
+// on roundtrip. A missing `id` means the request is a notification (no response).
+type RPCRequest struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+// RPCResponse is a JSON-RPC 2.0 response envelope. Exactly one of Result or
+// Error must be set; the other is encoded as omitempty.
+type RPCResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  any             `json:"result,omitempty"`
+	Error   *Error          `json:"error,omitempty"`
+}
+
+// NewErrorResponse constructs an error response envelope.
+func NewErrorResponse(id json.RawMessage, err *Error) RPCResponse {
+	return RPCResponse{JSONRPC: "2.0", ID: id, Error: err}
+}
+
+// NewSuccessResponse constructs a success response envelope.
+func NewSuccessResponse(id json.RawMessage, result any) RPCResponse {
+	return RPCResponse{JSONRPC: "2.0", ID: id, Result: result}
+}
+
+// ── MCP spec payload types ────────────────────────────────────────────────
+
+// InitializeResult is the body returned from the `initialize` request.
+type InitializeResult struct {
+	ProtocolVersion string             `json:"protocolVersion"`
+	ServerInfo      ServerInfo         `json:"serverInfo"`
+	Capabilities    ServerCapabilities `json:"capabilities"`
+}
+
+// ServerInfo identifies the MCP server implementation.
+type ServerInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// ServerCapabilities advertises optional MCP capabilities.
+type ServerCapabilities struct {
+	Tools *ToolsCapability `json:"tools,omitempty"`
+}
+
+// ToolsCapability signals that the server supports tools/list and tools/call.
+type ToolsCapability struct{}
+
+// ToolsListResult is the body of `tools/list`.
+type ToolsListResult struct {
+	Tools []ToolDescriptor `json:"tools"`
+}

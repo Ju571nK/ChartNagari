@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +71,41 @@ func TestError_StandardCodes(t *testing.T) {
 	}
 	if ErrCodeInvalidParams != -32602 {
 		t.Fatalf("invalid params code: %d", ErrCodeInvalidParams)
+	}
+}
+
+func TestRPCRequest_ParseInitialize(t *testing.T) {
+	raw := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"0.1"}}}`
+	var req RPCRequest
+	if err := json.Unmarshal([]byte(raw), &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if req.Method != "initialize" {
+		t.Errorf("method: %s", req.Method)
+	}
+	if req.JSONRPC != "2.0" {
+		t.Errorf("jsonrpc: %s", req.JSONRPC)
+	}
+}
+
+func TestRPCResponse_EncodeSuccess(t *testing.T) {
+	resp := RPCResponse{JSONRPC: "2.0", ID: json.RawMessage(`1`), Result: map[string]string{"ok": "yes"}}
+	b, _ := json.Marshal(resp)
+	if !strings.Contains(string(b), `"result"`) {
+		t.Errorf("missing result: %s", b)
+	}
+	if strings.Contains(string(b), `"error"`) {
+		t.Errorf("should not contain error: %s", b)
+	}
+}
+
+func TestRPCResponse_EncodeError(t *testing.T) {
+	resp := RPCResponse{JSONRPC: "2.0", ID: json.RawMessage(`2`), Error: &Error{Code: -32601, Message: "nope"}}
+	b, _ := json.Marshal(resp)
+	if !strings.Contains(string(b), `"error"`) || !strings.Contains(string(b), `"nope"`) {
+		t.Errorf("error envelope wrong: %s", b)
+	}
+	if strings.Contains(string(b), `"result"`) {
+		t.Errorf("should not contain result on error: %s", b)
 	}
 }

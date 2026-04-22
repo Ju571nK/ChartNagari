@@ -14,6 +14,35 @@ Format:
 
 ---
 
+## [2.7.0.0] - 2026-04-22
+
+### Added
+- **MCP (Model Context Protocol) server integration.** Claude Desktop / Claude Code / Codex CLI can query ChartNagari analysis directly, saving ~85% of tokens vs external OHLCV fetches on typical "analyze my watchlist" workflows.
+- 5 read-only MCP tools:
+  - `list_watchlist` — all tracked symbols with enable flags
+  - `get_analysis` — multi-timeframe analysis (fired rules, MTF score, key levels) as markdown
+  - `get_signal_history` — recent alerts for a symbol
+  - `get_ohlcv` — raw candles (JSON, fallback — prefer `get_analysis` for pattern questions)
+  - `get_economic_calendar` — economic events in a date range
+- New HTTP streamable endpoint `POST /api/mcp` (bearer-protected, reuses `API_TOKEN`)
+- New `chartnagari-mcp` stdio bridge binary for stdio-only clients (Codex CLI)
+- `MCPSettings` Settings UI section with ready-to-copy config snippets for all three clients
+- User setup guide at `docs/MCP_SETUP.md`
+
+### Technical
+- New Go package `internal/mcp` (registry + 5 tool handlers + JSON-RPC envelope types + markdown formatter)
+- `internal/api/mcp_handler.go` — streamable HTTP + in-memory session store with 30 min idle TTL
+- `cmd/chartnagari-mcp/` — stdio bridge (~130 lines, stdlib only)
+- Stdlib-only hand-roll of JSON-RPC 2.0 (SDK deferred — v1 scope is initialize + tools/list + tools/call)
+- All endpoints `127.0.0.1`-bound, 1 MiB request cap
+
+### Notes
+- `get_analysis` returns markdown tables; `get_ohlcv` returns JSON. Token savings were measured at ~85% vs external OHLCV fetches for typical 10-symbol watchlist workflows.
+- MCP session TTL is 30 min idle. Clients must re-initialize after expiry (automatic in Claude Desktop/Code).
+- No auto-activation: MCP is served whenever the server runs, but clients must be explicitly configured.
+
+---
+
 ## [2.5.0.0] - 2026-04-18
 
 ### Added

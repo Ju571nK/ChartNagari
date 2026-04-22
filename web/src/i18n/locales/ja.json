@@ -417,5 +417,14 @@
   "execution.add_row": "行追加",
   "execution.add_broker": "ブローカー追加",
   "execution.remove_row": "行削除",
-  "common.discard": "破棄"
+  "common.discard": "破棄",
+  "settings.mcp_server": "MCP サーバー",
+  "mcp.status_active": "アクティブ",
+  "mcp.tools_count": "{{n}} 個のツール登録済み",
+  "mcp.client_claude_code": "Claude Code",
+  "mcp.client_claude_desktop": "Claude Desktop",
+  "mcp.client_codex": "Codex CLI",
+  "mcp.copy": "コピー",
+  "mcp.copied": "コピーしました!",
+  "mcp.token_masked": "{{mask}}"
 }

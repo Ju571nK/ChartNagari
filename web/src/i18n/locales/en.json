@@ -417,5 +417,14 @@
   "execution.add_row": "Add row",
   "execution.add_broker": "Add broker",
   "execution.remove_row": "Remove row",
-  "common.discard": "Discard"
+  "common.discard": "Discard",
+  "settings.mcp_server": "MCP server",
+  "mcp.status_active": "Active",
+  "mcp.tools_count": "{{n}} tools registered",
+  "mcp.client_claude_code": "Claude Code",
+  "mcp.client_claude_desktop": "Claude Desktop",
+  "mcp.client_codex": "Codex CLI",
+  "mcp.copy": "Copy",
+  "mcp.copied": "Copied!",
+  "mcp.token_masked": "{{mask}}"
 }

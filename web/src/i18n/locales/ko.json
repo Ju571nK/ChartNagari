@@ -417,5 +417,14 @@
   "execution.add_row": "행 추가",
   "execution.add_broker": "브로커 추가",
   "execution.remove_row": "행 제거",
-  "common.discard": "취소"
+  "common.discard": "취소",
+  "settings.mcp_server": "MCP 서버",
+  "mcp.status_active": "활성",
+  "mcp.tools_count": "{{n}}개 툴 등록됨",
+  "mcp.client_claude_code": "Claude Code",
+  "mcp.client_claude_desktop": "Claude Desktop",
+  "mcp.client_codex": "Codex CLI",
+  "mcp.copy": "복사",
+  "mcp.copied": "복사됨!",
+  "mcp.token_masked": "{{mask}}"
 }

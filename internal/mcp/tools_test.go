@@ -206,3 +206,56 @@ func TestGetSignalHistory_LimitClamp(t *testing.T) {
 	}
 	_ = res
 }
+
+type fakeOHLCVSource struct{ rows []models.OHLCV }
+
+func (f *fakeOHLCVSource) GetOHLCV(symbol, tf string, limit int) ([]models.OHLCV, error) {
+	if limit > len(f.rows) {
+		limit = len(f.rows)
+	}
+	return f.rows[:limit], nil
+}
+
+func TestGetOHLCV_ReturnsJSON(t *testing.T) {
+	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	src := &fakeOHLCVSource{rows: []models.OHLCV{
+		{Symbol: "BTCUSDT", Timeframe: "1H", OpenTime: now, Open: 58500, High: 58600, Low: 58400, Close: 58432, Volume: 123.45},
+	}}
+	tool := NewGetOHLCV(src)
+	res, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT","timeframe":"1H"}`))
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	text := res.Content[0].Text
+	var js map[string]any
+	if err := json.Unmarshal([]byte(text), &js); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, text)
+	}
+	if js["symbol"] != "BTCUSDT" {
+		t.Errorf("symbol wrong: %v", js["symbol"])
+	}
+	candles, _ := js["candles"].([]any)
+	if len(candles) != 1 {
+		t.Errorf("want 1 candle, got %d", len(candles))
+	}
+}
+
+func TestGetOHLCV_InvalidTimeframe(t *testing.T) {
+	tool := NewGetOHLCV(&fakeOHLCVSource{})
+	_, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT","timeframe":"2H"}`))
+	if err == nil {
+		t.Fatal("want error for invalid tf")
+	}
+	var mcpErr *Error
+	if !errors.As(err, &mcpErr) || mcpErr.Code != ErrCodeInvalidParams {
+		t.Fatalf("want InvalidParams, got %v", err)
+	}
+}
+
+func TestGetOHLCV_LimitClamp(t *testing.T) {
+	tool := NewGetOHLCV(&fakeOHLCVSource{})
+	_, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT","timeframe":"1H","limit":9999}`))
+	if err != nil {
+		t.Fatalf("limit clamp should not error: %v", err)
+	}
+}

@@ -256,6 +256,93 @@ func dedupTopN(nums []float64, n int) []float64 {
 	return out
 }
 
+// OHLCVSource satisfies the minimal interface needed by GetOHLCVTool.
+// *storage.DB satisfies it via its existing GetOHLCV method.
+type OHLCVSource interface {
+	GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, error)
+}
+
+type GetOHLCVTool struct {
+	src OHLCVSource
+}
+
+func NewGetOHLCV(s OHLCVSource) *GetOHLCVTool {
+	return &GetOHLCVTool{src: s}
+}
+
+func (*GetOHLCVTool) Name() string { return "get_ohlcv" }
+
+func (*GetOHLCVTool) Description() string {
+	return "Get raw OHLCV candles for a symbol/timeframe. Use ONLY when you need to analyze raw price action yourself. Prefer get_analysis for pattern detection — it is pre-computed and more token-efficient."
+}
+
+func (*GetOHLCVTool) InputSchema() string { return SchemaGetOHLCV }
+
+type getOHLCVParams struct {
+	Symbol    string `json:"symbol"`
+	Timeframe string `json:"timeframe"`
+	Limit     int    `json:"limit"`
+}
+
+var allowedOHLCVTF = map[string]bool{"1W": true, "1D": true, "4H": true, "1H": true}
+
+const (
+	defaultOHLCVLimit = 50
+	maxOHLCVLimit     = 500
+)
+
+type ohlcvOut struct {
+	Symbol  string        `json:"symbol"`
+	TF      string        `json:"tf"`
+	Candles []ohlcvCandle `json:"candles"`
+}
+
+type ohlcvCandle struct {
+	T string  `json:"t"`
+	O float64 `json:"o"`
+	H float64 `json:"h"`
+	L float64 `json:"l"`
+	C float64 `json:"c"`
+	V float64 `json:"v"`
+}
+
+func (t *GetOHLCVTool) Call(_ context.Context, raw json.RawMessage) (ToolResult, error) {
+	var p getOHLCVParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return ToolResult{}, NewInvalidParams("invalid params: "+err.Error(), "")
+	}
+	if p.Symbol == "" {
+		return ToolResult{}, NewInvalidParams("symbol required", "")
+	}
+	if !allowedOHLCVTF[p.Timeframe] {
+		return ToolResult{}, NewInvalidParams(
+			"invalid timeframe — must be 1W, 1D, 4H, or 1H",
+			"Call list_watchlist to see the configured timeframes.",
+		)
+	}
+	if p.Limit <= 0 {
+		p.Limit = defaultOHLCVLimit
+	}
+	if p.Limit > maxOHLCVLimit {
+		p.Limit = maxOHLCVLimit
+	}
+
+	rows, err := t.src.GetOHLCV(p.Symbol, p.Timeframe, p.Limit)
+	if err != nil {
+		return ToolResult{}, &Error{Code: ErrCodeInternalError, Message: err.Error()}
+	}
+
+	out := ohlcvOut{Symbol: p.Symbol, TF: p.Timeframe, Candles: make([]ohlcvCandle, 0, len(rows))}
+	for _, r := range rows {
+		out.Candles = append(out.Candles, ohlcvCandle{
+			T: r.OpenTime.UTC().Format(time.RFC3339),
+			O: r.Open, H: r.High, L: r.Low, C: r.Close, V: r.Volume,
+		})
+	}
+	buf, _ := json.Marshal(out)
+	return TextResult(string(buf)), nil
+}
+
 // GetSignalHistoryTool returns recent alert history for a symbol.
 type GetSignalHistoryTool struct {
 	signal SignalSource

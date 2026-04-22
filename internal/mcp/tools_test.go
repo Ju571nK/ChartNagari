@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"github.com/Ju571nK/Chatter/internal/storage"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -257,5 +258,60 @@ func TestGetOHLCV_LimitClamp(t *testing.T) {
 	_, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT","timeframe":"1H","limit":9999}`))
 	if err != nil {
 		t.Fatalf("limit clamp should not error: %v", err)
+	}
+}
+
+type fakeCalendarSource struct{ events []storage.EconomicEvent }
+
+func (f *fakeCalendarSource) GetEconomicEvents(from, to time.Time) ([]storage.EconomicEvent, error) {
+	var out []storage.EconomicEvent
+	for _, e := range f.events {
+		if e.EventTime.Before(from) || e.EventTime.After(to) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func TestGetEconomicCalendar_Basic(t *testing.T) {
+	ts := time.Date(2026, 4, 23, 12, 30, 0, 0, time.UTC)
+	src := &fakeCalendarSource{events: []storage.EconomicEvent{
+		{Country: "US", Event: "US CPI YoY", Impact: "high", EventTime: ts},
+	}}
+	tool := NewGetEconomicCalendar(src)
+	raw := json.RawMessage(`{"start":"2026-04-22T00:00:00Z","end":"2026-04-29T00:00:00Z"}`)
+	res, err := tool.Call(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if !strings.Contains(res.Content[0].Text, "US CPI YoY") {
+		t.Errorf("missing event: %q", res.Content[0].Text)
+	}
+}
+
+func TestGetEconomicCalendar_StartAfterEnd(t *testing.T) {
+	tool := NewGetEconomicCalendar(&fakeCalendarSource{})
+	raw := json.RawMessage(`{"start":"2026-05-01T00:00:00Z","end":"2026-04-01T00:00:00Z"}`)
+	_, err := tool.Call(context.Background(), raw)
+	if err == nil {
+		t.Fatal("want error: start > end")
+	}
+}
+
+func TestGetEconomicCalendar_ImpactFilter(t *testing.T) {
+	ts := time.Date(2026, 4, 23, 12, 30, 0, 0, time.UTC)
+	src := &fakeCalendarSource{events: []storage.EconomicEvent{
+		{Event: "Low impact", Impact: "low", EventTime: ts},
+		{Event: "High impact", Impact: "high", EventTime: ts},
+	}}
+	tool := NewGetEconomicCalendar(src)
+	raw := json.RawMessage(`{"start":"2026-04-22T00:00:00Z","end":"2026-04-29T00:00:00Z","impact_min":"high"}`)
+	res, _ := tool.Call(context.Background(), raw)
+	if strings.Contains(res.Content[0].Text, "Low impact") {
+		t.Error("low-impact event should be filtered out")
+	}
+	if !strings.Contains(res.Content[0].Text, "High impact") {
+		t.Error("high-impact event missing")
 	}
 }

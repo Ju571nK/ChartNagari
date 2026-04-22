@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"github.com/Ju571nK/Chatter/internal/storage"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -341,6 +342,93 @@ func (t *GetOHLCVTool) Call(_ context.Context, raw json.RawMessage) (ToolResult,
 	}
 	buf, _ := json.Marshal(out)
 	return TextResult(string(buf)), nil
+}
+
+// CalendarSource returns economic events. *storage.DB satisfies this.
+type CalendarSource interface {
+	GetEconomicEvents(from, to time.Time) ([]storage.EconomicEvent, error)
+}
+
+type GetEconomicCalendarTool struct {
+	src CalendarSource
+}
+
+func NewGetEconomicCalendar(s CalendarSource) *GetEconomicCalendarTool {
+	return &GetEconomicCalendarTool{src: s}
+}
+
+func (*GetEconomicCalendarTool) Name() string { return "get_economic_calendar" }
+
+func (*GetEconomicCalendarTool) Description() string {
+	return "Get economic events (FOMC, CPI, employment, earnings) within a time range. Use for news or macro context questions."
+}
+
+func (*GetEconomicCalendarTool) InputSchema() string { return SchemaGetEconomicCalendar }
+
+type getCalendarParams struct {
+	Start     string `json:"start"`
+	End       string `json:"end"`
+	ImpactMin string `json:"impact_min"`
+}
+
+var impactOrder = map[string]int{"low": 0, "medium": 1, "high": 2}
+
+func (t *GetEconomicCalendarTool) Call(_ context.Context, raw json.RawMessage) (ToolResult, error) {
+	var p getCalendarParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return ToolResult{}, NewInvalidParams("invalid params: "+err.Error(), "")
+	}
+	start, err := time.Parse(time.RFC3339, p.Start)
+	if err != nil {
+		return ToolResult{}, NewInvalidParams("invalid 'start' (ISO 8601)", "")
+	}
+	end, err := time.Parse(time.RFC3339, p.End)
+	if err != nil {
+		return ToolResult{}, NewInvalidParams("invalid 'end' (ISO 8601)", "")
+	}
+	if !end.After(start) {
+		return ToolResult{}, NewInvalidParams("'end' must be after 'start'", "")
+	}
+	if p.ImpactMin == "" {
+		p.ImpactMin = "medium"
+	}
+	minOrd, ok := impactOrder[p.ImpactMin]
+	if !ok {
+		return ToolResult{}, NewInvalidParams("invalid impact_min — must be low/medium/high", "")
+	}
+
+	events, err := t.src.GetEconomicEvents(start, end)
+	if err != nil {
+		return ToolResult{}, &Error{Code: ErrCodeInternalError, Message: err.Error()}
+	}
+	var filtered []storage.EconomicEvent
+	for _, e := range events {
+		if impactOrder[e.Impact] >= minOrd {
+			filtered = append(filtered, e)
+		}
+	}
+
+	header := fmt.Sprintf("**Economic events · %s to %s · impact ≥ %s**\n\n",
+		start.UTC().Format("2006-01-02"), end.UTC().Format("2006-01-02"), p.ImpactMin)
+	if len(filtered) == 0 {
+		return TextResult(header + "_(no events)_"), nil
+	}
+	rows := make([][]string, 0, len(filtered))
+	for _, e := range filtered {
+		rows = append(rows, []string{
+			e.EventTime.UTC().Format("01-02 15:04"),
+			e.Event,
+			e.Impact,
+			DashIfEmpty(e.Actual),
+			DashIfEmpty(e.Forecast),
+			DashIfEmpty(e.Previous),
+		})
+	}
+	table := MarkdownTable(
+		[]string{"Time (UTC)", "Event", "Impact", "Actual", "Forecast", "Previous"},
+		rows,
+	)
+	return TextResult(header + table), nil
 }
 
 // GetSignalHistoryTool returns recent alert history for a symbol.

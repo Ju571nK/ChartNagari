@@ -62,9 +62,9 @@ func TextResult(text string) ToolResult {
 
 // Tool is the interface each registered tool implements.
 type Tool interface {
-	Name() string                                                      // e.g. "get_analysis"
-	Description() string                                               // LLM-facing description
-	InputSchema() string                                               // JSON schema (string, served verbatim)
+	Name() string        // e.g. "get_analysis"
+	Description() string // LLM-facing description
+	InputSchema() string // JSON schema (string, served verbatim)
 	Call(ctx context.Context, params json.RawMessage) (ToolResult, error)
 }
 

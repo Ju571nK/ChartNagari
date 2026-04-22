@@ -16,25 +16,26 @@ import (
 
 	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/api"
-	"github.com/Ju571nK/Chatter/internal/calendar"
-	"github.com/Ju571nK/Chatter/internal/history"
-	"github.com/Ju571nK/Chatter/internal/llm"
 	"github.com/Ju571nK/Chatter/internal/backtest"
+	"github.com/Ju571nK/Chatter/internal/calendar"
 	"github.com/Ju571nK/Chatter/internal/collector"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/execution"
+	"github.com/Ju571nK/Chatter/internal/history"
+	"github.com/Ju571nK/Chatter/internal/hub"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
+	"github.com/Ju571nK/Chatter/internal/llm"
+	"github.com/Ju571nK/Chatter/internal/mcp"
+	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
-	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
-	"github.com/Ju571nK/Chatter/internal/hub"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/paper"
-	"github.com/Ju571nK/Chatter/internal/pricealert"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
+	"github.com/Ju571nK/Chatter/internal/pricealert"
 	"github.com/Ju571nK/Chatter/internal/report"
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/internal/storage"
@@ -347,6 +348,17 @@ func main() {
 	apiSrv.WithExecutionDB(db.Conn())
 	apiSrv.WithExecutionState(execState)
 
+	// ── MCP 레지스트리 (로컬 LLM 통합) ────────────────────────────────────
+	mcpReg := mcp.NewRegistry()
+	watchSrc := &mcpWatchlistShim{cfg: cfg}
+	mcpReg.Register(mcp.NewListWatchlist(watchSrc))
+	mcpReg.Register(mcp.NewGetAnalysis(watchSrc, db))
+	mcpReg.Register(mcp.NewGetSignalHistory(db))
+	mcpReg.Register(mcp.NewGetOHLCV(db))
+	mcpReg.Register(mcp.NewGetEconomicCalendar(db))
+	apiSrv.WithMCPRegistry(mcpReg)
+	log.Info().Int("tools", 5).Msg("MCP registry wired")
+
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider
 	selectedProvider := cfg.LLMProvider
@@ -468,6 +480,11 @@ func main() {
 	time.Sleep(500 * time.Millisecond)
 	log.Info().Msg("Chart Nagari stopped")
 }
+
+// mcpWatchlistShim adapts *appconfig.Config to mcp.WatchlistSource.
+type mcpWatchlistShim struct{ cfg *appconfig.Config }
+
+func (s *mcpWatchlistShim) Watchlist() appconfig.WatchlistConfig { return s.cfg.Watchlist }
 
 // toEngineConfig converts the app-level RulesConfig (list format from YAML)
 // to the engine's map-based RuleConfig.

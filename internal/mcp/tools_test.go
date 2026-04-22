@@ -3,10 +3,13 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // fakeWatchlistSource is an in-memory WatchlistSource for tests.
@@ -68,5 +71,97 @@ func TestListWatchlist_MetaFields(t *testing.T) {
 	}
 	if tool.InputSchema() != SchemaListWatchlist {
 		t.Error("schema mismatch")
+	}
+}
+
+type fakeSignalSource struct {
+	byKey map[string][]models.Signal // key = "SYM:TF"
+	price float64
+}
+
+func (f *fakeSignalSource) GetSignalsFiltered(symbol, direction string, limit int) ([]models.Signal, error) {
+	var out []models.Signal
+	for k, sigs := range f.byKey {
+		if !strings.HasPrefix(k, symbol+":") {
+			continue
+		}
+		out = append(out, sigs...)
+	}
+	return out, nil
+}
+
+func (f *fakeSignalSource) LatestClose(symbol string) (float64, error) {
+	return f.price, nil
+}
+
+func TestGetAnalysis_RendersFourTimeframes(t *testing.T) {
+	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	src := &fakeSignalSource{
+		price: 58432.10,
+		byKey: map[string][]models.Signal{
+			"BTCUSDT:1W": {{Symbol: "BTCUSDT", Timeframe: "1W", Rule: "wyckoff.accumulation_phase_C", Direction: "LONG", Score: 12.0, CreatedAt: now}},
+			"BTCUSDT:1D": {{Symbol: "BTCUSDT", Timeframe: "1D", Rule: "ict.order_block_bullish", Direction: "LONG", Score: 14.5, CreatedAt: now, EntryPrice: 57800}},
+			"BTCUSDT:4H": {{Symbol: "BTCUSDT", Timeframe: "4H", Rule: "ta.macd_bullish_cross", Direction: "LONG", Score: 11.0, CreatedAt: now}},
+			// 1H intentionally missing
+		},
+	}
+	watchSrc := &fakeWatchlistSource{cfg: appconfig.WatchlistConfig{
+		Symbols: struct {
+			Crypto  []appconfig.SymbolEntry `yaml:"crypto"`
+			Stocks  []appconfig.SymbolEntry `yaml:"stocks"`
+			Indices []appconfig.SymbolEntry `yaml:"indices"`
+		}{
+			Crypto: []appconfig.SymbolEntry{{Symbol: "BTCUSDT", Enabled: true}},
+		},
+	}}
+
+	tool := NewGetAnalysis(watchSrc, src)
+	res, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT"}`))
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	text := res.Content[0].Text
+	for _, tf := range []string{"1W", "1D", "4H", "1H"} {
+		if !strings.Contains(text, "| "+tf+" |") {
+			t.Errorf("missing TF row %s in: %q", tf, text)
+		}
+	}
+	if !strings.Contains(text, "BTCUSDT") || !strings.Contains(text, "58432") {
+		t.Errorf("missing header: %q", text)
+	}
+	if !strings.Contains(text, "ict.order_block_bullish") {
+		t.Errorf("missing rule name: %q", text)
+	}
+}
+
+func TestGetAnalysis_UnknownSymbolReturnsError(t *testing.T) {
+	src := &fakeSignalSource{}
+	watchSrc := &fakeWatchlistSource{}
+	tool := NewGetAnalysis(watchSrc, src)
+	_, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"NOPE"}`))
+	if err == nil {
+		t.Fatal("expected error for unknown symbol")
+	}
+	var mcpErr *Error
+	if !errors.As(err, &mcpErr) {
+		t.Fatalf("want *Error, got %T", err)
+	}
+	if mcpErr.Code != ErrCodeInvalidParams {
+		t.Fatalf("want InvalidParams, got %d", mcpErr.Code)
+	}
+	if hint, ok := mcpErr.Data.(map[string]string); !ok || hint["hint"] == "" {
+		t.Errorf("missing hint in Data: %+v", mcpErr.Data)
+	}
+}
+
+func TestGetAnalysis_MissingSymbolParam(t *testing.T) {
+	tool := NewGetAnalysis(&fakeWatchlistSource{}, &fakeSignalSource{})
+	_, err := tool.Call(context.Background(), json.RawMessage(`{}`))
+	if err == nil {
+		t.Fatal("expected error for empty params")
+	}
+	var mcpErr *Error
+	if !errors.As(err, &mcpErr) || mcpErr.Code != ErrCodeInvalidParams {
+		t.Fatalf("want InvalidParams, got %v", err)
 	}
 }

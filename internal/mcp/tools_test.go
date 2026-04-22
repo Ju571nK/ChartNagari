@@ -165,3 +165,44 @@ func TestGetAnalysis_MissingSymbolParam(t *testing.T) {
 		t.Fatalf("want InvalidParams, got %v", err)
 	}
 }
+
+func TestGetSignalHistory_RendersTable(t *testing.T) {
+	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	src := &fakeSignalSource{
+		byKey: map[string][]models.Signal{
+			"BTCUSDT:1H": {
+				{Symbol: "BTCUSDT", Timeframe: "1H", Rule: "ict.order_block_bullish", Direction: "LONG", Score: 14.0, CreatedAt: now.Add(-48 * time.Hour)},
+				{Symbol: "BTCUSDT", Timeframe: "4H", Rule: "wyckoff.distribution_phase_D", Direction: "SHORT", Score: 11.5, CreatedAt: now.Add(-72 * time.Hour)},
+			},
+		},
+	}
+	tool := NewGetSignalHistory(src)
+	res, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT"}`))
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	text := res.Content[0].Text
+	if !strings.Contains(text, "ict.order_block_bullish") {
+		t.Errorf("missing rule: %q", text)
+	}
+	if !strings.Contains(text, "BTCUSDT") {
+		t.Errorf("missing symbol: %q", text)
+	}
+}
+
+func TestGetSignalHistory_NoAlerts(t *testing.T) {
+	tool := NewGetSignalHistory(&fakeSignalSource{})
+	res, _ := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT"}`))
+	if !strings.Contains(res.Content[0].Text, "0 alerts") {
+		t.Errorf("no-alerts summary missing: %q", res.Content[0].Text)
+	}
+}
+
+func TestGetSignalHistory_LimitClamp(t *testing.T) {
+	tool := NewGetSignalHistory(&fakeSignalSource{})
+	res, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT","limit":9999}`))
+	if err != nil {
+		t.Fatalf("limit clamp should silently cap, got err: %v", err)
+	}
+	_ = res
+}

@@ -255,3 +255,90 @@ func dedupTopN(nums []float64, n int) []float64 {
 	}
 	return out
 }
+
+// GetSignalHistoryTool returns recent alert history for a symbol.
+type GetSignalHistoryTool struct {
+	signal SignalSource
+}
+
+func NewGetSignalHistory(s SignalSource) *GetSignalHistoryTool {
+	return &GetSignalHistoryTool{signal: s}
+}
+
+func (*GetSignalHistoryTool) Name() string { return "get_signal_history" }
+
+func (*GetSignalHistoryTool) Description() string {
+	return "Get recent alert history for a symbol — rules that fired above the alert threshold, newest first. Default: last 7 days, 50 items. Use for 'what alerts did X trigger recently'."
+}
+
+func (*GetSignalHistoryTool) InputSchema() string { return SchemaGetSignalHistory }
+
+type getSignalHistoryParams struct {
+	Symbol string `json:"symbol"`
+	Since  string `json:"since"`
+	Limit  int    `json:"limit"`
+}
+
+const (
+	defaultHistoryLimit  = 50
+	maxHistoryLimit      = 200
+	defaultHistoryWindow = 7 * 24 * time.Hour
+)
+
+func (t *GetSignalHistoryTool) Call(_ context.Context, raw json.RawMessage) (ToolResult, error) {
+	var p getSignalHistoryParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return ToolResult{}, NewInvalidParams("invalid params: "+err.Error(), "")
+	}
+	if p.Symbol == "" {
+		return ToolResult{}, NewInvalidParams("symbol required", "Provide {\"symbol\":\"BTCUSDT\"}.")
+	}
+	if p.Limit <= 0 {
+		p.Limit = defaultHistoryLimit
+	}
+	if p.Limit > maxHistoryLimit {
+		p.Limit = maxHistoryLimit
+	}
+
+	since := time.Now().Add(-defaultHistoryWindow)
+	if p.Since != "" {
+		parsed, err := time.Parse(time.RFC3339, p.Since)
+		if err != nil {
+			return ToolResult{}, NewInvalidParams("invalid 'since' format — want ISO 8601", "")
+		}
+		since = parsed
+	}
+
+	raw2, err := t.signal.GetSignalsFiltered(p.Symbol, "", p.Limit*2)
+	if err != nil {
+		return ToolResult{}, &Error{Code: ErrCodeInternalError, Message: err.Error()}
+	}
+	var filtered []models.Signal
+	for _, s := range raw2 {
+		if s.CreatedAt.Before(since) {
+			continue
+		}
+		filtered = append(filtered, s)
+		if len(filtered) >= p.Limit {
+			break
+		}
+	}
+
+	header := fmt.Sprintf("**%s · %d alerts in window**\n\n", p.Symbol, len(filtered))
+	if len(filtered) == 0 {
+		return TextResult(header + "_(no recent alerts)_"), nil
+	}
+
+	rows := make([][]string, 0, len(filtered))
+	for _, s := range filtered {
+		rows = append(rows, []string{
+			s.CreatedAt.UTC().Format("2006-01-02 15:04"),
+			s.Timeframe,
+			s.Direction,
+			fmt.Sprintf("%.1f", s.Score),
+			s.Rule,
+		})
+	}
+	table := MarkdownTable([]string{"Time (UTC)", "TF", "Dir", "Score", "Rule"}, rows)
+	return TextResult(header + table), nil
+}

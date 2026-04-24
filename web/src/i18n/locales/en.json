@@ -426,5 +426,11 @@
   "mcp.client_codex": "Codex CLI",
   "mcp.copy": "Copy",
   "mcp.copied": "Copied!",
-  "mcp.token_masked": "{{mask}}"
+  "mcp.token_masked": "{{mask}}",
+  "settings.section_general": "General",
+  "settings.section_data": "Data Sources",
+  "settings.section_alerts": "Alerts",
+  "settings.section_ai": "AI / LLM",
+  "settings.section_mcp": "MCP",
+  "settings.section_advanced": "Advanced"
 }

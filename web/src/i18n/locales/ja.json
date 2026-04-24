@@ -426,5 +426,11 @@
   "mcp.client_codex": "Codex CLI",
   "mcp.copy": "コピー",
   "mcp.copied": "コピーしました!",
-  "mcp.token_masked": "{{mask}}"
+  "mcp.token_masked": "{{mask}}",
+  "settings.section_general": "一般",
+  "settings.section_data": "データソース",
+  "settings.section_alerts": "アラート",
+  "settings.section_ai": "AI / LLM",
+  "settings.section_mcp": "MCP",
+  "settings.section_advanced": "高度な設定"
 }

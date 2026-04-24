@@ -426,5 +426,11 @@
   "mcp.client_codex": "Codex CLI",
   "mcp.copy": "복사",
   "mcp.copied": "복사됨!",
-  "mcp.token_masked": "{{mask}}"
+  "mcp.token_masked": "{{mask}}",
+  "settings.section_general": "일반",
+  "settings.section_data": "데이터 소스",
+  "settings.section_alerts": "알림",
+  "settings.section_ai": "AI / LLM",
+  "settings.section_mcp": "MCP",
+  "settings.section_advanced": "고급"
 }

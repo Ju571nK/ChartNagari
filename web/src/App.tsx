@@ -3220,19 +3220,29 @@ interface EnvField {
   type: 'text' | 'password' | 'select'
   options?: string[]
 }
-interface EnvGroup { label: string; fields: EnvField[] }
+type SettingsSection = 'general' | 'data' | 'alerts' | 'ai' | 'mcp' | 'advanced'
+interface EnvGroup { label: string; tab: SettingsSection; fields: EnvField[] }
 
 const ENV_GROUPS: EnvGroup[] = [
   {
+    tab: 'general',
     label: 'Server',
     fields: [
-      { key: 'ENV',                  label: 'Environment',            type: 'select', options: ['development', 'production'] },
-      { key: 'SERVER_PORT',          label: 'Server Port',            type: 'text' },
-      { key: 'LOG_LEVEL',            label: 'Log Level',              type: 'select', options: ['debug', 'info', 'warn', 'error'] },
+      { key: 'ENV',           label: 'Environment', type: 'select', options: ['development', 'production'] },
+      { key: 'SERVER_PORT',   label: 'Server Port', type: 'text' },
+      { key: 'LOG_LEVEL',     label: 'Log Level',   type: 'select', options: ['debug', 'info', 'warn', 'error'] },
+      { key: 'API_TOKEN',     label: 'API Token (MCP 인증용)', type: 'password' },
+    ],
+  },
+  {
+    tab: 'alerts',
+    label: 'Alert Timing',
+    fields: [
       { key: 'ALERT_COOLDOWN_HOURS', label: 'Alert Cooldown (hours)', type: 'text' },
     ],
   },
   {
+    tab: 'alerts',
     label: 'Notifications',
     fields: [
       { key: 'TELEGRAM_BOT_TOKEN',  label: 'Telegram Bot Token',   type: 'password' },
@@ -3241,7 +3251,8 @@ const ENV_GROUPS: EnvGroup[] = [
     ],
   },
   {
-    label: 'Data Sources',
+    tab: 'data',
+    label: 'Stocks / Crypto',
     fields: [
       { key: 'TIINGO_API_KEY',       label: 'Tiingo API Key',              type: 'password' },
       { key: 'TIINGO_POLL_INTERVAL', label: 'Tiingo Poll Interval (sec)',  type: 'text' },
@@ -3252,17 +3263,19 @@ const ENV_GROUPS: EnvGroup[] = [
     ],
   },
   {
+    tab: 'data',
     label: 'Economic Calendar (둘 중 하나만 설정)',
     fields: [
-      { key: 'FMP_API_KEY',             label: 'FMP API Key (무료 — 권장)',           type: 'password' },
-      { key: 'FINNHUB_API_KEY',         label: 'Finnhub API Key (유료 플랜 필요)',     type: 'password' },
-      { key: 'CALENDAR_ALERT_WINDOW',   label: '사전 알림 (분, 기본 30)',              type: 'text' },
+      { key: 'FMP_API_KEY',           label: 'FMP API Key (무료 — 권장)',          type: 'password' },
+      { key: 'FINNHUB_API_KEY',       label: 'Finnhub API Key (유료 플랜 필요)',    type: 'password' },
+      { key: 'CALENDAR_ALERT_WINDOW', label: '사전 알림 (분, 기본 30)',             type: 'text' },
     ],
   },
   {
+    tab: 'ai',
     label: 'AI / LLM',
     fields: [
-      { key: 'LLM_PROVIDER',     label: 'LLM Provider',    type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini'] },
+      { key: 'LLM_PROVIDER',      label: 'LLM Provider',      type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini'] },
       { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', type: 'password' },
       { key: 'OPENAI_API_KEY',    label: 'OpenAI API Key',    type: 'password' },
       { key: 'GROQ_API_KEY',      label: 'Groq API Key',      type: 'password' },
@@ -3281,6 +3294,7 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [section, setSection] = useState<SettingsSection>('general')
 
   const loadEnv = useCallback(() => {
     setLoading(true)
@@ -3318,7 +3332,6 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
         const k = field.key
         if (k in edits) {
           const v = edits[k]
-          // blank password field + was previously set → keep existing
           payload[k] = (v === '' && field.type === 'password' && env[k] === ENV_SENTINEL)
             ? ENV_SENTINEL
             : v
@@ -3345,107 +3358,138 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
 
   if (loading) return <div className="section"><p>Loading…</p></div>
 
+  const sections: Array<{ id: SettingsSection; label: string }> = [
+    { id: 'general',  label: t('settings.section_general') },
+    { id: 'data',     label: t('settings.section_data') },
+    { id: 'alerts',   label: t('settings.section_alerts') },
+    { id: 'ai',       label: t('settings.section_ai') },
+    { id: 'mcp',      label: t('settings.section_mcp') },
+    { id: 'advanced', label: t('settings.section_advanced') },
+  ]
+
+  const groupsForSection = ENV_GROUPS.filter(g => g.tab === section)
+  const showSaveButton = groupsForSection.length > 0
+
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    padding: '8px 14px',
+    fontSize: '0.82rem',
+    fontWeight: active ? 600 : 400,
+    border: '1px solid rgba(91,146,121,0.25)',
+    borderBottom: active ? '2px solid var(--accent)' : '1px solid rgba(91,146,121,0.25)',
+    background: active ? 'rgba(91,146,121,0.1)' : 'transparent',
+    color: active ? 'var(--text)' : 'var(--muted)',
+    cursor: 'pointer',
+    borderRadius: '4px 4px 0 0',
+  })
+
   return (
     <div className="section">
-      {/* UI Mode Toggle */}
-      <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(91,146,121,0.2)' }}>
-        <h3 style={{
-          fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
-          color: 'var(--accent)', marginBottom: '0.75rem',
-        }}>
-          {t('ui_mode')}
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
-            <input
-              type="radio"
-              name="ui_mode"
-              checked={uiMode === 'beginner'}
-              onChange={() => onSetUiMode('beginner')}
-              style={{ accentColor: 'var(--green)' }}
-            />
-            <span style={{ fontWeight: uiMode === 'beginner' ? 600 : 400 }}>{t('mode_beginner')}</span>
-            <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}> — {t('mode_beginner_desc')}</span>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
-            <input
-              type="radio"
-              name="ui_mode"
-              checked={uiMode === 'expert'}
-              onChange={() => onSetUiMode('expert')}
-              style={{ accentColor: 'var(--green)' }}
-            />
-            <span style={{ fontWeight: uiMode === 'expert' ? 600 : 400 }}>{t('mode_expert')}</span>
-            <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}> — {t('mode_expert_desc')}</span>
-          </label>
-        </div>
+      {/* 서브탭 네비 */}
+      <div role="tablist" aria-label="Settings sections" style={{
+        display: 'flex', gap: 4, marginBottom: '1.5rem', flexWrap: 'wrap',
+        borderBottom: '1px solid rgba(91,146,121,0.2)',
+      }}>
+        {sections.map(s => (
+          <button
+            key={s.id}
+            role="tab"
+            aria-selected={section === s.id}
+            type="button"
+            onClick={() => setSection(s.id)}
+            style={tabBtnStyle(section === s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
 
-      <h2>Environment Settings</h2>
-      <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
-        Changes are written to <code>.env</code>. <strong>Restart the server</strong> to apply.
-      </p>
-      {error && (
-        <div className="save-success" style={{ background: 'rgba(255,68,68,0.12)', color: '#ff6b6b', marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
-      {saved && (
-        <div className="save-success" style={{ marginBottom: '1rem' }}>
-          Saved — restart the server to apply changes.
-        </div>
-      )}
-      {ENV_GROUPS.map(group => (
-        <div key={group.label} style={{ marginBottom: '2rem' }}>
+      {/* General 탭 전용: UI Mode */}
+      {section === 'general' && (
+        <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(91,146,121,0.2)' }}>
           <h3 style={{
             fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
             color: 'var(--accent)', marginBottom: '0.75rem',
-            borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
-          }}>
-            {group.label}
-          </h3>
-          {group.fields.map(field => (
-            <div key={field.key} className="report-field">
-              <label style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
-                {field.label}
-              </label>
-              {field.type === 'select' ? (
-                <select
-                  className="report-input"
-                  value={getValue(field.key)}
-                  onChange={e => handleChange(field.key, e.target.value)}
-                >
-                  {(field.options ?? []).map(o => (
-                    <option key={o} value={o}>{o || '— auto —'}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  className="report-input"
-                  type={field.type}
-                  value={getValue(field.key)}
-                  placeholder={getPlaceholder(field.key, field.type)}
-                  onChange={e => handleChange(field.key, e.target.value)}
-                  autoComplete="off"
-                />
-              )}
+          }}>{t('ui_mode')}</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
+              <input type="radio" name="ui_mode" checked={uiMode === 'beginner'}
+                onChange={() => onSetUiMode('beginner')} style={{ accentColor: 'var(--green)' }} />
+              <span style={{ fontWeight: uiMode === 'beginner' ? 600 : 400 }}>{t('mode_beginner')}</span>
+              <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}> — {t('mode_beginner_desc')}</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
+              <input type="radio" name="ui_mode" checked={uiMode === 'expert'}
+                onChange={() => onSetUiMode('expert')} style={{ accentColor: 'var(--green)' }} />
+              <span style={{ fontWeight: uiMode === 'expert' ? 600 : 400 }}>{t('mode_expert')}</span>
+              <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}> — {t('mode_expert_desc')}</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* env 필드 그룹 (general/data/alerts/ai) */}
+      {showSaveButton && (
+        <>
+          <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+            Changes are written to <code>config/settings.yaml</code>. <strong>Restart the server</strong> to apply.
+          </p>
+          {error && (
+            <div className="save-success" style={{ background: 'rgba(255,68,68,0.12)', color: '#ff6b6b', marginBottom: '1rem' }}>
+              {error}
+            </div>
+          )}
+          {saved && (
+            <div className="save-success" style={{ marginBottom: '1rem' }}>
+              Saved — restart the server to apply changes.
+            </div>
+          )}
+          {groupsForSection.map(group => (
+            <div key={group.label} style={{ marginBottom: '2rem' }}>
+              <h3 style={{
+                fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+                color: 'var(--accent)', marginBottom: '0.75rem',
+                borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
+              }}>{group.label}</h3>
+              {group.fields.map(field => (
+                <div key={field.key} className="report-field">
+                  <label style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
+                    {field.label}
+                  </label>
+                  {field.type === 'select' ? (
+                    <select className="report-input" value={getValue(field.key)}
+                      onChange={e => handleChange(field.key, e.target.value)}>
+                      {(field.options ?? []).map(o => (
+                        <option key={o} value={o}>{o || '— auto —'}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input className="report-input" type={field.type} value={getValue(field.key)}
+                      placeholder={getPlaceholder(field.key, field.type)}
+                      onChange={e => handleChange(field.key, e.target.value)} autoComplete="off" />
+                  )}
+                </div>
+              ))}
             </div>
           ))}
-        </div>
-      ))}
-      <button className="run-btn" onClick={handleSave} disabled={saving}>
-        {saving ? 'Saving…' : 'Save to .env'}
-      </button>
+          <button className="run-btn" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </>
+      )}
 
-      <MCPSettings
-        apiToken={(edits['API_TOKEN'] || env['API_TOKEN'] || '') === ENV_SENTINEL
-          ? '<YOUR_API_TOKEN>'
-          : (edits['API_TOKEN'] || env['API_TOKEN'] || '<YOUR_API_TOKEN>')}
-        endpointURL={`${window.location.protocol}//${window.location.host}/api/mcp`}
-        toolNames={['list_watchlist','get_analysis','get_signal_history','get_ohlcv','get_economic_calendar']}
-      />
+      {/* MCP 탭 */}
+      {section === 'mcp' && (
+        <MCPSettings
+          apiToken={(edits['API_TOKEN'] || env['API_TOKEN'] || '') === ENV_SENTINEL
+            ? '<YOUR_API_TOKEN>'
+            : (edits['API_TOKEN'] || env['API_TOKEN'] || '<YOUR_API_TOKEN>')}
+          endpointURL={`${window.location.protocol}//${window.location.host}/api/mcp`}
+          toolNames={['list_watchlist','get_analysis','get_signal_history','get_ohlcv','get_economic_calendar']}
+        />
+      )}
 
-      <DataManagementSection />
+      {/* Advanced 탭 */}
+      {section === 'advanced' && <DataManagementSection />}
     </div>
   )
 }

@@ -115,6 +115,7 @@ type Pipeline struct {
 
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via SetSymbolProfiles
 	tuningHolder  *appconfig.SignalTuningHolder  // optional; set via SetSignalTuningHolder
+	overrideStore appconfig.OverrideGetter        // optional; set via SetOverrideStore. nil → profile-only resolution
 
 	forwardReturnDB   ForwardReturnDB          // optional; set via SetForwardReturnStore
 	forwardReturnOHLCV ForwardReturnOHLCVReader // optional; set via SetForwardReturnStore
@@ -184,6 +185,12 @@ func (p *Pipeline) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 // SetSymbolProfiles wires an optional per-symbol profile holder for rule filtering.
 func (p *Pipeline) SetSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	p.profileHolder = h
+}
+
+// SetOverrideStore wires an optional per-symbol override store for hot-reload alert config.
+// When set, EffectiveAlertConfig merges profile defaults with per-symbol DB rows on each tick.
+func (p *Pipeline) SetOverrideStore(store appconfig.OverrideGetter) {
+	p.overrideStore = store
 }
 
 // SetSignalTuningHolder wires an optional live-updated signal tuning configuration holder.
@@ -313,12 +320,43 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 	signals := p.eng.Run(analysisCtx)
 
-	// Profile filter: remove signals not allowed by the symbol's profile.
+	// Effective alert config (profile + per-symbol override).
+	effCfg := appconfig.EffectiveAlertConfig(sym, p.profileHolder, p.overrideStore)
+
+	// Profile/override filter: remove signals not allowed by methodology/rule.
 	if p.profileHolder != nil {
 		beforeProfile := len(signals)
 		signals = filterByProfile(signals, p.profileHolder, sym)
 		if filtered := beforeProfile - len(signals); filtered > 0 {
 			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile filter removed disallowed signals")
+		}
+	}
+
+	// Timeframe filter (override-driven; empty list = allow all).
+	if len(effCfg.Timeframes) > 0 {
+		beforeTF := len(signals)
+		signals = filterByTimeframe(signals, effCfg.Timeframes)
+		if filtered := beforeTF - len(signals); filtered > 0 {
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Strs("allowed_tf", effCfg.Timeframes).Msg("timeframe filter removed signals")
+		}
+	}
+
+	// Override-aware allowed_rules filter (only when override sets a non-nil list).
+	if p.overrideHasRulesOverride(sym) && len(effCfg.AllowedRules) > 0 {
+		beforeRules := len(signals)
+		allowedSet := make(map[string]struct{}, len(effCfg.AllowedRules))
+		for _, r := range effCfg.AllowedRules {
+			allowedSet[r] = struct{}{}
+		}
+		kept := signals[:0]
+		for _, sig := range signals {
+			if _, ok := allowedSet[sig.Rule]; ok {
+				kept = append(kept, sig)
+			}
+		}
+		signals = kept
+		if filtered := beforeRules - len(signals); filtered > 0 {
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("override allowed_rules filter removed signals")
 		}
 	}
 
@@ -724,4 +762,19 @@ func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, i
 		sig.TP = entry - atr*tpMult
 		sig.SL = entry + atr*slMult
 	}
+}
+
+// overrideHasRulesOverride reports whether the symbol has an explicit
+// allowed_rules override row in the DB. Used so the override-driven
+// rules filter does not double-fire when the profile alone defines the list
+// (filterByProfile already handles that).
+func (p *Pipeline) overrideHasRulesOverride(symbol string) bool {
+	if p.overrideStore == nil {
+		return false
+	}
+	ov, err := p.overrideStore.Get(symbol)
+	if err != nil || ov == nil {
+		return false
+	}
+	return ov.AllowedRules != nil
 }

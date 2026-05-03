@@ -332,6 +332,29 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
+	// Score threshold gate (per-symbol effective; 0 = no minimum).
+	// Note: this filters at pipeline level. The Notifier currently also has
+	// a global ScoreThreshold check; the per-symbol value here can be
+	// stricter than the global, but the global remains a floor.
+	if effCfg.ScoreThreshold > 0 {
+		beforeScore := len(signals)
+		kept := signals[:0]
+		for _, sig := range signals {
+			if sig.Score >= effCfg.ScoreThreshold {
+				kept = append(kept, sig)
+			}
+		}
+		signals = kept
+		if filtered := beforeScore - len(signals); filtered > 0 {
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Float64("threshold", effCfg.ScoreThreshold).Msg("override score threshold filter removed signals")
+		}
+	}
+
+	// TODO(per-symbol-overrides): per-symbol CooldownHours and
+	// AlertLimitPerDay overrides are not yet consumed. They live in
+	// notifier/cooldown.go's global tracker and need a refactor to be
+	// per-symbol-aware. Spec §4.3 requires them; tracked as follow-up.
+
 	// Timeframe filter (override-driven; empty list = allow all).
 	if len(effCfg.Timeframes) > 0 {
 		beforeTF := len(signals)
@@ -342,7 +365,7 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 
 	// Override-aware allowed_rules filter (only when override sets a non-nil list).
-	if p.overrideHasRulesOverride(sym) && len(effCfg.AllowedRules) > 0 {
+	if len(effCfg.AllowedRules) > 0 && p.overrideHasRulesOverride(sym) {
 		beforeRules := len(signals)
 		allowedSet := make(map[string]struct{}, len(effCfg.AllowedRules))
 		for _, r := range effCfg.AllowedRules {
@@ -773,7 +796,11 @@ func (p *Pipeline) overrideHasRulesOverride(symbol string) bool {
 		return false
 	}
 	ov, err := p.overrideStore.Get(symbol)
-	if err != nil || ov == nil {
+	if err != nil {
+		p.log.Warn().Err(err).Str("symbol", symbol).Msg("override get failed during rules-filter probe")
+		return false
+	}
+	if ov == nil {
 		return false
 	}
 	return ov.AllowedRules != nil

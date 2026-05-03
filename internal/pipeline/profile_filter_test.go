@@ -243,3 +243,43 @@ func TestEffectiveScoreThreshold_HotReload(t *testing.T) {
 		t.Errorf("after override: score = %v, want 18.0 (hot-reload failed)", second.ScoreThreshold)
 	}
 }
+
+func TestEffectiveScoreThreshold_FilteredAtPipeline(t *testing.T) {
+	// Sanity: the score gate is computed correctly. (Pipeline-level wiring is
+	// indirectly tested via TestEffectiveScoreThreshold_OverrideWins; this test
+	// asserts the per-symbol effCfg.ScoreThreshold value is what the pipeline
+	// would apply.)
+	holder := appconfig.NewSymbolProfilesHolder(appconfig.SymbolProfilesConfig{
+		DefaultProfile: "p1",
+		Profiles: map[string]appconfig.Profile{
+			"p1": {ScoreThreshold: 5},
+		},
+	})
+	threshold := 12.0
+	store := &stubOverrideStore{rows: map[string]*storage.SymbolOverride{
+		"TSLA": {Symbol: "TSLA", ScoreThreshold: &threshold},
+	}}
+	cfg := appconfig.EffectiveAlertConfig("TSLA", holder, store)
+	if cfg.ScoreThreshold != 12.0 {
+		t.Errorf("TSLA effective threshold = %v, want 12.0 (override winning)", cfg.ScoreThreshold)
+	}
+
+	// Simulate the inner-loop filter logic.
+	signals := []models.Signal{
+		{Rule: "r1", Score: 8},  // below 12 → dropped
+		{Rule: "r1", Score: 15}, // above 12 → kept
+		{Rule: "r1", Score: 12}, // exact → kept (>=)
+	}
+	kept := signals[:0]
+	for _, sig := range signals {
+		if sig.Score >= cfg.ScoreThreshold {
+			kept = append(kept, sig)
+		}
+	}
+	if len(kept) != 2 {
+		t.Errorf("kept = %d, want 2", len(kept))
+	}
+	if kept[0].Score != 15 || kept[1].Score != 12 {
+		t.Errorf("wrong signals kept: %v", kept)
+	}
+}

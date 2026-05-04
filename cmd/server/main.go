@@ -70,6 +70,8 @@ func main() {
 	defer db.Close()
 	log.Info().Str("path", cfg.DBPath).Msg("SQLite connected")
 
+	overrideStore := storage.NewSymbolOverrideStore(db)
+
 	// ── 컨텍스트 (SIGINT/SIGTERM 감지) ───────────────────────────────
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -286,6 +288,7 @@ func main() {
 		pipe.SetBroadcaster(wsHub)
 		pipe.SetAlertConfigHolder(alertHolder)
 		pipe.SetSymbolProfiles(profileHolder)
+		pipe.SetOverrideStore(overrideStore)
 		pipe.SetSignalTuningHolder(tuningHolder)
 		pipe.SetForwardReturnStore(db, db)
 		pipe.SetCryptoSymbols(cryptoSymbols)

@@ -345,6 +345,12 @@ func main() {
 	apiSrv.WithDemoEngine(eng)
 	apiSrv.WithSymbolProfiles(profileHolder)
 	apiSrv.WithSignalTuningHolder(tuningHolder)
+	apiSrv.WithOverrideStore(overrideStore)
+	validRules := make(map[string]struct{}, len(cfg.Rules.Rules))
+	for _, r := range cfg.Rules.Rules {
+		validRules[r.Name] = struct{}{}
+	}
+	apiSrv.WithValidRuleNames(validRules)
 	apiSrv.WithExecutionHolder(execHolder, execPath)
 	apiSrv.WithExecutionDispatcher(dispatcher)
 	apiSrv.WithExecutionFeedback(feedbackIdem)

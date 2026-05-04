@@ -197,6 +197,8 @@ type Server struct {
 	demoEngine         *engine.RuleEngine              // optional; set via WithDemoEngine for /api/demo/scan
 	profileHolder      *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
 	signalTuningHolder *appconfig.SignalTuningHolder   // optional; set via WithSignalTuningHolder
+	overrideStore      *storage.SymbolOverrideStore    // optional; set via WithOverrideStore
+	validRuleNames     map[string]struct{}              // optional; set via WithValidRuleNames
 	dbPath             string                          // path to SQLite DB file; set via WithDBPath
 	startTime          time.Time                       // server start timestamp for uptime
 	dataSources        []string                        // active data sources (e.g. ["Binance","Tiingo"])
@@ -366,6 +368,17 @@ func (s *Server) WithSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	s.profileHolder = h
 }
 
+// WithOverrideStore wires the per-symbol alert override store.
+func (s *Server) WithOverrideStore(store *storage.SymbolOverrideStore) {
+	s.overrideStore = store
+}
+
+// WithValidRuleNames sets the closed set of known rule names used to validate
+// PUT /api/symbol-overrides/{symbol} requests.
+func (s *Server) WithValidRuleNames(names map[string]struct{}) {
+	s.validRuleNames = names
+}
+
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
 // WithDemoEngine injects the rule engine for the demo scan endpoint.
 func (s *Server) WithDemoEngine(e *engine.RuleEngine) {
@@ -467,6 +480,13 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/profiles", s.getProfiles)
 		mux.HandleFunc("GET /api/profiles/{symbol}", s.getSymbolProfile)
 		mux.HandleFunc("PUT /api/profiles/{symbol}", s.updateSymbolProfile)
+	}
+
+	// Per-symbol alert overrides
+	if s.overrideStore != nil {
+		mux.HandleFunc("GET /api/symbol-overrides/{symbol}", s.getSymbolOverride)
+		mux.HandleFunc("PUT /api/symbol-overrides/{symbol}", s.putSymbolOverride)
+		mux.HandleFunc("DELETE /api/symbol-overrides/{symbol}", s.deleteSymbolOverride)
 	}
 
 	// Economic calendar

@@ -72,7 +72,7 @@ export function SymbolOverrideEditor({ symbol, profile, apiToken }: Props) {
   // Initial GET — populate state from current override row.
   useEffect(() => {
     let cancelled = false
-    apiFetch<EffectiveResponse>(`/api/symbol-overrides/${encodeURIComponent(symbol)}`)
+    apiFetch<EffectiveResponse>(`/api/symbol-overrides/${encodeURIComponent(symbol)}`, undefined, apiToken)
       .then(eff => {
         if (cancelled) return
         setState({
@@ -85,7 +85,7 @@ export function SymbolOverrideEditor({ symbol, profile, apiToken }: Props) {
       })
       .catch(() => { /* leave defaults */ })
     return () => { cancelled = true }
-  }, [symbol])
+  }, [symbol, apiToken])
 
   // Schedule a debounced PUT whenever state changes.
   const scheduleSave = useCallback((next: OverrideState) => {
@@ -111,21 +111,17 @@ export function SymbolOverrideEditor({ symbol, profile, apiToken }: Props) {
   }, [symbol, apiToken])
 
   // Flush on unmount with pending changes.
+  // Uses fetch + keepalive (NOT sendBeacon — which forces POST and would 405 against our PUT route).
   useEffect(() => () => {
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current)
-      const payload = pendingFlush.current
-      if (payload) {
-        const url = `/api/symbol-overrides/${encodeURIComponent(symbol)}`
-        const body = JSON.stringify(payload)
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))
-        } else {
-          fetch(url, { method: 'PUT', body, headers: { 'Content-Type': 'application/json' } })
-        }
-      }
-    }
-  }, [symbol])
+    // Tighten guard: require BOTH a live timer AND a pending payload.
+    if (!debounceTimer.current || !pendingFlush.current) return
+    clearTimeout(debounceTimer.current)
+    const url = `/api/symbol-overrides/${encodeURIComponent(symbol)}`
+    const body = JSON.stringify(pendingFlush.current)
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (apiToken) headers['Authorization'] = `Bearer ${apiToken}`
+    fetch(url, { method: 'PUT', body, headers, keepalive: true }).catch(() => { /* best-effort */ })
+  }, [symbol, apiToken])
 
   const updateField = <K extends keyof OverrideState>(key: K, value: OverrideState[K]) => {
     setState(prev => {

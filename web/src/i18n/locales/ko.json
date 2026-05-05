@@ -432,5 +432,19 @@
   "settings.section_alerts": "알림",
   "settings.section_ai": "AI / LLM",
   "settings.section_mcp": "MCP",
-  "settings.section_advanced": "고급"
+  "settings.section_advanced": "고급",
+  "override": {
+    "score_threshold": "점수 임계값",
+    "cooldown_hours": "쿨다운 (시간)",
+    "alert_limit": "일일 알람 한도",
+    "timeframes": "타임프레임",
+    "allowed_rules": "사용 룰",
+    "profile_default": "프로파일 기본값",
+    "profile_default_value": "프로파일 기본값: {{value}}",
+    "reset": "초기화",
+    "reset_all": "프로파일로 전체 초기화",
+    "saved_ago": "{{n}}초 전 저장됨",
+    "save_failed": "저장 실패",
+    "tooltip_blank": "잘 모르겠으면 비워두세요 — 프로파일 기본값을 따릅니다."
+  }
 }

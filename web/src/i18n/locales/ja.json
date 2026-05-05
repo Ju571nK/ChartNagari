@@ -432,5 +432,19 @@
   "settings.section_alerts": "アラート",
   "settings.section_ai": "AI / LLM",
   "settings.section_mcp": "MCP",
-  "settings.section_advanced": "高度な設定"
+  "settings.section_advanced": "高度な設定",
+  "override": {
+    "score_threshold": "スコア閾値",
+    "cooldown_hours": "クールダウン (時間)",
+    "alert_limit": "1日あたりのアラート上限",
+    "timeframes": "タイムフレーム",
+    "allowed_rules": "使用ルール",
+    "profile_default": "プロファイルのデフォルト",
+    "profile_default_value": "プロファイルのデフォルト: {{value}}",
+    "reset": "リセット",
+    "reset_all": "プロファイルに全リセット",
+    "saved_ago": "{{n}}秒前に保存",
+    "save_failed": "保存に失敗",
+    "tooltip_blank": "わからない場合は空欄のままにしてください — プロファイルのデフォルトに従います。"
+  }
 }

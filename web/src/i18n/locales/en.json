@@ -432,5 +432,19 @@
   "settings.section_alerts": "Alerts",
   "settings.section_ai": "AI / LLM",
   "settings.section_mcp": "MCP",
-  "settings.section_advanced": "Advanced"
+  "settings.section_advanced": "Advanced",
+  "override": {
+    "score_threshold": "Score threshold",
+    "cooldown_hours": "Cooldown (hours)",
+    "alert_limit": "Daily alert limit",
+    "timeframes": "Timeframes",
+    "allowed_rules": "Allowed rules",
+    "profile_default": "Profile default",
+    "profile_default_value": "Profile default: {{value}}",
+    "reset": "Reset",
+    "reset_all": "Reset all to profile",
+    "saved_ago": "Saved ✓ {{n}}s ago",
+    "save_failed": "Save failed",
+    "tooltip_blank": "Leave blank to use the profile default."
+  }
 }

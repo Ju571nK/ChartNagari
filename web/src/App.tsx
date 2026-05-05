@@ -823,6 +823,8 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
   const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
   const [enabledOverlays, setEnabledOverlays] = useState<Set<OverlayType>>(loadOverlayToggles)
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false)
+  const [profilesForChart, setProfilesForChart] = useState<ProfileInfo[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -842,6 +844,10 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
       setSymbols(enabled)
       if (enabled.length > 0) setSymbol(enabled[0].symbol)
     }).catch(() => {/* silently ignore */})
+  }, [])
+
+  useEffect(() => {
+    apiFetch<ProfileInfo[]>('/profiles').then(setProfilesForChart).catch(() => {})
   }, [])
 
   const markets = useMemo(() => {
@@ -1242,6 +1248,20 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setOverrideModalOpen(true)}
+          title="Alert override"
+          aria-label="Open alert override settings"
+          style={{
+            background: 'transparent',
+            border: '1px solid rgba(91,146,121,0.3)',
+            borderRadius: 4,
+            padding: '2px 8px',
+            cursor: 'pointer',
+            color: 'var(--muted)',
+            marginLeft: 4,
+          }}
+        >⚙</button>
         <div className="tf-group">
           {TFS.map((t) => (
             <button
@@ -1378,6 +1398,52 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
           </div>
         </>
       )}
+      {overrideModalOpen && (() => {
+        const profileObj = profilesForChart[0] ?? null
+        if (!profileObj) return null
+        return (
+          <div
+            onClick={() => setOverrideModalOpen(false)}
+            role="presentation"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 100,
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Alert override: ${symbol}`}
+              style={{
+                background: 'var(--bg)',
+                border: '1px solid var(--mint)',
+                borderRadius: 8,
+                padding: 20,
+                minWidth: 400,
+                maxWidth: 600,
+                maxHeight: '80vh',
+                overflow: 'auto',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <strong>{symbol}</strong>
+                <button
+                  onClick={() => setOverrideModalOpen(false)}
+                  aria-label="Close"
+                  style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '1.2rem' }}
+                >✕</button>
+              </div>
+              <SymbolOverrideEditor symbol={symbol} profile={profileObj} />
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
+import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import ExecutionTab from './ExecutionTab'
 import MCPSettings from './MCPSettings'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
@@ -311,6 +312,7 @@ function SymbolsTab() {
   const [profiles, setProfiles] = useState<ProfileInfo[]>([])
   const [symbolProfiles, setSymbolProfiles] = useState<Record<string, string>>({})
   const [profileUpdating, setProfileUpdating] = useState<string | null>(null)
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
 
   const markets = useMemo(() => {
     const seen = new Set<string>()
@@ -477,32 +479,53 @@ function SymbolsTab() {
         </div>
       )}
       {filteredSymbols.map((sym) => (
-        <div key={sym.symbol} className="item">
-          <div>
-            <div className="item-name">
-              <span className={`badge badge-${sym.type}`}>{sym.type}</span>
-              {sym.symbol}
+        <div key={sym.symbol}>
+          <div className="item">
+            <div>
+              <div className="item-name">
+                <span className={`badge badge-${sym.type}`}>{sym.type}</span>
+                {sym.symbol}
+              </div>
+              <div className="item-meta">{sym.exchange}</div>
             </div>
-            <div className="item-meta">{sym.exchange}</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {profiles.length > 0 && (
-              <select
-                className="chart-select"
-                style={{ fontSize: '0.8rem', padding: '2px 6px', minWidth: 120 }}
-                value={symbolProfiles[sym.symbol] ?? ''}
-                onChange={(e) => changeProfile(sym.symbol, e.target.value)}
-                disabled={profileUpdating === sym.symbol}
-                title={t('profile')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {profiles.length > 0 && (
+                <select
+                  className="chart-select"
+                  style={{ fontSize: '0.8rem', padding: '2px 6px', minWidth: 120 }}
+                  value={symbolProfiles[sym.symbol] ?? ''}
+                  onChange={(e) => changeProfile(sym.symbol, e.target.value)}
+                  disabled={profileUpdating === sym.symbol}
+                  title={t('profile')}
+                >
+                  {profiles.map(p => (
+                    <option key={p.name} value={p.name}>{t(`profile_${p.name}`, p.name)}</option>
+                  ))}
+                </select>
+              )}
+              <Toggle checked={sym.enabled} onChange={(v) => toggle(sym, v)} />
+              <button
+                onClick={() => setExpandedSymbol(prev => prev === sym.symbol ? null : sym.symbol)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '1rem', padding: '0 4px' }}
+                title="Custom alert overrides"
+                aria-expanded={expandedSymbol === sym.symbol}
+                aria-label={expandedSymbol === sym.symbol ? 'Collapse override editor' : 'Expand override editor'}
               >
-                {profiles.map(p => (
-                  <option key={p.name} value={p.name}>{t(`profile_${p.name}`, p.name)}</option>
-                ))}
-              </select>
-            )}
-            <Toggle checked={sym.enabled} onChange={(v) => toggle(sym, v)} />
-            <button className="remove-btn" onClick={() => remove(sym)} title={t('delete')}>✕</button>
+                {expandedSymbol === sym.symbol ? '▼' : '▶'}
+              </button>
+              <button className="remove-btn" onClick={() => remove(sym)} title={t('delete')}>✕</button>
+            </div>
           </div>
+          {expandedSymbol === sym.symbol && (() => {
+            const profileName = symbolProfiles[sym.symbol] ?? ''
+            const profileObj = profiles.find(p => p.name === profileName)
+            if (!profileObj) return null
+            return (
+              <div style={{ padding: '8px 16px 16px' }}>
+                <SymbolOverrideEditor symbol={sym.symbol} profile={profileObj} />
+              </div>
+            )
+          })()}
         </div>
       ))}
       {filteredSymbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}

@@ -168,7 +168,9 @@ func TestGetAnalysis_MissingSymbolParam(t *testing.T) {
 }
 
 func TestGetSignalHistory_RendersTable(t *testing.T) {
-	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
+	// Use time.Now() so signals stay within the tool's 7-day window
+	// regardless of when the test runs. (Hardcoded 2026-04-22 was a time-bomb.)
+	now := time.Now().UTC()
 	src := &fakeSignalSource{
 		byKey: map[string][]models.Signal{
 			"BTCUSDT:1H": {

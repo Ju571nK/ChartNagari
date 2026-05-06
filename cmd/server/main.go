@@ -25,6 +25,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
+	"github.com/Ju571nK/Chatter/internal/ollama"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
@@ -347,6 +348,20 @@ func main() {
 	apiSrv.WithExecutionDB(db.Conn())
 	apiSrv.WithExecutionState(execState)
 
+	// Ollama detector (opt-in local LLM status endpoint).
+	ollamaDet := ollama.NewDetector(cfg.Ollama.Host, cfg.Ollama.Model, ollama.DefaultRuntime())
+	apiSrv.WithOllamaDetector(ollamaDet)
+	apiSrv.WithOllamaPullRunner(ollama.DefaultPullRunner())
+	apiSrv.WithOllamaStarter(ollama.DefaultStarter())
+	if cwd, err := os.Getwd(); err == nil {
+		apiSrv.WithOllamaRepoRoot(cwd)
+	}
+	// Tester is always wired (regardless of active LLM provider) so users
+	// can verify connectivity before switching to Ollama as their provider.
+	if cfg.Ollama.Host != "" && cfg.Ollama.Model != "" {
+		apiSrv.WithOllamaTester(llm.NewOllamaProvider(cfg.Ollama.Host, cfg.Ollama.Model, 5*time.Second))
+	}
+
 	// ── Multi-analyst AI 분석 엔진 ────────────────────────────────────
 	var llmProvider llm.Provider
 	selectedProvider := cfg.LLMProvider
@@ -384,6 +399,14 @@ func main() {
 			llmProvider = llm.NewGeminiProvider(cfg.Gemini.APIKey)
 			log.Info().Msg("Multi-analyst AI: using Google Gemini 1.5 Flash")
 		}
+	case "ollama":
+		if cfg.Ollama.Host != "" && cfg.Ollama.Model != "" {
+			llmProvider = llm.NewOllamaProvider(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.Timeout)
+			log.Info().
+				Str("host", cfg.Ollama.Host).
+				Str("model", cfg.Ollama.Model).
+				Msg("Multi-analyst AI: using Ollama (local)")
+		}
 	}
 	var director *analyst.Director
 	if llmProvider != nil {
@@ -392,7 +415,7 @@ func main() {
 		apiSrv.WithAnalystDirector(director)
 		log.Info().Str("provider", selectedProvider).Msg("Multi-analyst AI analysis enabled")
 	} else {
-		log.Info().Msg("Multi-analyst AI disabled (no API key — set ANTHROPIC/OPENAI/GROQ/GEMINI_API_KEY)")
+		log.Info().Msg("Multi-analyst AI disabled (no API key — set ANTHROPIC/OPENAI/GROQ/GEMINI_API_KEY or LLM_PROVIDER=ollama)")
 	}
 
 	// ── Telegram 봇 명령어 수신 (/analysis SYMBOL) ────────────────────

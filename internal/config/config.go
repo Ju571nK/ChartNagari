@@ -37,7 +37,8 @@ type Config struct {
 	OpenAI       OpenAIConfig
 	Groq         GroqConfig
 	Gemini       GeminiConfig
-	LLMProvider  string // "anthropic" | "openai" | "groq" | "gemini"
+	Ollama       OllamaConfig
+	LLMProvider  string // "anthropic" | "openai" | "groq" | "gemini" | "ollama"
 	Language     string // "en" | "ko" | "ja" (default "en")
 
 	Rules       RulesConfig
@@ -140,6 +141,12 @@ type GeminiConfig struct {
 	APIKey string
 }
 
+type OllamaConfig struct {
+	Host    string
+	Model   string
+	Timeout time.Duration
+}
+
 // RulesConfig mirrors config/rules.yaml structure.
 type RulesConfig struct {
 	Rules            []RuleEntry        `yaml:"rules"`
@@ -226,6 +233,11 @@ type SettingsYAML struct {
 	Gemini struct {
 		APIKey string `yaml:"api_key"`
 	} `yaml:"gemini"`
+	Ollama struct {
+		Host       string `yaml:"host"`
+		Model      string `yaml:"model"`
+		TimeoutSec int    `yaml:"timeout_sec"`
+	} `yaml:"ollama"`
 	AlphaVantage struct {
 		APIKey string `yaml:"api_key"`
 	} `yaml:"alphavantage"`
@@ -274,6 +286,9 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		"OPENAI_API_KEY":       s.OpenAI.APIKey,
 		"GROQ_API_KEY":         s.Groq.APIKey,
 		"GEMINI_API_KEY":       s.Gemini.APIKey,
+		"OLLAMA_HOST":          s.Ollama.Host,
+		"OLLAMA_MODEL":         s.Ollama.Model,
+		"OLLAMA_TIMEOUT_SEC":   itoa(s.Ollama.TimeoutSec),
 		"ALPHAVANTAGE_API_KEY": s.AlphaVantage.APIKey,
 		"FINNHUB_API_KEY":        s.Finnhub.APIKey,
 		"CALENDAR_ALERT_WINDOW":  itoa(s.Finnhub.AlertWindowMinutes),
@@ -324,6 +339,9 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.OpenAI.APIKey, "OPENAI_API_KEY")
 	set(&s.Groq.APIKey, "GROQ_API_KEY")
 	set(&s.Gemini.APIKey, "GEMINI_API_KEY")
+	set(&s.Ollama.Host, "OLLAMA_HOST")
+	set(&s.Ollama.Model, "OLLAMA_MODEL")
+	setInt(&s.Ollama.TimeoutSec, "OLLAMA_TIMEOUT_SEC")
 	set(&s.AlphaVantage.APIKey, "ALPHAVANTAGE_API_KEY")
 	set(&s.Finnhub.APIKey, "FINNHUB_API_KEY")
 	setInt(&s.Finnhub.AlertWindowMinutes, "CALENDAR_ALERT_WINDOW")
@@ -368,6 +386,11 @@ func Load(envFile, configDir string) (*Config, error) {
 
 	// Legacy fallback: load .env (sets env vars only if not already set by OS)
 	_ = godotenv.Load(envFile)
+
+	ollamaTimeout := getEnvOrDuration("OLLAMA_TIMEOUT_SEC", s.Ollama.TimeoutSec, 120, time.Second)
+	if ollamaTimeout <= 0 {
+		ollamaTimeout = 120 * time.Second
+	}
 
 	cfg := &Config{
 		Env:        getEnvOr("ENV", s.Server.Env, "development"),
@@ -425,6 +448,11 @@ func Load(envFile, configDir string) (*Config, error) {
 		},
 		Gemini: GeminiConfig{
 			APIKey: getEnvOr("GEMINI_API_KEY", s.Gemini.APIKey, ""),
+		},
+		Ollama: OllamaConfig{
+			Host:    getEnvOr("OLLAMA_HOST", s.Ollama.Host, "http://localhost:11434"),
+			Model:   getEnvOr("OLLAMA_MODEL", s.Ollama.Model, "gemma4:4b"),
+			Timeout: ollamaTimeout,
 		},
 		LLMProvider: getEnvOr("LLM_PROVIDER", s.LLM.Provider, ""),
 		Language:    getEnvOr("LLM_LANGUAGE", s.LLM.Language, "en"),

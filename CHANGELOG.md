@@ -14,6 +14,39 @@ Format:
 
 ---
 
+## [2.6.0.0] - 2026-04-20
+
+### Added
+- **Ollama local LLM integration** (opt-in). Run Gemma 4 or Llama 3.1 locally via Ollama for privacy and cost reduction. Two setup paths:
+  - Docker sidecar (one-click Enable from Settings → copies `docker compose up -d ollama` to clipboard)
+  - Native install (macOS / Linux / Windows instructions)
+- New `OllamaSettings` component in the Settings tab with a 5-state detection machine (READY, READY_NO_MODEL, INSTALLED_NOT_RUNNING, DOCKER_SIDECAR_AVAILABLE, NOT_INSTALLED), each with a specific CTA
+- Streaming progress bar for `ollama pull` via Server-Sent Events (cancel supported)
+- Test connection button that performs a 1-token inference and reports latency
+- New backend endpoints (all behind `requireBearer`):
+  - `GET /api/ai/ollama/status` — detection state machine
+  - `POST /api/ai/ollama/pull` — SSE model download
+  - `POST /api/ai/ollama/start` — background `ollama serve` launch
+  - `POST /api/ai/ollama/sidecar/enable` — write `docker-compose.override.yml`
+  - `POST /api/ai/ollama/test` — connection test with latency
+- New config keys: `OLLAMA_HOST` (default `http://localhost:11434`), `OLLAMA_MODEL` (default `gemma4:4b`), `OLLAMA_TIMEOUT_SEC` (default 120)
+- `ollama` added to `LLM_PROVIDER` options — select to route all trade-signal interpretation through the local model
+- i18n support (en/ko/ja) for all Ollama Settings strings
+- User-facing setup guide at `docs/OLLAMA_SETUP.md`
+
+### Technical
+- New Go package `internal/ollama` (detector + pull runner + starter with clean interface seams for testing)
+- New `internal/llm/ollama.go` `OllamaProvider` implements the existing `Provider` interface (stdlib only, no new deps)
+- 71 new tests across backend (34 Ollama-specific + 5 test-connection) and frontend (23 OllamaSettings)
+- `docker-compose.ollama.yml.template` committed — copied to `docker-compose.override.yml` on sidecar enable
+
+### Notes
+- The default model tag `gemma4:4b` assumes Google publishes Gemma 4 on Ollama. If the tag is not yet live, set `OLLAMA_MODEL=gemma3:4b` or similar.
+- Ollama is NOT auto-activated when `LLM_PROVIDER` is empty — it must be explicitly selected. Ollama is bypassed in the API-key auto-select fallback.
+- When Ollama is configured, the `Test connection` endpoint is available regardless of the active `LLM_PROVIDER`, so users can validate connectivity before switching providers.
+
+---
+
 ## [2.5.0.0] - 2026-04-18
 
 ### Added

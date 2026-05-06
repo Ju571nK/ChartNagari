@@ -198,7 +198,7 @@ type Server struct {
 	profileHolder      *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
 	signalTuningHolder *appconfig.SignalTuningHolder   // optional; set via WithSignalTuningHolder
 	overrideStore      *storage.SymbolOverrideStore    // optional; set via WithOverrideStore
-	validRuleNames     map[string]struct{}              // optional; set via WithValidRuleNames
+	validRuleNames     map[string]struct{}             // optional; set via WithValidRuleNames
 	dbPath             string                          // path to SQLite DB file; set via WithDBPath
 	startTime          time.Time                       // server start timestamp for uptime
 	dataSources        []string                        // active data sources (e.g. ["Binance","Tiingo"])
@@ -212,6 +212,11 @@ type Server struct {
 	execState          *execution.StateStore           // optional; set via WithExecutionState for config versioning
 	mcpRegistry        *mcp.Registry                   // optional; set via WithMCPRegistry
 	mcpSessions        *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
+	ollamaDetector     OllamaStatusProvider            // optional; set via WithOllamaDetector
+	ollamaPullRunner   OllamaPullRunner                // optional; set via WithOllamaPullRunner
+	ollamaStarter      OllamaStarter                   // optional; set via WithOllamaStarter
+	ollamaRepoRoot     string                          // optional; set via WithOllamaRepoRoot
+	ollamaTester       OllamaTester                    // optional; set via WithOllamaTester
 	mu                 sync.RWMutex
 	configUpdateOnce   sync.Once // guards the one-shot "execState nil" startup warning
 }
@@ -278,6 +283,39 @@ func (s *Server) WithExecutionDB(db *sql.DB) {
 // (config_version) and kill-switch metadata (killed_at).
 func (s *Server) WithExecutionState(store *execution.StateStore) {
 	s.execState = store
+}
+
+// WithOllamaDetector wires the Ollama status detector. When unset, the
+// status endpoint returns 503.
+func (s *Server) WithOllamaDetector(d OllamaStatusProvider) {
+	s.ollamaDetector = d
+}
+
+// WithOllamaPullRunner wires the pull runner. When unset, the pull endpoint
+// returns 503.
+func (s *Server) WithOllamaPullRunner(r OllamaPullRunner) {
+	s.ollamaPullRunner = r
+}
+
+// WithOllamaStarter wires the subprocess launcher. When unset, the start
+// endpoint returns 503.
+func (s *Server) WithOllamaStarter(st OllamaStarter) {
+	s.ollamaStarter = st
+}
+
+// WithOllamaRepoRoot sets the filesystem root used by the sidecar/enable
+// handler to locate the compose template and write the override file.
+// In production this is the working directory of the server process.
+// Tests pass t.TempDir() to avoid writing to the real repo root.
+func (s *Server) WithOllamaRepoRoot(root string) {
+	s.ollamaRepoRoot = root
+}
+
+// WithOllamaTester wires a test-connection provider. When unset, the
+// POST /api/ai/ollama/test endpoint returns 503. The tester is always
+// available regardless of the active LLM provider selection.
+func (s *Server) WithOllamaTester(t OllamaTester) {
+	s.ollamaTester = t
 }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
@@ -528,6 +566,13 @@ func (s *Server) Handler() http.Handler {
 
 	// MCP streamable HTTP endpoint
 	mux.HandleFunc("POST /api/mcp", s.handleMCP)
+
+	// Ollama local-LLM status (detection state machine)
+	mux.HandleFunc("GET /api/ai/ollama/status", s.getOllamaStatus)
+	mux.HandleFunc("POST /api/ai/ollama/pull", s.pullOllamaModel)
+	mux.HandleFunc("POST /api/ai/ollama/start", s.startOllama)
+	mux.HandleFunc("POST /api/ai/ollama/sidecar/enable", s.enableOllamaSidecar)
+	mux.HandleFunc("POST /api/ai/ollama/test", s.testOllamaConnection)
 
 	// Static frontend (SPA)
 	if s.static != nil {

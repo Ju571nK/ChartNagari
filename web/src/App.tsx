@@ -5,6 +5,7 @@ import { AnalysisTab } from './AnalysisTab'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import ExecutionTab from './ExecutionTab'
 import MCPSettings from './MCPSettings'
+import OllamaSettings from './OllamaSettings'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
@@ -3364,7 +3365,7 @@ const ENV_GROUPS: EnvGroup[] = [
     tab: 'ai',
     label: 'AI / LLM',
     fields: [
-      { key: 'LLM_PROVIDER',      label: 'LLM Provider',      type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini'] },
+      { key: 'LLM_PROVIDER',      label: 'LLM Provider',      type: 'select', options: ['', 'anthropic', 'openai', 'groq', 'gemini', 'ollama'] },
       { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', type: 'password' },
       { key: 'OPENAI_API_KEY',    label: 'OpenAI API Key',    type: 'password' },
       { key: 'GROQ_API_KEY',      label: 'Groq API Key',      type: 'password' },
@@ -3564,6 +3565,13 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
             {saving ? 'Saving…' : 'Save'}
           </button>
         </>
+      )}
+
+      {/* AI 탭 — OllamaSettings 추가 */}
+      {section === 'ai' && (
+        <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(91,146,121,0.2)' }}>
+          <OllamaSettings />
+        </div>
       )}
 
       {/* MCP 탭 */}

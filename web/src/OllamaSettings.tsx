@@ -1,0 +1,695 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+export type OllamaStatus = {
+  state: 'READY' | 'READY_NO_MODEL' | 'INSTALLED_NOT_RUNNING' | 'NOT_INSTALLED' | 'DOCKER_SIDECAR_AVAILABLE';
+  host: string;
+  model: string;
+  models_available?: string[];
+  deployment: 'docker' | 'native';
+  version?: string;
+  suggest: { action: string; command?: string; size_bytes?: number };
+};
+
+type FetchResult =
+  | { kind: 'ok'; data: OllamaStatus }
+  | { kind: 'not_configured' }
+  | { kind: 'error' };
+
+type PullProgress = {
+  status: string;
+  completed?: number;
+  total?: number;
+  errorMessage?: string;
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  return `${bytes} B`;
+}
+
+const pillBase: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '2px 8px',
+  borderRadius: '12px',
+  fontSize: '0.75rem',
+  textTransform: 'uppercase',
+  fontWeight: 600,
+  letterSpacing: '0.05em',
+};
+
+const pillStyles: Record<OllamaStatus['state'], React.CSSProperties> = {
+  READY: { ...pillBase, background: 'rgba(91,200,91,0.18)', color: 'var(--safe, #5bc85b)' },
+  READY_NO_MODEL: { ...pillBase, background: 'rgba(255,180,50,0.18)', color: 'var(--warning, #ffb432)' },
+  INSTALLED_NOT_RUNNING: { ...pillBase, background: 'rgba(255,200,50,0.18)', color: 'var(--warning, #ffc832)' },
+  NOT_INSTALLED: { ...pillBase, background: 'rgba(255,68,68,0.18)', color: 'var(--danger, #ff4444)' },
+  DOCKER_SIDECAR_AVAILABLE: { ...pillBase, background: 'rgba(148,163,184,0.18)', color: 'var(--slate)' },
+};
+
+const pillLabels: Record<OllamaStatus['state'], string> = {
+  READY: 'ollama.state_ready',
+  READY_NO_MODEL: 'ollama.state_no_model',
+  INSTALLED_NOT_RUNNING: 'ollama.state_not_running',
+  NOT_INSTALLED: 'ollama.state_not_installed',
+  DOCKER_SIDECAR_AVAILABLE: 'ollama.state_sidecar_available',
+};
+
+// Polish 7: tightened ActionState — pending can carry an optional message.
+type ActionState =
+  | null
+  | { status: 'pending'; message?: string }
+  | { status: 'success'; message?: string; code?: string }
+  | { status: 'error'; message: string };
+
+// Polish 1: ActionFeedback helper component — replaces inline feedback blocks.
+function ActionFeedback({
+  action,
+  onReset,
+  t,
+  extraCode,
+}: {
+  action: ActionState;
+  onReset: () => void;
+  t: (k: string, p?: Record<string, string | number>) => string;
+  extraCode?: string;
+}) {
+  if (!action) return null;
+  if (action.status === 'pending') {
+    return (
+      <div role="status" aria-live="polite" style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+        {action.message ?? t('ollama.starting')}
+      </div>
+    );
+  }
+  if (action.status === 'success') {
+    return (
+      <div role="status" aria-live="polite" style={{ color: 'var(--safe)', fontSize: '0.85rem', marginTop: 4 }}>
+        {action.message}
+        {extraCode && (
+          <pre style={{ background: 'rgba(255,255,255,0.06)', padding: 8, borderRadius: 4, marginTop: 6, fontSize: '0.78rem' }}>{extraCode}</pre>
+        )}
+      </div>
+    );
+  }
+  // error
+  return (
+    <div role="alert" style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 4 }}>
+      {action.message}
+      <button type="button" className="tab-btn" style={{ marginLeft: 8 }} onClick={onReset}>
+        {t('ollama.try_again')}
+      </button>
+    </div>
+  );
+}
+
+type StateCardProps = {
+  status: OllamaStatus;
+  t: (k: string, o?: Record<string, string | number>) => string;
+  pulling: PullProgress | null;
+  onPull: () => void;
+  onCancelPull: () => void;
+  onResetPullError: () => void;
+  startAction: ActionState;
+  onStart: () => void;
+  onResetStart: () => void;
+  sidecarAction: ActionState;
+  onEnableSidecar: () => void;
+  onResetSidecar: () => void;
+  testAction: ActionState;
+  onTestConnection: () => void;
+  onResetTest: () => void;
+};
+
+function StateCard({
+  status, t,
+  pulling, onPull, onCancelPull, onResetPullError,
+  startAction, onStart, onResetStart,
+  sidecarAction, onEnableSidecar, onResetSidecar,
+  testAction, onTestConnection, onResetTest,
+}: StateCardProps) {
+  const { state, suggest } = status;
+
+  if (state === 'READY') {
+    return (
+      <div style={{ marginTop: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={pillStyles.READY}>{t(pillLabels.READY)}</span>
+          {testAction?.status !== 'pending' && (
+            <button className="tab-btn" onClick={onTestConnection}>
+              {t('ollama.test_connection')}
+            </button>
+          )}
+          {testAction?.status === 'pending' && (
+            <div role="status" aria-live="polite" style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+              {t('ollama.testing')}
+            </div>
+          )}
+        </div>
+        {(testAction?.status === 'success' || testAction?.status === 'error') && (
+          <div style={{ marginTop: 4 }}>
+            <ActionFeedback action={testAction} onReset={onResetTest} t={t} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (state === 'READY_NO_MODEL') {
+    const sizeStr = suggest.size_bytes != null ? formatBytes(suggest.size_bytes) : '';
+    return (
+      <div style={{ marginTop: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={pillStyles.READY_NO_MODEL}>{t(pillLabels.READY_NO_MODEL)}</span>
+          {pulling === null && (
+            <button className="tab-btn" onClick={onPull}>
+              {t('ollama.pull_model')}
+            </button>
+          )}
+          {sizeStr && pulling === null && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+              {t('ollama.download_size', { size: sizeStr })}
+            </span>
+          )}
+        </div>
+
+        {pulling !== null && pulling.status !== 'error' && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 4 }}>
+              {pulling.status}
+              {pulling.completed != null && pulling.total != null && (
+                <> — {Math.floor((pulling.completed / pulling.total) * 100)}%</>
+              )}
+            </div>
+            <div style={{ width: '100%', height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+              <div
+                style={{
+                  width: pulling.completed != null && pulling.total != null
+                    ? `${(pulling.completed / pulling.total) * 100}%`
+                    : '20%',
+                  height: '100%',
+                  background: 'var(--accent)',
+                  transition: 'width 0.2s ease',
+                }}
+                role="progressbar"
+                aria-valuenow={pulling.completed != null && pulling.total != null ? Math.floor((pulling.completed / pulling.total) * 100) : undefined}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('ollama.pull_progress')}
+              />
+            </div>
+            <button
+              type="button"
+              className="tab-btn"
+              onClick={onCancelPull}
+              style={{ marginTop: 8 }}
+            >
+              {t('ollama.cancel_pull')}
+            </button>
+          </div>
+        )}
+
+        {pulling?.status === 'error' && (
+          <div style={{ marginTop: 12, color: 'var(--danger)', fontSize: '0.85rem' }}>
+            {pulling.errorMessage || 'Pull failed'}
+            <button
+              type="button"
+              className="tab-btn"
+              onClick={onResetPullError}
+              style={{ marginLeft: 8 }}
+            >
+              {t('ollama.pull_try_again')}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (state === 'INSTALLED_NOT_RUNNING') {
+    return (
+      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={pillStyles.INSTALLED_NOT_RUNNING}>{t(pillLabels.INSTALLED_NOT_RUNNING)}</span>
+        <div style={{ marginTop: 0 }}>
+          {startAction?.status !== 'pending' && (
+            <button
+              type="button"
+              className="tab-btn"
+              onClick={onStart}
+            >
+              {t('ollama.start_ollama')}
+            </button>
+          )}
+          <ActionFeedback action={startAction} onReset={onResetStart} t={t} />
+        </div>
+      </div>
+    );
+  }
+
+  if (state === 'DOCKER_SIDECAR_AVAILABLE') {
+    return (
+      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={pillStyles.DOCKER_SIDECAR_AVAILABLE}>{t(pillLabels.DOCKER_SIDECAR_AVAILABLE)}</span>
+        <div style={{ marginTop: 0 }}>
+          {sidecarAction?.status !== 'pending' && sidecarAction?.status !== 'success' && (
+            <button
+              type="button"
+              className="tab-btn"
+              onClick={onEnableSidecar}
+            >
+              {t('ollama.enable_sidecar')}
+            </button>
+          )}
+          <ActionFeedback
+            action={sidecarAction}
+            onReset={onResetSidecar}
+            t={t}
+            extraCode={sidecarAction?.status === 'success' ? sidecarAction.code : undefined}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // NOT_INSTALLED
+  return (
+    <div style={{ marginTop: '0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <span style={pillStyles.NOT_INSTALLED}>{t(pillLabels.NOT_INSTALLED)}</span>
+        <a
+          href="https://ollama.com/download"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tab-btn"
+        >
+          {t('ollama.install_ollama')}
+        </a>
+      </div>
+      {suggest.command && (
+        <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.4rem' }}>
+          <code style={{
+            background: 'rgba(255,255,255,0.06)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontFamily: 'monospace',
+          }}>
+            {suggest.command}
+          </code>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function OllamaSettings() {
+  const { t } = useTranslation();
+  const [result, setResult] = useState<FetchResult | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [pulling, setPulling] = useState<PullProgress | null>(null);
+  const pullAbortRef = useRef<AbortController | null>(null);
+  const [startAction, setStartAction] = useState<ActionState>(null);
+  const [sidecarAction, setSidecarAction] = useState<ActionState>(null);
+  const [testAction, setTestAction] = useState<ActionState>(null);
+
+  // Polish 3: timer cleanup on unmount.
+  const timerRef = useRef<number[]>([]);
+  const scheduleClear = useCallback((setter: React.Dispatch<React.SetStateAction<ActionState>>, ms: number) => {
+    const id = window.setTimeout(() => setter(null), ms);
+    timerRef.current.push(id);
+  }, []);
+
+  useEffect(() => () => {
+    for (const id of timerRef.current) clearTimeout(id);
+    timerRef.current = [];
+  }, []);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/ollama/status', { credentials: 'include' });
+      if (res.status === 503) {
+        setResult({ kind: 'not_configured' });
+        return;
+      }
+      if (!res.ok) {
+        setResult({ kind: 'error' });
+        return;
+      }
+      const data: OllamaStatus = await res.json();
+      setResult({ kind: 'ok', data });
+    } catch {
+      setResult({ kind: 'error' });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+
+    const startPolling = () => {
+      if (intervalRef.current) return;
+      intervalRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          fetchStatus();
+        }
+      }, 5000);
+    };
+
+    const stopPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    if (document.visibilityState === 'visible') {
+      startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stopPolling();
+    };
+  }, [fetchStatus]);
+
+  useEffect(() => {
+    return () => {
+      pullAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Polish 2: clear all action states whenever the detector state transitions.
+  const prevStateRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (result?.kind !== 'ok') return;
+    const curr = result.data.state;
+    if (prevStateRef.current !== undefined && prevStateRef.current !== curr) {
+      setStartAction(null);
+      setSidecarAction(null);
+      setTestAction(null);
+    }
+    prevStateRef.current = curr;
+  }, [result]);
+
+  const handlePull = useCallback(async () => {
+    if (pullAbortRef.current) return; // already pulling
+    if (!result || result.kind !== 'ok') return;
+    const status = result.data;
+    const sizeFormatted = status.suggest.size_bytes != null && status.suggest.size_bytes > 0
+      ? formatBytes(status.suggest.size_bytes)
+      : t('ollama.unknown_size');
+    const confirmMsg = t('ollama.pull_confirm', { model: status.model, size: sizeFormatted });
+    if (!window.confirm(confirmMsg)) return;
+
+    const ctrl = new AbortController();
+    pullAbortRef.current = ctrl;
+    setPulling({ status: 'starting' });
+    let succeeded = false;
+
+    try {
+      const res = await fetch('/api/ai/ollama/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ model: status.model }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok || !res.body) {
+        setPulling({ status: 'error', errorMessage: `HTTP ${res.status}` });
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let done = false;
+
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // Split into SSE frames (delimiter: blank line, i.e., \n\n)
+        let frameEnd: number;
+        while ((frameEnd = buf.indexOf('\n\n')) !== -1) {
+          const frame = buf.slice(0, frameEnd);
+          buf = buf.slice(frameEnd + 2);
+
+          // Detect 'event: done' frames
+          const lines = frame.split('\n');
+          if (lines.some(l => l.trim() === 'event: done')) { done = true; succeeded = true; break; }
+
+          // Extract data: <payload>
+          const dataLine = frame.split('\n').find(l => l.startsWith('data: '));
+          if (!dataLine) continue;
+          const payload = dataLine.slice('data: '.length);
+          let obj: Record<string, unknown>;
+          try { obj = JSON.parse(payload); } catch { continue; }
+
+          if (obj.error) {
+            setPulling({ status: 'error', errorMessage: String(obj.error) });
+            done = true;
+            break;
+          }
+
+          const statusStr = typeof obj.status === 'string' ? obj.status : 'downloading';
+          if (statusStr === 'success') {
+            succeeded = true;
+          }
+          setPulling({
+            status: statusStr,
+            completed: typeof obj.completed === 'number' ? obj.completed : undefined,
+            total: typeof obj.total === 'number' ? obj.total : undefined,
+          });
+        }
+      }
+    } catch (e) {
+      // Abort or network error
+      if ((e as Error).name === 'AbortError') {
+        setPulling(null);
+        return;
+      }
+      setPulling({ status: 'error', errorMessage: (e as Error).message });
+      return;
+    } finally {
+      pullAbortRef.current = null;
+    }
+
+    // Only refresh status on genuine success (not on error frames).
+    if (!succeeded) return;
+    setPulling(null);
+    await fetchStatus();
+  }, [result, t, fetchStatus]);
+
+  const handleCancelPull = useCallback(() => {
+    pullAbortRef.current?.abort();
+  }, []);
+
+  const handleResetPullError = useCallback(() => {
+    setPulling(null);
+  }, []);
+
+  const handleStart = useCallback(async () => {
+    // Polish 4: concurrent-click guard.
+    if (startAction?.status === 'pending') return;
+    setStartAction({ status: 'pending' });
+    try {
+      const res = await fetch('/api/ai/ollama/start', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const body = await res.json() as { pid: number; started_at: string };
+        // Polish 7: pass body.pid directly (number) — no String() wrapper needed.
+        setStartAction({ status: 'success', message: t('ollama.start_success', { pid: body.pid }) });
+        scheduleClear(setStartAction, 3000);
+        await fetchStatus();
+      } else if (res.status === 409) {
+        setStartAction(null);
+        await fetchStatus();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setStartAction({ status: 'error', message: (body as { error?: string }).error || `HTTP ${res.status}` });
+      }
+    } catch (e) {
+      setStartAction({ status: 'error', message: (e as Error).message });
+    }
+  }, [t, fetchStatus, startAction, scheduleClear]);
+
+  const handleEnableSidecar = useCallback(async () => {
+    // Polish 4: concurrent-click guard.
+    if (sidecarAction?.status === 'pending') return;
+    setSidecarAction({ status: 'pending' });
+    try {
+      const res = await fetch('/api/ai/ollama/sidecar/enable', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const body = await res.json() as { override_path: string; run_command: string };
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          try { await navigator.clipboard.writeText(body.run_command); } catch { /* no-op */ }
+        }
+        setSidecarAction({ status: 'success', message: t('ollama.sidecar_success'), code: body.run_command });
+      } else if (res.status === 409) {
+        setSidecarAction({ status: 'success', message: t('ollama.sidecar_already_configured'), code: 'docker compose up -d ollama' });
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setSidecarAction({ status: 'error', message: (body as { error?: string }).error || `HTTP ${res.status}` });
+      }
+    } catch (e) {
+      setSidecarAction({ status: 'error', message: (e as Error).message });
+    }
+  }, [t, sidecarAction]);
+
+  type TestResult = { ok: true; latency_ms: number } | { ok: false; error: string; latency_ms: number };
+
+  const handleTestConnection = useCallback(async () => {
+    // Polish 4: concurrent-click guard.
+    if (testAction?.status === 'pending') return;
+    setTestAction({ status: 'pending' });
+    try {
+      const res = await fetch('/api/ai/ollama/test', { method: 'POST', credentials: 'include' });
+      const body = await res.json() as TestResult;
+      if (res.ok && body.ok) {
+        setTestAction({
+          status: 'success',
+          message: t('ollama.test_ok', { ms: body.latency_ms }),
+        });
+        scheduleClear(setTestAction, 5000);
+      } else {
+        setTestAction({
+          status: 'error',
+          message: 'error' in body ? body.error : `HTTP ${res.status}`,
+        });
+      }
+    } catch (e) {
+      setTestAction({ status: 'error', message: (e as Error).message });
+    }
+  }, [t, testAction, scheduleClear]);
+
+  const cardStyle: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(91,146,121,0.2)',
+    borderRadius: '8px',
+    padding: '1rem 1.25rem',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: '0.78rem',
+    color: 'var(--muted)',
+    marginRight: '0.4rem',
+  };
+
+  const valueStyle: React.CSSProperties = {
+    fontSize: '0.82rem',
+    color: 'var(--text)',
+  };
+
+  const renderContent = () => {
+    if (result === null) {
+      return <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{t('ollama.loading')}</p>;
+    }
+
+    if (result.kind === 'error') {
+      return (
+        <div style={{ ...cardStyle, borderColor: 'rgba(255,68,68,0.35)' }}>
+          <p style={{ color: 'var(--danger, #ff4444)', margin: 0 }}>{t('ollama.fetch_failed')}</p>
+          <button
+            className="tab-btn"
+            onClick={fetchStatus}
+            style={{ marginTop: '0.75rem' }}
+          >
+            {t('ollama.retry_status')}
+          </button>
+        </div>
+      );
+    }
+
+    if (result.kind === 'not_configured') {
+      return (
+        <div style={cardStyle}>
+          <p style={{ color: 'var(--muted)', margin: 0 }}>{t('ollama.detector_not_configured')}</p>
+        </div>
+      );
+    }
+
+    const { data } = result;
+    const deploymentLabel = data.deployment === 'docker'
+      ? t('ollama.deployment_docker')
+      : t('ollama.deployment_native');
+
+    return (
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.25rem' }}>
+          <span>
+            <span style={labelStyle}>{t('ollama.host_label')}:</span>
+            <span style={valueStyle}>{data.host}</span>
+          </span>
+          <span>
+            <span style={labelStyle}>{t('ollama.model_label')}:</span>
+            <span style={valueStyle}>{data.model}</span>
+          </span>
+          {data.version && (
+            <span>
+              <span style={labelStyle}>{t('ollama.version_label')}:</span>
+              <span style={valueStyle}>{data.version}</span>
+            </span>
+          )}
+          <span style={{
+            ...pillBase,
+            background: 'rgba(255,255,255,0.07)',
+            color: 'var(--muted)',
+          }}>
+            {deploymentLabel}
+          </span>
+        </div>
+
+        <StateCard
+          status={data}
+          t={t}
+          pulling={pulling}
+          onPull={handlePull}
+          onCancelPull={handleCancelPull}
+          onResetPullError={handleResetPullError}
+          startAction={startAction}
+          onStart={handleStart}
+          onResetStart={() => setStartAction(null)}
+          sidecarAction={sidecarAction}
+          onEnableSidecar={handleEnableSidecar}
+          onResetSidecar={() => setSidecarAction(null)}
+          testAction={testAction}
+          onTestConnection={handleTestConnection}
+          onResetTest={() => setTestAction(null)}
+        />
+
+        <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem' }}>
+          <button
+            className="tab-btn"
+            onClick={fetchStatus}
+          >
+            {t('ollama.retry_status')}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <h3 style={{
+        fontSize: '0.78rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        color: 'var(--accent)',
+        marginBottom: '0.75rem',
+        borderBottom: '1px solid rgba(91,146,121,0.2)',
+        paddingBottom: '0.4rem',
+      }}>
+        {t('settings.ai_provider_ollama')}
+      </h3>
+      {renderContent()}
+    </div>
+  );
+}

@@ -16,26 +16,27 @@ import (
 
 	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/api"
-	"github.com/Ju571nK/Chatter/internal/calendar"
-	"github.com/Ju571nK/Chatter/internal/history"
-	"github.com/Ju571nK/Chatter/internal/llm"
 	"github.com/Ju571nK/Chatter/internal/backtest"
+	"github.com/Ju571nK/Chatter/internal/calendar"
 	"github.com/Ju571nK/Chatter/internal/collector"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/execution"
+	"github.com/Ju571nK/Chatter/internal/history"
+	"github.com/Ju571nK/Chatter/internal/hub"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
+	"github.com/Ju571nK/Chatter/internal/llm"
+	"github.com/Ju571nK/Chatter/internal/mcp"
 	"github.com/Ju571nK/Chatter/internal/ollama"
+	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
-	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
-	"github.com/Ju571nK/Chatter/internal/hub"
 	"github.com/Ju571nK/Chatter/internal/notifier"
 	"github.com/Ju571nK/Chatter/internal/paper"
-	"github.com/Ju571nK/Chatter/internal/pricealert"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
+	"github.com/Ju571nK/Chatter/internal/pricealert"
 	"github.com/Ju571nK/Chatter/internal/report"
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/internal/storage"
@@ -69,6 +70,8 @@ func main() {
 	}
 	defer db.Close()
 	log.Info().Str("path", cfg.DBPath).Msg("SQLite connected")
+
+	overrideStore := storage.NewSymbolOverrideStore(db)
 
 	// ── 컨텍스트 (SIGINT/SIGTERM 감지) ───────────────────────────────
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -286,6 +289,7 @@ func main() {
 		pipe.SetBroadcaster(wsHub)
 		pipe.SetAlertConfigHolder(alertHolder)
 		pipe.SetSymbolProfiles(profileHolder)
+		pipe.SetOverrideStore(overrideStore)
 		pipe.SetSignalTuningHolder(tuningHolder)
 		pipe.SetForwardReturnStore(db, db)
 		pipe.SetCryptoSymbols(cryptoSymbols)
@@ -342,13 +346,30 @@ func main() {
 	apiSrv.WithDemoEngine(eng)
 	apiSrv.WithSymbolProfiles(profileHolder)
 	apiSrv.WithSignalTuningHolder(tuningHolder)
+	apiSrv.WithOverrideStore(overrideStore)
+	validRules := make(map[string]struct{}, len(cfg.Rules.Rules))
+	for _, r := range cfg.Rules.Rules {
+		validRules[r.Name] = struct{}{}
+	}
+	apiSrv.WithValidRuleNames(validRules)
 	apiSrv.WithExecutionHolder(execHolder, execPath)
 	apiSrv.WithExecutionDispatcher(dispatcher)
 	apiSrv.WithExecutionFeedback(feedbackIdem)
 	apiSrv.WithExecutionDB(db.Conn())
 	apiSrv.WithExecutionState(execState)
 
-	// Ollama detector (opt-in local LLM status endpoint).
+	// ── MCP 레지스트리 (로컬 LLM 통합) ────────────────────────────────────
+	mcpReg := mcp.NewRegistry()
+	watchSrc := &mcpWatchlistShim{cfg: cfg}
+	mcpReg.Register(mcp.NewListWatchlist(watchSrc))
+	mcpReg.Register(mcp.NewGetAnalysis(watchSrc, db))
+	mcpReg.Register(mcp.NewGetSignalHistory(db))
+	mcpReg.Register(mcp.NewGetOHLCV(db))
+	mcpReg.Register(mcp.NewGetEconomicCalendar(db))
+	apiSrv.WithMCPRegistry(mcpReg)
+	log.Info().Int("tools", 5).Msg("MCP registry wired")
+
+	// ── Ollama detector (opt-in local LLM status endpoint) ───────────────
 	ollamaDet := ollama.NewDetector(cfg.Ollama.Host, cfg.Ollama.Model, ollama.DefaultRuntime())
 	apiSrv.WithOllamaDetector(ollamaDet)
 	apiSrv.WithOllamaPullRunner(ollama.DefaultPullRunner())
@@ -491,6 +512,11 @@ func main() {
 	time.Sleep(500 * time.Millisecond)
 	log.Info().Msg("Chart Nagari stopped")
 }
+
+// mcpWatchlistShim adapts *appconfig.Config to mcp.WatchlistSource.
+type mcpWatchlistShim struct{ cfg *appconfig.Config }
+
+func (s *mcpWatchlistShim) Watchlist() appconfig.WatchlistConfig { return s.cfg.Watchlist }
 
 // toEngineConfig converts the app-level RulesConfig (list format from YAML)
 // to the engine's map-based RuleConfig.

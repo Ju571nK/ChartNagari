@@ -22,19 +22,20 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver for integrity_check
 
-	"github.com/rs/zerolog/log"
-	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/analyst"
-	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/backtest"
+	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
-	"github.com/Ju571nK/Chatter/internal/storage"
+	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/history"
 	"github.com/Ju571nK/Chatter/internal/indicator"
+	"github.com/Ju571nK/Chatter/internal/mcp"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pinescript"
+	"github.com/Ju571nK/Chatter/internal/storage"
 	wyckoffanalyzer "github.com/Ju571nK/Chatter/internal/wyckoff"
 	"github.com/Ju571nK/Chatter/pkg/models"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,7 +44,7 @@ import (
 // SymbolItem is the JSON representation of a single watchlist entry.
 type SymbolItem struct {
 	Symbol   string `json:"symbol"`
-	Type     string `json:"type"`     // "crypto" | "stock"
+	Type     string `json:"type"` // "crypto" | "stock"
 	Exchange string `json:"exchange"`
 	Enabled  bool   `json:"enabled"`
 }
@@ -179,41 +180,45 @@ type PriceAlertStore interface {
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
-	configDir        string
-	static           http.Handler                   // nil when webDist is absent or not built yet
-	chartStore       ChartStore                     // optional; set via WithChartStore
-	backtestRunner   BacktestRunner                 // optional; set via WithBacktestRunner
-	paperStore       PaperStore                     // optional; set via WithPaperStore
-	reportSched      ReportScheduler                // optional; set via WithReportScheduler
-	alertHolder      *appconfig.AlertConfigHolder   // optional; set via WithAlertConfigHolder
-	fullStore        FullStore                      // optional; set via WithFullStore
-	analystDirector  AnalystDirector                // optional; set via WithAnalystDirector
-	announcer        Announcer                      // optional; set via WithAnnouncer
-	priceAlertStore  PriceAlertStore                // optional; set via WithPriceAlertStore
-	wsHub            WSHub                          // optional; set via WithHub
-	calendarStore    CalendarStore                  // optional; set via WithCalendarStore
-	settingsFile     string                         // path to settings.yaml; set via WithSettingsFile
-	demoEngine       *engine.RuleEngine             // optional; set via WithDemoEngine for /api/demo/scan
-	profileHolder       *appconfig.SymbolProfilesHolder    // optional; set via WithSymbolProfiles
-	signalTuningHolder  *appconfig.SignalTuningHolder      // optional; set via WithSignalTuningHolder
-	dbPath              string                             // path to SQLite DB file; set via WithDBPath
-	startTime           time.Time                          // server start timestamp for uptime
-	dataSources         []string                           // active data sources (e.g. ["Binance","Tiingo"])
-	allowedOrigins      map[string]bool                    // CORS allowlist; set via WithAllowedOrigins
-	apiToken            string                             // optional bearer token; set via WithAPIToken
-	execHolder          *appconfig.ExecutionHolder         // optional; set via WithExecutionHolder
-	execPath            string                             // path to execution.yaml; set via WithExecutionPath
-	execDispatcher      ExecutionReleaser                  // optional; set via WithExecutionDispatcher
-	execFeedback        FeedbackRecorder                   // optional; set via WithExecutionFeedback
-	execDB              *sql.DB                            // optional; set via WithExecutionDB for feedback queries
-	execState           *execution.StateStore              // optional; set via WithExecutionState for config versioning
-	ollamaDetector      OllamaStatusProvider               // optional; set via WithOllamaDetector
-	ollamaPullRunner    OllamaPullRunner                   // optional; set via WithOllamaPullRunner
-	ollamaStarter       OllamaStarter                      // optional; set via WithOllamaStarter
-	ollamaRepoRoot      string                             // optional; set via WithOllamaRepoRoot
-	ollamaTester        OllamaTester                       // optional; set via WithOllamaTester
-	mu                  sync.RWMutex
-	configUpdateOnce    sync.Once                          // guards the one-shot "execState nil" startup warning
+	configDir          string
+	static             http.Handler                    // nil when webDist is absent or not built yet
+	chartStore         ChartStore                      // optional; set via WithChartStore
+	backtestRunner     BacktestRunner                  // optional; set via WithBacktestRunner
+	paperStore         PaperStore                      // optional; set via WithPaperStore
+	reportSched        ReportScheduler                 // optional; set via WithReportScheduler
+	alertHolder        *appconfig.AlertConfigHolder    // optional; set via WithAlertConfigHolder
+	fullStore          FullStore                       // optional; set via WithFullStore
+	analystDirector    AnalystDirector                 // optional; set via WithAnalystDirector
+	announcer          Announcer                       // optional; set via WithAnnouncer
+	priceAlertStore    PriceAlertStore                 // optional; set via WithPriceAlertStore
+	wsHub              WSHub                           // optional; set via WithHub
+	calendarStore      CalendarStore                   // optional; set via WithCalendarStore
+	settingsFile       string                          // path to settings.yaml; set via WithSettingsFile
+	demoEngine         *engine.RuleEngine              // optional; set via WithDemoEngine for /api/demo/scan
+	profileHolder      *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
+	signalTuningHolder *appconfig.SignalTuningHolder   // optional; set via WithSignalTuningHolder
+	overrideStore      *storage.SymbolOverrideStore    // optional; set via WithOverrideStore
+	validRuleNames     map[string]struct{}             // optional; set via WithValidRuleNames
+	dbPath             string                          // path to SQLite DB file; set via WithDBPath
+	startTime          time.Time                       // server start timestamp for uptime
+	dataSources        []string                        // active data sources (e.g. ["Binance","Tiingo"])
+	allowedOrigins     map[string]bool                 // CORS allowlist; set via WithAllowedOrigins
+	apiToken           string                          // optional bearer token; set via WithAPIToken
+	execHolder         *appconfig.ExecutionHolder      // optional; set via WithExecutionHolder
+	execPath           string                          // path to execution.yaml; set via WithExecutionPath
+	execDispatcher     ExecutionReleaser               // optional; set via WithExecutionDispatcher
+	execFeedback       FeedbackRecorder                // optional; set via WithExecutionFeedback
+	execDB             *sql.DB                         // optional; set via WithExecutionDB for feedback queries
+	execState          *execution.StateStore           // optional; set via WithExecutionState for config versioning
+	mcpRegistry        *mcp.Registry                   // optional; set via WithMCPRegistry
+	mcpSessions        *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
+	ollamaDetector     OllamaStatusProvider            // optional; set via WithOllamaDetector
+	ollamaPullRunner   OllamaPullRunner                // optional; set via WithOllamaPullRunner
+	ollamaStarter      OllamaStarter                   // optional; set via WithOllamaStarter
+	ollamaRepoRoot     string                          // optional; set via WithOllamaRepoRoot
+	ollamaTester       OllamaTester                    // optional; set via WithOllamaTester
+	mu                 sync.RWMutex
+	configUpdateOnce   sync.Once // guards the one-shot "execState nil" startup warning
 }
 
 // ExecutionReleaser is the minimal dispatcher surface the feedback handler
@@ -238,10 +243,10 @@ func New(configDir, webDist string) *Server {
 		configDir: configDir,
 		startTime: time.Now(),
 		allowedOrigins: map[string]bool{
-			"http://localhost:5173":   true,
-			"http://localhost:8080":   true,
-			"http://127.0.0.1:5173":  true,
-			"http://127.0.0.1:8080":  true,
+			"http://localhost:5173": true,
+			"http://localhost:8080": true,
+			"http://127.0.0.1:5173": true,
+			"http://127.0.0.1:8080": true,
 		},
 	}
 	if webDist != "" {
@@ -328,6 +333,12 @@ func (s *Server) WithAPIToken(token string) {
 	s.apiToken = token
 }
 
+// WithMCPRegistry wires the MCP tool registry. When nil, /api/mcp returns 503.
+func (s *Server) WithMCPRegistry(reg *mcp.Registry) {
+	s.mcpRegistry = reg
+	s.mcpSessions = newMCPSessionStore()
+}
+
 // WithChartStore wires the chart data store (OHLCV + signals) to the server.
 func (s *Server) WithChartStore(cs ChartStore) {
 	s.chartStore = cs
@@ -393,6 +404,17 @@ func (s *Server) WithSignalTuningHolder(h *appconfig.SignalTuningHolder) {
 
 func (s *Server) WithSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	s.profileHolder = h
+}
+
+// WithOverrideStore wires the per-symbol alert override store.
+func (s *Server) WithOverrideStore(store *storage.SymbolOverrideStore) {
+	s.overrideStore = store
+}
+
+// WithValidRuleNames sets the closed set of known rule names used to validate
+// PUT /api/symbol-overrides/{symbol} requests.
+func (s *Server) WithValidRuleNames(names map[string]struct{}) {
+	s.validRuleNames = names
 }
 
 // WithSettingsFile enables the GET/PUT /api/settings/config endpoints by pointing them at settings.yaml.
@@ -498,6 +520,13 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("PUT /api/profiles/{symbol}", s.updateSymbolProfile)
 	}
 
+	// Per-symbol alert overrides
+	if s.overrideStore != nil {
+		mux.HandleFunc("GET /api/symbol-overrides/{symbol}", s.getSymbolOverride)
+		mux.HandleFunc("PUT /api/symbol-overrides/{symbol}", s.putSymbolOverride)
+		mux.HandleFunc("DELETE /api/symbol-overrides/{symbol}", s.deleteSymbolOverride)
+	}
+
 	// Economic calendar
 	if s.calendarStore != nil {
 		mux.HandleFunc("GET /api/calendar", s.getCalendarEvents)
@@ -534,6 +563,9 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/execution/feedback", s.listExecutionFeedback)
 		mux.HandleFunc("GET /api/execution/plugins/stats", s.getExecutionPluginStats)
 	}
+
+	// MCP streamable HTTP endpoint
+	mux.HandleFunc("POST /api/mcp", s.handleMCP)
 
 	// Ollama local-LLM status (detection state machine)
 	mux.HandleFunc("GET /api/ai/ollama/status", s.getOllamaStatus)
@@ -983,9 +1015,9 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Symbol    string  `json:"symbol"`
 		Timeframe string  `json:"timeframe"`
-		Rule      string  `json:"rule"`     // optional filter
-		TPMult    float64 `json:"tp_mult"`  // 0 = use default
-		SLMult    float64 `json:"sl_mult"`  // 0 = use default
+		Rule      string  `json:"rule"`    // optional filter
+		TPMult    float64 `json:"tp_mult"` // 0 = use default
+		SLMult    float64 `json:"sl_mult"` // 0 = use default
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -1037,7 +1069,8 @@ func (s *Server) runPerRuleBacktest(w http.ResponseWriter, r *http.Request) {
 
 // getPerformanceRules handles GET /api/performance/rules
 // Query params: symbols (comma-separated, required), timeframe (required),
-//               tp_mult (optional), sl_mult (optional)
+//
+//	tp_mult (optional), sl_mult (optional)
 func (s *Server) getPerformanceRules(w http.ResponseWriter, r *http.Request) {
 	if s.backtestRunner == nil {
 		http.Error(w, "backtest runner not configured", http.StatusServiceUnavailable)
@@ -1704,10 +1737,10 @@ func checkYahooSymbol(ctx context.Context, symbol string) (string, string, bool)
 		Chart struct {
 			Result []struct {
 				Meta struct {
-					Symbol          string `json:"symbol"`
+					Symbol           string `json:"symbol"`
 					FullExchangeName string `json:"fullExchangeName"`
-					LongName        string `json:"longName"`
-					ShortName       string `json:"shortName"`
+					LongName         string `json:"longName"`
+					ShortName        string `json:"shortName"`
 				} `json:"meta"`
 			} `json:"result"`
 			Error interface{} `json:"error"`
@@ -2230,9 +2263,9 @@ func (s *Server) demoScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := struct {
-		Symbol    string         `json:"symbol"`
-		Timeframe string         `json:"timeframe"`
-		Bars      []chartBar     `json:"bars"`
+		Symbol    string          `json:"symbol"`
+		Timeframe string          `json:"timeframe"`
+		Bars      []chartBar      `json:"bars"`
 		Signals   []models.Signal `json:"signals"`
 	}{
 		Symbol:    symbol,

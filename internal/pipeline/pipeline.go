@@ -115,6 +115,7 @@ type Pipeline struct {
 
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via SetSymbolProfiles
 	tuningHolder  *appconfig.SignalTuningHolder  // optional; set via SetSignalTuningHolder
+	overrideStore appconfig.OverrideGetter        // optional; set via SetOverrideStore. nil → profile-only resolution
 
 	forwardReturnDB   ForwardReturnDB          // optional; set via SetForwardReturnStore
 	forwardReturnOHLCV ForwardReturnOHLCVReader // optional; set via SetForwardReturnStore
@@ -184,6 +185,12 @@ func (p *Pipeline) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 // SetSymbolProfiles wires an optional per-symbol profile holder for rule filtering.
 func (p *Pipeline) SetSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	p.profileHolder = h
+}
+
+// SetOverrideStore wires an optional per-symbol override store for hot-reload alert config.
+// When set, EffectiveAlertConfig merges profile defaults with per-symbol DB rows on each tick.
+func (p *Pipeline) SetOverrideStore(store appconfig.OverrideGetter) {
+	p.overrideStore = store
 }
 
 // SetSignalTuningHolder wires an optional live-updated signal tuning configuration holder.
@@ -313,12 +320,50 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 	signals := p.eng.Run(analysisCtx)
 
-	// Profile filter: remove signals not allowed by the symbol's profile.
+	// Effective alert config (profile + per-symbol override).
+	effCfg := appconfig.EffectiveAlertConfig(sym, p.profileHolder, p.overrideStore)
+
+	// Profile/override filter: remove signals not allowed by methodology/rule.
+	// Uses the merged effective config so that an override can widen the
+	// profile's allowed_rules list (not just narrow it).
 	if p.profileHolder != nil {
 		beforeProfile := len(signals)
-		signals = filterByProfile(signals, p.profileHolder, sym)
+		profile := p.profileHolder.GetProfile(sym)
+		signals = filterByProfileEffective(signals, profile, effCfg)
 		if filtered := beforeProfile - len(signals); filtered > 0 {
-			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile filter removed disallowed signals")
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile/override filter removed disallowed signals")
+		}
+	}
+
+	// Score threshold gate (per-symbol effective; 0 = no minimum).
+	// Note: this filters at pipeline level. The Notifier currently also has
+	// a global ScoreThreshold check; the per-symbol value here can be
+	// stricter than the global, but the global remains a floor.
+	if effCfg.ScoreThreshold > 0 {
+		beforeScore := len(signals)
+		kept := signals[:0]
+		for _, sig := range signals {
+			if sig.Score >= effCfg.ScoreThreshold {
+				kept = append(kept, sig)
+			}
+		}
+		signals = kept
+		if filtered := beforeScore - len(signals); filtered > 0 {
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Float64("threshold", effCfg.ScoreThreshold).Msg("override score threshold filter removed signals")
+		}
+	}
+
+	// TODO(per-symbol-overrides): per-symbol CooldownHours and
+	// AlertLimitPerDay overrides are not yet consumed. They live in
+	// notifier/cooldown.go's global tracker and need a refactor to be
+	// per-symbol-aware. Spec §4.3 requires them; tracked as follow-up.
+
+	// Timeframe filter (override-driven; empty list = allow all).
+	if len(effCfg.Timeframes) > 0 {
+		beforeTF := len(signals)
+		signals = filterByTimeframe(signals, effCfg.Timeframes)
+		if filtered := beforeTF - len(signals); filtered > 0 {
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Strs("allowed_tf", effCfg.Timeframes).Msg("timeframe filter removed signals")
 		}
 	}
 
@@ -725,3 +770,4 @@ func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, i
 		sig.SL = entry + atr*slMult
 	}
 }
+

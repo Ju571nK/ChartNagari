@@ -14,6 +14,50 @@ Format:
 
 ---
 
+## [2.8.0.0] - 2026-05-06
+
+### Added
+- Per-symbol alert overrides: tune `score_threshold`, `cooldown_hours`, `alert_limit_per_day`, and `timeframes` per symbol from the UI without touching YAML or restarting the server.
+- New SQLite table `symbol_alert_overrides` with nullable fields (NULL = inherit from profile).
+- New API endpoints: `GET/PUT/DELETE /api/symbol-overrides/{symbol}`.
+- New React component `SymbolOverrideEditor` mounted in Symbols tab (row expand chevron) and Chart tab (⚙ modal).
+- New optional `Profile.Timeframes` field in `config/symbol_profiles.yaml` (existing YAMLs unaffected).
+
+### Changed
+- Pipeline filter chain now consults `EffectiveAlertConfig(symbol)` for each tick — score threshold, timeframe, and override-driven `allowed_rules` overrides take effect on the next signal evaluation, no restart required.
+
+### Notes
+- Empty arrays for `timeframes`/`allowed_rules` in PUT bodies are normalized to NULL on disk to avoid silently muting all alerts.
+- Per-symbol `cooldown_hours` and `alert_limit_per_day` overrides are computed but NOT yet consumed by the global notifier cooldown tracker — flagged as a follow-up (TODO inline in `internal/pipeline/pipeline.go`).
+- `allowed_rules` UI editor is deferred to v1.1 per spec §11.
+
+## [2.7.0.0] - 2026-04-22
+
+### Added
+- **MCP (Model Context Protocol) server integration.** Claude Desktop / Claude Code / Codex CLI can query ChartNagari analysis directly, saving ~85% of tokens vs external OHLCV fetches on typical "analyze my watchlist" workflows.
+- 5 read-only MCP tools:
+  - `list_watchlist` — all tracked symbols with enable flags
+  - `get_analysis` — multi-timeframe analysis (fired rules, MTF score, key levels) as markdown
+  - `get_signal_history` — recent alerts for a symbol
+  - `get_ohlcv` — raw candles (JSON, fallback — prefer `get_analysis` for pattern questions)
+  - `get_economic_calendar` — economic events in a date range
+- New HTTP streamable endpoint `POST /api/mcp` (bearer-protected, reuses `API_TOKEN`)
+- New `chartnagari-mcp` stdio bridge binary for stdio-only clients (Codex CLI)
+- `MCPSettings` Settings UI section with ready-to-copy config snippets for all three clients
+- User setup guide at `docs/MCP_SETUP.md`
+
+### Technical
+- New Go package `internal/mcp` (registry + 5 tool handlers + JSON-RPC envelope types + markdown formatter)
+- `internal/api/mcp_handler.go` — streamable HTTP + in-memory session store with 30 min idle TTL
+- `cmd/chartnagari-mcp/` — stdio bridge (~130 lines, stdlib only)
+- Stdlib-only hand-roll of JSON-RPC 2.0 (SDK deferred — v1 scope is initialize + tools/list + tools/call)
+- All endpoints `127.0.0.1`-bound, 1 MiB request cap
+
+### Notes
+- `get_analysis` returns markdown tables; `get_ohlcv` returns JSON. Token savings were measured at ~85% vs external OHLCV fetches for typical 10-symbol watchlist workflows.
+- MCP session TTL is 30 min idle. Clients must re-initialize after expiry (automatic in Claude Desktop/Code).
+- No auto-activation: MCP is served whenever the server runs, but clients must be explicitly configured.
+
 ## [2.6.0.0] - 2026-04-20
 
 ### Added

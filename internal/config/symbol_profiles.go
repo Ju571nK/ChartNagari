@@ -14,6 +14,7 @@ type Profile struct {
 	AllowedMethodologies []string `yaml:"allowed_methodologies" json:"allowed_methodologies"`
 	BlockedMethodologies []string `yaml:"blocked_methodologies" json:"blocked_methodologies"`
 	AllowedRules         []string `yaml:"allowed_rules" json:"allowed_rules"`
+	Timeframes           []string `yaml:"timeframes,omitempty" json:"timeframes,omitempty"`
 	AlertLimitPerDay     int      `yaml:"alert_limit_per_day" json:"alert_limit_per_day"`
 	CooldownHours        int      `yaml:"cooldown_hours" json:"cooldown_hours"`
 	ScoreThreshold       float64  `yaml:"score_threshold" json:"score_threshold"`

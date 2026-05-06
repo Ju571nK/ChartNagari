@@ -116,6 +116,17 @@ func (db *DB) GetOHLCVAll(symbol, timeframe string) ([]models.OHLCV, error) {
 	return scanOHLCVRows(rows)
 }
 
+// LatestClose returns the most recent close price for a symbol across all
+// timeframes (latest OHLCV row by open_time). Used by MCP get_analysis tool.
+func (db *DB) LatestClose(symbol string) (float64, error) {
+	var close float64
+	err := db.conn.QueryRow(
+		`SELECT close FROM ohlcv WHERE symbol = ? ORDER BY open_time DESC LIMIT 1`,
+		symbol,
+	).Scan(&close)
+	return close, err
+}
+
 func scanOHLCVRows(rows *sql.Rows) ([]models.OHLCV, error) {
 	var bars []models.OHLCV
 	for rows.Next() {

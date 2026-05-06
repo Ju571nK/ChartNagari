@@ -211,6 +211,16 @@ func (db *DB) migrate() error {
 	-- Feedback read-path index for 24h window aggregation and list queries.
 	CREATE INDEX IF NOT EXISTS idx_feedback_received_at
 		ON feedback_idempotency(received_at);
+
+	CREATE TABLE IF NOT EXISTS symbol_alert_overrides (
+		symbol               TEXT PRIMARY KEY,
+		score_threshold      REAL,
+		cooldown_hours       INTEGER,
+		alert_limit_per_day  INTEGER,
+		timeframes           TEXT,
+		allowed_rules        TEXT,
+		updated_at           INTEGER NOT NULL
+	);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err

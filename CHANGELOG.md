@@ -14,6 +14,23 @@ Format:
 
 ---
 
+## [2.8.0.0] - 2026-05-06
+
+### Added
+- Per-symbol alert overrides: tune `score_threshold`, `cooldown_hours`, `alert_limit_per_day`, and `timeframes` per symbol from the UI without touching YAML or restarting the server.
+- New SQLite table `symbol_alert_overrides` with nullable fields (NULL = inherit from profile).
+- New API endpoints: `GET/PUT/DELETE /api/symbol-overrides/{symbol}`.
+- New React component `SymbolOverrideEditor` mounted in Symbols tab (row expand chevron) and Chart tab (⚙ modal).
+- New optional `Profile.Timeframes` field in `config/symbol_profiles.yaml` (existing YAMLs unaffected).
+
+### Changed
+- Pipeline filter chain now consults `EffectiveAlertConfig(symbol)` for each tick — score threshold, timeframe, and override-driven `allowed_rules` overrides take effect on the next signal evaluation, no restart required.
+
+### Notes
+- Empty arrays for `timeframes`/`allowed_rules` in PUT bodies are normalized to NULL on disk to avoid silently muting all alerts.
+- Per-symbol `cooldown_hours` and `alert_limit_per_day` overrides are computed but NOT yet consumed by the global notifier cooldown tracker — flagged as a follow-up (TODO inline in `internal/pipeline/pipeline.go`).
+- `allowed_rules` UI editor is deferred to v1.1 per spec §11.
+
 ## [2.7.0.0] - 2026-04-22
 
 ### Added

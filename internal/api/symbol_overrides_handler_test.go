@@ -42,6 +42,8 @@ func newTestServer(t *testing.T, apiToken string) (*Server, *storage.SymbolOverr
 }
 
 func TestGetSymbolOverride_Empty(t *testing.T) {
+	// GET with no override stored must return the merged effective shape
+	// ({value, source}) so the React editor can read it without a PUT first.
 	s, _ := newTestServer(t, "")
 	req := httptest.NewRequest(http.MethodGet, "/api/symbol-overrides/TSLA", nil)
 	req.SetPathValue("symbol", "TSLA")
@@ -58,8 +60,16 @@ func TestGetSymbolOverride_Empty(t *testing.T) {
 	if got["symbol"] != "TSLA" {
 		t.Errorf("symbol = %v, want TSLA", got["symbol"])
 	}
-	if got["score_threshold"] != nil {
-		t.Errorf("score_threshold = %v, want nil", got["score_threshold"])
+	// No override stored: all fields must come from profile with source=="profile".
+	scoreEntry, ok := got["score_threshold"].(map[string]any)
+	if !ok {
+		t.Fatalf("score_threshold not a {value,source} object: %v", got["score_threshold"])
+	}
+	if scoreEntry["source"] != "profile" {
+		t.Errorf("score_threshold.source = %v, want profile", scoreEntry["source"])
+	}
+	if scoreEntry["value"].(float64) != 10.0 {
+		t.Errorf("score_threshold.value = %v, want 10.0 (from profile)", scoreEntry["value"])
 	}
 }
 

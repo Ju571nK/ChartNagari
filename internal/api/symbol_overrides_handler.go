@@ -59,42 +59,7 @@ func (s *Server) getSymbolOverride(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "symbol path parameter required")
 		return
 	}
-
-	ov, err := s.overrideStore.Get(symbol)
-	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, fmt.Sprintf("get override: %v", err))
-		return
-	}
-
-	out := map[string]any{"symbol": symbol}
-	if ov == nil {
-		out["score_threshold"] = nil
-		out["cooldown_hours"] = nil
-		out["alert_limit_per_day"] = nil
-		out["timeframes"] = nil
-		out["allowed_rules"] = nil
-		out["updated_at"] = nil
-	} else {
-		if ov.ScoreThreshold != nil {
-			out["score_threshold"] = *ov.ScoreThreshold
-		} else {
-			out["score_threshold"] = nil
-		}
-		if ov.CooldownHours != nil {
-			out["cooldown_hours"] = *ov.CooldownHours
-		} else {
-			out["cooldown_hours"] = nil
-		}
-		if ov.AlertLimitPerDay != nil {
-			out["alert_limit_per_day"] = *ov.AlertLimitPerDay
-		} else {
-			out["alert_limit_per_day"] = nil
-		}
-		out["timeframes"] = ov.Timeframes
-		out["allowed_rules"] = ov.AllowedRules
-		out["updated_at"] = ov.UpdatedAt
-	}
-	jsonOK(w, out)
+	jsonOK(w, s.buildEffectiveResponse(symbol))
 }
 
 // putSymbolOverride handles PUT /api/symbol-overrides/{symbol}.
@@ -108,6 +73,7 @@ func (s *Server) putSymbolOverride(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var req symbolOverrideRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, "invalid JSON body")
@@ -192,9 +158,11 @@ func (s *Server) requestToOverride(symbol string, req symbolOverrideRequest) (st
 		out.Timeframes = *req.Timeframes
 	}
 	if req.AllowedRules != nil && len(*req.AllowedRules) > 0 {
-		for _, r := range *req.AllowedRules {
-			if _, ok := s.validRuleNames[r]; !ok {
-				return out, fmt.Errorf("unknown rule: %q", r)
+		if s.validRuleNames != nil {
+			for _, r := range *req.AllowedRules {
+				if _, ok := s.validRuleNames[r]; !ok {
+					return out, fmt.Errorf("unknown rule: %q", r)
+				}
 			}
 		}
 		out.AllowedRules = *req.AllowedRules

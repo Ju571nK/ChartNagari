@@ -324,11 +324,14 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	effCfg := appconfig.EffectiveAlertConfig(sym, p.profileHolder, p.overrideStore)
 
 	// Profile/override filter: remove signals not allowed by methodology/rule.
+	// Uses the merged effective config so that an override can widen the
+	// profile's allowed_rules list (not just narrow it).
 	if p.profileHolder != nil {
 		beforeProfile := len(signals)
-		signals = filterByProfile(signals, p.profileHolder, sym)
+		profile := p.profileHolder.GetProfile(sym)
+		signals = filterByProfileEffective(signals, profile, effCfg)
 		if filtered := beforeProfile - len(signals); filtered > 0 {
-			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile filter removed disallowed signals")
+			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile/override filter removed disallowed signals")
 		}
 	}
 
@@ -361,25 +364,6 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		signals = filterByTimeframe(signals, effCfg.Timeframes)
 		if filtered := beforeTF - len(signals); filtered > 0 {
 			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Strs("allowed_tf", effCfg.Timeframes).Msg("timeframe filter removed signals")
-		}
-	}
-
-	// Override-aware allowed_rules filter (only when override sets a non-nil list).
-	if len(effCfg.AllowedRules) > 0 && p.overrideHasRulesOverride(sym) {
-		beforeRules := len(signals)
-		allowedSet := make(map[string]struct{}, len(effCfg.AllowedRules))
-		for _, r := range effCfg.AllowedRules {
-			allowedSet[r] = struct{}{}
-		}
-		kept := signals[:0]
-		for _, sig := range signals {
-			if _, ok := allowedSet[sig.Rule]; ok {
-				kept = append(kept, sig)
-			}
-		}
-		signals = kept
-		if filtered := beforeRules - len(signals); filtered > 0 {
-			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("override allowed_rules filter removed signals")
 		}
 	}
 
@@ -787,21 +771,3 @@ func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, i
 	}
 }
 
-// overrideHasRulesOverride reports whether the symbol has an explicit
-// allowed_rules override row in the DB. Used so the override-driven
-// rules filter does not double-fire when the profile alone defines the list
-// (filterByProfile already handles that).
-func (p *Pipeline) overrideHasRulesOverride(symbol string) bool {
-	if p.overrideStore == nil {
-		return false
-	}
-	ov, err := p.overrideStore.Get(symbol)
-	if err != nil {
-		p.log.Warn().Err(err).Str("symbol", symbol).Msg("override get failed during rules-filter probe")
-		return false
-	}
-	if ov == nil {
-		return false
-	}
-	return ov.AllowedRules != nil
-}

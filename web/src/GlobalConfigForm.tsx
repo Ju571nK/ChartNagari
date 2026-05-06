@@ -15,10 +15,11 @@ type Props = {
 
 type Row = { symbol: string; map: { broker: string; ticker: string }[] };
 
-function toRows(m: GlobalConfig['symbol_map']): Row[] {
+function toRows(m: GlobalConfig['symbol_map'] | null | undefined): Row[] {
+	if (!m) return [];
 	return Object.entries(m).map(([symbol, brokers]) => ({
 		symbol,
-		map: Object.entries(brokers).map(([broker, ticker]) => ({ broker, ticker })),
+		map: brokers ? Object.entries(brokers).map(([broker, ticker]) => ({ broker, ticker })) : [],
 	}));
 }
 

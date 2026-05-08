@@ -29,13 +29,25 @@ func NewCooldown(duration time.Duration) *Cooldown {
 // Allow returns true and records the current time when the cooldown has expired
 // (or when this key has never been seen before). Returns false if the last alert
 // for this key was sent within the cooldown window.
+// It is a thin wrapper around AllowWithDuration that uses the global duration.
 func (c *Cooldown) Allow(symbol, rule string) bool {
+	return c.AllowWithDuration(symbol, rule, 0)
+}
+
+// AllowWithDuration is the same as Allow but uses dur instead of the struct's
+// global duration. When dur <= 0, it falls back to c.duration (global default).
+// This allows per-call per-symbol cooldown durations without a new Cooldown
+// instance per symbol.
+func (c *Cooldown) AllowWithDuration(symbol, rule string, dur time.Duration) bool {
+	if dur <= 0 {
+		dur = c.duration
+	}
 	key := fmt.Sprintf("%s|%s", symbol, rule)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	last, exists := c.last[key]
-	if !exists || c.now().Sub(last) >= c.duration {
+	if !exists || c.now().Sub(last) >= dur {
 		c.last[key] = c.now()
 		return true
 	}

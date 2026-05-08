@@ -353,11 +353,6 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
-	// TODO(per-symbol-overrides): per-symbol CooldownHours and
-	// AlertLimitPerDay overrides are not yet consumed. They live in
-	// notifier/cooldown.go's global tracker and need a refactor to be
-	// per-symbol-aware. Spec §4.3 requires them; tracked as follow-up.
-
 	// Timeframe filter (override-driven; empty list = allow all).
 	if len(effCfg.Timeframes) > 0 {
 		beforeTF := len(signals)

@@ -47,19 +47,23 @@ func DefaultConfig() Config {
 // Notifier filters scored signals and dispatches them to all registered senders.
 // It is safe for concurrent use.
 type Notifier struct {
-	cfg         Config
-	cooldown    *Cooldown
-	senders     []Sender
-	log         zerolog.Logger
-	alertHolder *appconfig.AlertConfigHolder
+	cfg           Config
+	cooldown      *Cooldown
+	dailyLimit    *DailyLimit
+	senders       []Sender
+	log           zerolog.Logger
+	alertHolder   *appconfig.AlertConfigHolder
+	profileHolder *appconfig.SymbolProfilesHolder // optional; set via WithProfileHolder
+	overrideStore appconfig.OverrideGetter        // optional; set via WithOverrideStore
 }
 
 // New creates a Notifier from the given config and logger.
 func New(cfg Config, log zerolog.Logger) *Notifier {
 	return &Notifier{
-		cfg:      cfg,
-		cooldown: NewCooldown(cfg.CooldownDur),
-		log:      log,
+		cfg:        cfg,
+		cooldown:   NewCooldown(cfg.CooldownDur),
+		dailyLimit: NewDailyLimit(),
+		log:        log,
 	}
 }
 
@@ -71,6 +75,20 @@ func (n *Notifier) Register(s Sender) {
 // SetAlertConfigHolder wires an optional live-updated alert configuration holder.
 func (n *Notifier) SetAlertConfigHolder(h *appconfig.AlertConfigHolder) {
 	n.alertHolder = h
+}
+
+// WithProfileHolder wires an optional symbol profiles holder for per-symbol
+// cooldown and daily limit resolution. Returns n for chaining.
+func (n *Notifier) WithProfileHolder(h *appconfig.SymbolProfilesHolder) *Notifier {
+	n.profileHolder = h
+	return n
+}
+
+// WithOverrideStore wires an optional per-symbol override store used together
+// with profileHolder by EffectiveAlertConfig. Returns n for chaining.
+func (n *Notifier) WithOverrideStore(s appconfig.OverrideGetter) *Notifier {
+	n.overrideStore = s
+	return n
 }
 
 // Announce sends a raw HTML text message to all senders that implement TextSender.
@@ -107,11 +125,30 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 			continue
 		}
 
-		if !n.cooldown.Allow(sig.Symbol, sig.Rule) {
+		// Per-symbol effective config (falls through to global when no override / no holder).
+		var cooldownDur time.Duration
+		var dailyLimit int
+		if n.profileHolder != nil {
+			eff := appconfig.EffectiveAlertConfig(sig.Symbol, n.profileHolder, n.overrideStore)
+			if eff.CooldownHours > 0 {
+				cooldownDur = time.Duration(eff.CooldownHours) * time.Hour
+			}
+			dailyLimit = eff.AlertLimitPerDay
+		}
+
+		if !n.cooldown.AllowWithDuration(sig.Symbol, sig.Rule, cooldownDur) {
 			n.log.Debug().
 				Str("symbol", sig.Symbol).
 				Str("rule", sig.Rule).
 				Msg("notification cooldown active — skipping")
+			continue
+		}
+
+		if !n.dailyLimit.Allow(sig.Symbol, dailyLimit) {
+			n.log.Debug().
+				Str("symbol", sig.Symbol).
+				Int("limit", dailyLimit).
+				Msg("daily alert limit reached — skipping")
 			continue
 		}
 

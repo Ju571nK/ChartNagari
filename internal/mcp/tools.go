@@ -135,7 +135,7 @@ func (t *GetAnalysisTool) Call(_ context.Context, raw json.RawMessage) (ToolResu
 
 	price, _ := t.signal.LatestClose(p.Symbol) // ignore error — show 0 on failure
 
-	allSignals, err := t.signal.GetSignalsFiltered(p.Symbol, "", signalLookbackPerTF*len(timeframesOrder))
+	allSignals, err := t.signal.GetSignalsFiltered(p.Symbol, "ALL", signalLookbackPerTF*len(timeframesOrder))
 	if err != nil {
 		return ToolResult{}, &Error{Code: ErrCodeInternalError, Message: "signal lookup failed: " + err.Error()}
 	}
@@ -484,7 +484,7 @@ func (t *GetSignalHistoryTool) Call(_ context.Context, raw json.RawMessage) (Too
 		since = parsed
 	}
 
-	raw2, err := t.signal.GetSignalsFiltered(p.Symbol, "", p.Limit*2)
+	raw2, err := t.signal.GetSignalsFiltered(p.Symbol, "ALL", p.Limit*2)
 	if err != nil {
 		return ToolResult{}, &Error{Code: ErrCodeInternalError, Message: err.Error()}
 	}

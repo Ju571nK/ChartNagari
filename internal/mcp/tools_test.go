@@ -317,3 +317,39 @@ func TestGetEconomicCalendar_ImpactFilter(t *testing.T) {
 		t.Error("high-impact event missing")
 	}
 }
+
+func TestGetSignalHistory_RealDB_AllDirections(t *testing.T) {
+	// Regression test: ensure MCP tools pass "ALL" (not "") for direction
+	// so the SQL wildcard match in storage.signals works. Was returning
+	// zero signals silently in production due to "" never matching the
+	// 'ALL' wildcard in SQL.
+	dbPath := t.TempDir() + "/mcp.db"
+	db, err := storage.New(dbPath)
+	if err != nil {
+		t.Fatalf("storage.New: %v", err)
+	}
+	defer db.Close()
+
+	// Insert two signals: one LONG and one SHORT.
+	now := time.Now().UTC()
+	for _, dir := range []string{"LONG", "SHORT"} {
+		sig := models.Signal{
+			Symbol: "BTCUSDT", Timeframe: "1H", Rule: "ict.order_block_bullish",
+			Direction: dir, Score: 14.0, Message: "test",
+			CreatedAt: now.Add(-1 * time.Hour),
+		}
+		if err := db.SaveSignal(sig); err != nil {
+			t.Fatalf("SaveSignal: %v", err)
+		}
+	}
+
+	tool := NewGetSignalHistory(db)
+	res, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT"}`))
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	text := res.Content[0].Text
+	if !strings.Contains(text, "LONG") || !strings.Contains(text, "SHORT") {
+		t.Errorf("expected both LONG and SHORT in output (direction wildcard broken?), got: %q", text)
+	}
+}

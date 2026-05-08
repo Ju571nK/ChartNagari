@@ -14,6 +14,18 @@ Format:
 
 ---
 
+## [2.8.1.0] - 2026-05-08
+
+### Fixed
+- Per-symbol `cooldown_hours` and `alert_limit_per_day` overrides are now actually consumed by the Notifier — previously the UI stored them but the backend silently ignored them, so users tuning the cooldown slider saw no behavior change. (Resolves the v2.8.0.0 TODO in `internal/pipeline/pipeline.go`.)
+- MCP `get_analysis` and `get_signal_history` tools now pass `"ALL"` (not `""`) to `GetSignalsFiltered`'s SQL wildcard, fixing a silent regression where both tools always returned zero signals from the real DB. The fakeSignalSource used in unit tests bypassed SQL, so the bug only manifested in production. New regression test exercises the real `storage.DB` path.
+
+### Added
+- New `DailyLimit` tracker in `internal/notifier/daily_limit.go` — UTC-day-bucketed per-symbol counter with idempotent reset at midnight.
+- `Cooldown.AllowWithDuration(symbol, rule, dur)` for per-call cooldown durations; the existing `Allow` method is preserved as a global-default wrapper.
+
+---
+
 ## [2.8.0.0] - 2026-05-06
 
 ### Added

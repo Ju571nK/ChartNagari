@@ -224,6 +224,8 @@ func main() {
 	}
 	notif := notifier.New(notifCfg, log.Logger)
 	notif.SetAlertConfigHolder(alertHolder)
+	notif.WithProfileHolder(profileHolder)
+	notif.WithOverrideStore(overrideStore)
 
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
 		notif.Register(notifier.NewTelegramSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID))

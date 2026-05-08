@@ -346,6 +346,41 @@ func TestDiscordSender_SendsEmbedPayload(t *testing.T) {
 	}
 }
 
+// Test 19: AllowWithDuration uses the per-call duration, not the global one.
+func TestCooldownAllowWithDuration(t *testing.T) {
+	c := NewCooldown(1 * time.Hour) // global default
+	clock := time.Now()
+	c.setClock(func() time.Time { return clock })
+
+	// First call always passes.
+	if !c.AllowWithDuration("BTCUSDT", "rsi", 30*time.Minute) {
+		t.Fatal("first call should allow")
+	}
+	// 20 min later — under the 30-min override window — should block.
+	clock = clock.Add(20 * time.Minute)
+	if c.AllowWithDuration("BTCUSDT", "rsi", 30*time.Minute) {
+		t.Errorf("should still be in 30-min cooldown")
+	}
+	// 35 min total — past the 30-min window — should pass.
+	clock = clock.Add(15 * time.Minute)
+	if !c.AllowWithDuration("BTCUSDT", "rsi", 30*time.Minute) {
+		t.Errorf("should be past 30-min cooldown")
+	}
+}
+
+// Test 20: AllowWithDuration falls back to the global duration when dur <= 0.
+func TestCooldownAllowWithDuration_FallsBackToGlobalWhenZero(t *testing.T) {
+	c := NewCooldown(2 * time.Hour)
+	clock := time.Now()
+	c.setClock(func() time.Time { return clock })
+
+	c.AllowWithDuration("BTCUSDT", "rsi", 0) // dur=0 → use global 2h
+	clock = clock.Add(1 * time.Hour)
+	if c.AllowWithDuration("BTCUSDT", "rsi", 0) {
+		t.Errorf("dur=0 should fall back to 2h global, still blocked at +1h")
+	}
+}
+
 // ── rewriteTransport ─────────────────────────────────────────────────────────
 // Redirects all outbound HTTP requests to a fixed base URL (test server).
 type rewriteTransport struct {

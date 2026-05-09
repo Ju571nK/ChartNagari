@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { AnalysisTab } from './AnalysisTab'
+import { MyTradesTab } from './MyTradesTab'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import ExecutionTab from './ExecutionTab'
 import MCPSettings from './MCPSettings'
@@ -21,7 +22,7 @@ import {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar' | 'execution'
+type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar' | 'execution' | 'my-trades'
 
 type UIMode = 'beginner' | 'expert'
 const UI_MODE_KEY = 'chartnagari_ui_mode'
@@ -3116,6 +3117,20 @@ function PerformanceTab() {
   const [error, setError] = useState('')
   const [stats, setStats] = useState<AggregatedRuleStat[] | null>(null)
   const [exporting, setExporting] = useState<string | null>(null)
+  const [myStats, setMyStats] = useState<Record<string, { took: number; hit_rate: number; skip_rate: number }>>({})
+
+  useEffect(() => {
+    fetch('/api/marks/rollup?by=rule')
+      .then(r => r.ok ? r.json() : { rows: [] })
+      .then((data: { rows?: { key: string; took: number; hit_rate: number; skip_rate: number }[] }) => {
+        const m: Record<string, { took: number; hit_rate: number; skip_rate: number }> = {}
+        for (const r of (data.rows ?? [])) {
+          m[r.key] = { took: r.took, hit_rate: r.hit_rate, skip_rate: r.skip_rate }
+        }
+        setMyStats(m)
+      })
+      .catch(() => { /* leave empty */ })
+  }, [])
 
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
@@ -3243,6 +3258,10 @@ function PerformanceTab() {
                       <th>{t('total_trades')}</th>
                       <th>{t('symbol_count')}</th>
                       <th style={{ minWidth: 140 }}>{t('tv_export')}</th>
+                      <th>{t('performance.my_took')}</th>
+                      <th>{t('performance.my_hit_rate')}</th>
+                      <th>{t('performance.my_skip_rate')}</th>
+                      <th>{t('performance.delta_vs_bt')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3283,6 +3302,22 @@ function PerformanceTab() {
                             <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>{t('not_supported')}</span>
                           )}
                         </td>
+                        {(() => {
+                          const me = myStats[s.rule]
+                          if (!me || me.took === 0) {
+                            return (<>
+                              <td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td>
+                            </>)
+                          }
+                          const delta = (me.hit_rate - s.avg_win_rate) * 100
+                          const sign = delta > 0 ? '+' : ''
+                          return (<>
+                            <td align="right">{me.took}</td>
+                            <td align="right">{(me.hit_rate * 100).toFixed(1)}%</td>
+                            <td align="right">{(me.skip_rate * 100).toFixed(1)}%</td>
+                            <td align="right">{sign}{delta.toFixed(1)}pp</td>
+                          </>)
+                        })()}
                       </tr>
                     ))}
                   </tbody>
@@ -3859,6 +3894,7 @@ const TAB_KEYS: Record<Tab, string> = {
   'price-alerts': 'price_alerts',
   calendar: 'calendar',
   execution: 'execution',
+  'my-trades': 'my_trades.title',
 }
 
 // ── Calendar Tab ─────────────────────────────────────────────────────────────
@@ -4131,6 +4167,7 @@ export function App() {
           <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
           <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>{t('calendar')}</button>
           <button className={`tab-btn${tab === 'execution' ? ' active' : ''}`} onClick={() => setTab('execution')}>{t('execution')}</button>
+          <button className={`tab-btn${tab === 'my-trades' ? ' active' : ''}`} onClick={() => setTab('my-trades')}>{t('my_trades.title')}</button>
         </nav>
       </header>
       <main>
@@ -4149,6 +4186,7 @@ export function App() {
         {tab === 'price-alerts' && <PriceAlertsTab />}
         {tab === 'calendar' && <CalendarTab />}
         {tab === 'execution' && <ExecutionTab />}
+        {tab === 'my-trades' && <MyTradesTab />}
       </main>
       {showOnboarding && (
         <OnboardingModal

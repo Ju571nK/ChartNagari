@@ -7,9 +7,9 @@ import (
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
-// SaveSignal persists a generated signal to the database.
-func (db *DB) SaveSignal(sig models.Signal) error {
-	_, err := db.conn.Exec(`
+// SaveSignal persists a generated signal to the database and returns the new row id.
+func (db *DB) SaveSignal(sig models.Signal) (int64, error) {
+	res, err := db.conn.Exec(`
 		INSERT INTO signals (symbol, timeframe, rule, direction, score, message, ai_interpretation, zone_low, zone_high, htf_trend, atr_percentile, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sig.Symbol,
@@ -26,9 +26,13 @@ func (db *DB) SaveSignal(sig models.Signal) error {
 		sig.CreatedAt.Unix(),
 	)
 	if err != nil {
-		return fmt.Errorf("신호 저장 실패 [%s %s]: %w", sig.Symbol, sig.Rule, err)
+		return 0, fmt.Errorf("신호 저장 실패 [%s %s]: %w", sig.Symbol, sig.Rule, err)
 	}
-	return nil
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("LastInsertId 실패 [%s %s]: %w", sig.Symbol, sig.Rule, err)
+	}
+	return id, nil
 }
 
 // GetLatestSignalTime returns the Unix-second timestamp of the most recent signal,

@@ -14,6 +14,31 @@ Format:
 
 ---
 
+## [2.9.0.0] - 2026-05-09
+
+### Added
+- **Signal Performance Tracking.** Mark each fired alert as Took or Skipped, then for Took alerts mark the outcome as Win / Loss / BE. Personal hit rate aggregates per rule, symbol, methodology, and timeframe.
+- **Telegram inline keyboard marking.** Alert messages now ship with `[✅ Took / ❌ Skipped]` buttons; tapping Took swaps in `[💰 Win / 💸 Loss / ⚖ BE / ↺ Undo]`. Outcomes append to the message text as a journal: `✓ Took at HH:MM → 💰 Win at HH:MM`.
+- **My Trades tab** with three subtabs:
+  - *Rollup* — aggregated stats by rule / symbol / methodology / timeframe with selectable period (7d / 30d / 90d / 365d / all).
+  - *Pending* — alerts not yet marked, with one-click Took/Skipped buttons.
+  - *History* — marked alerts with edit / undo support.
+- **Performance tab extension.** New columns: My Took, My Hit Rate, My Skip Rate, Δ vs BT — your personal hit rate side-by-side with the rule's backtest WinRate.
+- **New MCP tool `get_my_performance`** (6 tools total). Claude Desktop / Claude Code / Codex CLI can now answer questions like "내 ICT 통계 어때?" with a markdown table of personal stats.
+- **New SQLite table `signal_marks`** with FSM-validated transitions and lazy-create semantic (no row = implicit PENDING).
+- **New API endpoints**: `POST /api/marks/{signal_id}` (bearer), `GET /api/marks/pending`, `GET /api/marks/recent`, `GET /api/marks/rollup`.
+
+### Changed
+- `Signal.ID` field added to `pkg/models/signal.go`. `storage.DB.SaveSignal` now returns `(int64, error)` so the pipeline can capture and propagate the row id to the notifier (required for Telegram callback_data).
+- `notifier.NewTelegramBot` now takes a `MarkStore` parameter (use nil to disable callback marking).
+
+### Notes
+- Discord receives the same alert text without inline buttons in v1. Discord interaction-based marking is deferred to v2.10.
+- Outcome is 3-state (Win/Loss/BE) in v1. Per-trade ±R precision input is reserved for v2.10 (the `outcome_pnl_r` column already exists).
+- The user can mark an alert at any time — there is no PENDING timeout. Edits are reversible (`undo` action).
+
+---
+
 ## [2.8.1.0] - 2026-05-08
 
 ### Fixed

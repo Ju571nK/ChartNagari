@@ -29,6 +29,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/history"
 	"github.com/Ju571nK/Chatter/internal/indicator"
+	"github.com/Ju571nK/Chatter/internal/marks"
 	"github.com/Ju571nK/Chatter/internal/mcp"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pinescript"
@@ -210,6 +211,8 @@ type Server struct {
 	execFeedback       FeedbackRecorder                // optional; set via WithExecutionFeedback
 	execDB             *sql.DB                         // optional; set via WithExecutionDB for feedback queries
 	execState          *execution.StateStore           // optional; set via WithExecutionState for config versioning
+	markStore          *storage.SignalMarkStore         // optional; set via WithMarkStore
+	aggregator         *marks.Aggregator               // optional; set via WithAggregator
 	mcpRegistry        *mcp.Registry                   // optional; set via WithMCPRegistry
 	mcpSessions        *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
 	ollamaDetector     OllamaStatusProvider            // optional; set via WithOllamaDetector
@@ -406,6 +409,18 @@ func (s *Server) WithSymbolProfiles(h *appconfig.SymbolProfilesHolder) {
 	s.profileHolder = h
 }
 
+// WithMarkStore wires the signal mark store for the /api/marks/* endpoints.
+func (s *Server) WithMarkStore(store *storage.SignalMarkStore) *Server {
+	s.markStore = store
+	return s
+}
+
+// WithAggregator wires the marks aggregator for the GET /api/marks/rollup endpoint.
+func (s *Server) WithAggregator(a *marks.Aggregator) *Server {
+	s.aggregator = a
+	return s
+}
+
 // WithOverrideStore wires the per-symbol alert override store.
 func (s *Server) WithOverrideStore(store *storage.SymbolOverrideStore) {
 	s.overrideStore = store
@@ -530,6 +545,16 @@ func (s *Server) Handler() http.Handler {
 	// Economic calendar
 	if s.calendarStore != nil {
 		mux.HandleFunc("GET /api/calendar", s.getCalendarEvents)
+	}
+
+	// Signal performance marks
+	if s.markStore != nil {
+		mux.HandleFunc("POST /api/marks/{signal_id}", s.postMark)
+		mux.HandleFunc("GET /api/marks/pending",      s.getPending)
+		mux.HandleFunc("GET /api/marks/recent",       s.getRecent)
+	}
+	if s.aggregator != nil {
+		mux.HandleFunc("GET /api/marks/rollup", s.getRollup)
 	}
 
 	// Demo scan (no DB required — runs rule engine on sample data)

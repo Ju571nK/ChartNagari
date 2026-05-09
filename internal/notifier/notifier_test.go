@@ -271,7 +271,10 @@ func TestTelegramSender_SendsCorrectPayload(t *testing.T) {
 		var buf bytes.Buffer
 		buf.ReadFrom(r.Body)
 		received = buf.Bytes()
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		// Return a minimal Telegram sendMessage response so SendAlert can decode message_id.
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1}}`))
 	}))
 	defer srv.Close()
 
@@ -290,7 +293,8 @@ func TestTelegramSender_SendsCorrectPayload(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var payload map[string]string
+	// Payload now includes reply_markup (an object), so unmarshal into map[string]any.
+	var payload map[string]any
 	if err := json.Unmarshal(received, &payload); err != nil {
 		t.Fatalf("could not unmarshal payload: %v", err)
 	}
@@ -300,8 +304,12 @@ func TestTelegramSender_SendsCorrectPayload(t *testing.T) {
 	if payload["parse_mode"] != "HTML" {
 		t.Errorf("parse_mode mismatch: %q", payload["parse_mode"])
 	}
-	if !strings.Contains(payload["text"], "SHORT") {
-		t.Errorf("text does not contain direction: %q", payload["text"])
+	text, _ := payload["text"].(string)
+	if !strings.Contains(text, "SHORT") {
+		t.Errorf("text does not contain direction: %q", text)
+	}
+	if payload["reply_markup"] == nil {
+		t.Error("reply_markup should be present in SendAlert payload")
 	}
 }
 

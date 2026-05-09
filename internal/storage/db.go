@@ -221,6 +221,21 @@ func (db *DB) migrate() error {
 		allowed_rules        TEXT,
 		updated_at           INTEGER NOT NULL
 	);
+
+	-- Signal performance tracking (Phase: signal-performance-tracking).
+	-- Lazy-created on first mark; absent row = implicit PENDING.
+	CREATE TABLE IF NOT EXISTS signal_marks (
+		signal_id      INTEGER PRIMARY KEY,
+		status         TEXT    NOT NULL DEFAULT 'PENDING',
+		took_at        INTEGER,
+		outcome_at     INTEGER,
+		outcome_pnl_r  REAL,
+		notes          TEXT,
+		tg_message_id  INTEGER,
+		updated_at     INTEGER NOT NULL,
+		FOREIGN KEY (signal_id) REFERENCES signals(id)
+	);
+	CREATE INDEX IF NOT EXISTS idx_signal_marks_status ON signal_marks(status);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err

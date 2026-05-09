@@ -338,7 +338,7 @@ func TestGetSignalHistory_RealDB_AllDirections(t *testing.T) {
 			Direction: dir, Score: 14.0, Message: "test",
 			CreatedAt: now.Add(-1 * time.Hour),
 		}
-		if err := db.SaveSignal(sig); err != nil {
+		if _, err := db.SaveSignal(sig); err != nil {
 			t.Fatalf("SaveSignal: %v", err)
 		}
 	}

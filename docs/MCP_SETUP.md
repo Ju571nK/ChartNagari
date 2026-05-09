@@ -77,7 +77,7 @@ Point it at the `chartnagari-mcp` binary with the same two env vars:
 - `CHARTNAGARI_URL` (default `http://localhost:8080`)
 - `CHARTNAGARI_TOKEN` (required if `API_TOKEN` is set on the server)
 
-## Available tools (v1)
+## Available tools (v2)
 
 | Tool | Purpose |
 |------|---------|
@@ -86,6 +86,7 @@ Point it at the `chartnagari-mcp` binary with the same two env vars:
 | `get_signal_history` | Recent alerts for a symbol |
 | `get_ohlcv` | Raw candles (fallback — prefer `get_analysis`) |
 | `get_economic_calendar` | Economic events in a date range |
+| `get_my_performance` | Personal trading performance from user-marked alerts (Took/Skipped/Win/Loss/BE counts and hit rate by rule/symbol/methodology/timeframe) |
 
 ## Example Claude Code conversation
 
@@ -120,7 +121,7 @@ Claude: [calls list_watchlist]
 - Confirm `curl http://localhost:8080/api/status` from the same shell.
 
 ### "unknown tool" error
-- Server version mismatch (v1 ships 5 tools; older server has fewer). Upgrade with `git pull && ./restart.sh`.
+- Server version mismatch (v2 ships 6 tools; older server has fewer). Upgrade with `git pull && ./restart.sh`.
 
 ## Security notes
 

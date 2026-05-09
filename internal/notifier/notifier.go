@@ -18,6 +18,21 @@ type Sender interface {
 	Name() string
 }
 
+// AlertSender is an optional extension to Sender for backends that can return
+// a platform message_id after dispatch (e.g. TelegramSender.SendAlert).
+// Notifier uses this to capture the id for later editMessageReplyMarkup calls.
+type AlertSender interface {
+	Sender
+	SendAlert(ctx context.Context, sig models.Signal) (int64, error)
+}
+
+// MarkStoreSet is the subset of SignalMarkStore the Notifier uses.
+// *storage.SignalMarkStore satisfies it. Defined here as a small interface
+// to avoid a hard dependency on the storage package from notifier internals.
+type MarkStoreSet interface {
+	SetMessageID(signalID int64, msgID int64) error
+}
+
 // TextSender is an optional extension to Sender for sending raw text messages.
 // Backends that implement this receive Announce() calls (e.g. startup notices).
 type TextSender interface {
@@ -55,6 +70,7 @@ type Notifier struct {
 	alertHolder   *appconfig.AlertConfigHolder
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via WithProfileHolder
 	overrideStore appconfig.OverrideGetter        // optional; set via WithOverrideStore
+	markStore     MarkStoreSet                    // optional; nil disables message_id capture
 }
 
 // New creates a Notifier from the given config and logger.
@@ -88,6 +104,14 @@ func (n *Notifier) WithProfileHolder(h *appconfig.SymbolProfilesHolder) *Notifie
 // with profileHolder by EffectiveAlertConfig. Returns n for chaining.
 func (n *Notifier) WithOverrideStore(s appconfig.OverrideGetter) *Notifier {
 	n.overrideStore = s
+	return n
+}
+
+// WithMarkStore wires an optional mark store used to persist the Telegram
+// message_id after SendAlert. When nil, message_id capture is disabled.
+// Returns n for chaining.
+func (n *Notifier) WithMarkStore(s MarkStoreSet) *Notifier {
+	n.markStore = s
 	return n
 }
 
@@ -160,12 +184,29 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 			Msg("dispatching signal")
 
 		for _, sender := range n.senders {
-			if err := sender.Send(ctx, sig); err != nil {
-				n.log.Error().
-					Err(err).
-					Str("sender", sender.Name()).
-					Str("symbol", sig.Symbol).
-					Msg("failed to send notification")
+			if as, ok := sender.(AlertSender); ok {
+				msgID, err := as.SendAlert(ctx, sig)
+				if err != nil {
+					n.log.Error().
+						Err(err).
+						Str("sender", sender.Name()).
+						Str("symbol", sig.Symbol).
+						Msg("failed to send notification")
+					continue
+				}
+				if n.markStore != nil && msgID != 0 {
+					if err := n.markStore.SetMessageID(sig.ID, msgID); err != nil {
+						n.log.Warn().Err(err).Int64("signal_id", sig.ID).Msg("set message_id failed")
+					}
+				}
+			} else {
+				if err := sender.Send(ctx, sig); err != nil {
+					n.log.Error().
+						Err(err).
+						Str("sender", sender.Name()).
+						Str("symbol", sig.Symbol).
+						Msg("failed to send notification")
+				}
 			}
 		}
 	}

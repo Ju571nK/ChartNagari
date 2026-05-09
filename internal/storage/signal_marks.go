@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // SignalMark is one row of the signal_marks table.
@@ -171,6 +173,98 @@ func (s *SignalMarkStore) directSetStatus(signalID int64, status string) error {
 		ON CONFLICT(signal_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`,
 		signalID, status, now)
 	return err
+}
+
+// SignalMarkRow joins a mark with its underlying signal for list queries.
+// Used by My Trades tab Pending / History sections.
+type SignalMarkRow struct {
+	Signal models.Signal `json:"signal"` // ID, Symbol, Timeframe, Rule, Direction, Score, Message, CreatedAt populated
+	Mark   *SignalMark   `json:"mark"`   // nil for pending rows (no signal_marks row yet)
+}
+
+// ListPending returns signals with NO mark row, created at or after `since`.
+// Pass time.Time{} (zero) to disable the date filter.
+// limit <= 0 or > 200 falls back to 50.
+func (s *SignalMarkStore) ListPending(since time.Time, limit int) ([]SignalMarkRow, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	sinceUnix := int64(0)
+	if !since.IsZero() {
+		sinceUnix = since.Unix()
+	}
+	rows, err := s.db.conn.Query(`
+		SELECT s.id, s.symbol, s.timeframe, s.rule, s.direction, s.score, s.message, s.created_at
+		FROM signals s
+		LEFT JOIN signal_marks m ON m.signal_id = s.id
+		WHERE m.signal_id IS NULL AND s.created_at >= ?
+		ORDER BY s.created_at DESC
+		LIMIT ?`, sinceUnix, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list pending: %w", err)
+	}
+	defer rows.Close()
+	out := []SignalMarkRow{}
+	for rows.Next() {
+		var sig models.Signal
+		var createdUnix int64
+		if err := rows.Scan(&sig.ID, &sig.Symbol, &sig.Timeframe, &sig.Rule, &sig.Direction, &sig.Score, &sig.Message, &createdUnix); err != nil {
+			return nil, err
+		}
+		sig.CreatedAt = time.Unix(createdUnix, 0).UTC()
+		out = append(out, SignalMarkRow{Signal: sig, Mark: nil})
+	}
+	return out, rows.Err()
+}
+
+// ListMarked returns marked signals (any status) with updated_at >= since.
+// limit <= 0 or > 200 falls back to 50.
+func (s *SignalMarkStore) ListMarked(since time.Time, limit int) ([]SignalMarkRow, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	sinceUnix := int64(0)
+	if !since.IsZero() {
+		sinceUnix = since.Unix()
+	}
+	rows, err := s.db.conn.Query(`
+		SELECT s.id, s.symbol, s.timeframe, s.rule, s.direction, s.score, s.message, s.created_at,
+		       m.status, m.took_at, m.outcome_at, m.tg_message_id, m.updated_at
+		FROM signal_marks m
+		JOIN signals s ON s.id = m.signal_id
+		WHERE m.updated_at >= ?
+		ORDER BY m.updated_at DESC
+		LIMIT ?`, sinceUnix, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list marked: %w", err)
+	}
+	defer rows.Close()
+	out := []SignalMarkRow{}
+	for rows.Next() {
+		var sig models.Signal
+		var createdUnix int64
+		var mark SignalMark
+		var took, outc, msg sql.NullInt64
+		if err := rows.Scan(&sig.ID, &sig.Symbol, &sig.Timeframe, &sig.Rule, &sig.Direction, &sig.Score, &sig.Message, &createdUnix, &mark.Status, &took, &outc, &msg, &mark.UpdatedAt); err != nil {
+			return nil, err
+		}
+		sig.CreatedAt = time.Unix(createdUnix, 0).UTC()
+		mark.SignalID = sig.ID
+		if took.Valid {
+			v := took.Int64
+			mark.TookAt = &v
+		}
+		if outc.Valid {
+			v := outc.Int64
+			mark.OutcomeAt = &v
+		}
+		if msg.Valid {
+			v := msg.Int64
+			mark.TgMessageID = &v
+		}
+		out = append(out, SignalMarkRow{Signal: sig, Mark: &mark})
+	}
+	return out, rows.Err()
 }
 
 // nextFSMState returns (newStatus, deleteRow, error).

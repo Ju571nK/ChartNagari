@@ -3,6 +3,7 @@ package storage
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // FSM matrix from spec §3.2 / §9.1
@@ -214,5 +215,88 @@ func TestSignalMarkStore_SignalExists(t *testing.T) {
 	}
 	if exists {
 		t.Errorf("SignalExists(missing) = true, want false")
+	}
+}
+
+func TestSignalMarkStore_ListPending(t *testing.T) {
+	db := newTestDB(t)
+	store := NewSignalMarkStore(db)
+	id1 := seedSignal(t, db)
+	id2 := seedSignal(t, db)
+	id3 := seedSignal(t, db)
+	// id1 is marked TOOK, id2/id3 unmarked.
+	if _, err := store.Mark(id1, "took"); err != nil {
+		t.Fatal(err)
+	}
+	_ = id2
+	_ = id3
+
+	rows, err := store.ListPending(time.Time{}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("len(pending) = %d, want 2 (id2,id3)", len(rows))
+	}
+	// Each row must have a populated Signal.ID.
+	for _, r := range rows {
+		if r.Signal.ID == 0 {
+			t.Errorf("Signal.ID = 0, expected populated")
+		}
+		if r.Mark != nil {
+			t.Errorf("Mark should be nil for pending: %#v", r.Mark)
+		}
+	}
+}
+
+func TestSignalMarkStore_ListMarked(t *testing.T) {
+	db := newTestDB(t)
+	store := NewSignalMarkStore(db)
+	id1 := seedSignal(t, db)
+	id2 := seedSignal(t, db)
+	_, _ = store.Mark(id1, "took")
+	_, _ = store.Mark(id1, "win")
+	_, _ = store.Mark(id2, "skip")
+
+	rows, err := store.ListMarked(time.Time{}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("len(marked) = %d, want 2", len(rows))
+	}
+	statuses := map[string]bool{}
+	for _, r := range rows {
+		if r.Mark == nil {
+			t.Fatalf("Mark must be non-nil for marked rows: %#v", r)
+		}
+		statuses[r.Mark.Status] = true
+		if r.Signal.ID == 0 {
+			t.Errorf("Signal.ID = 0, expected populated")
+		}
+	}
+	if !statuses["WIN"] || !statuses["SKIPPED"] {
+		t.Errorf("expected WIN and SKIPPED in results, got %v", statuses)
+	}
+}
+
+func TestSignalMarkStore_ListPending_LimitClamp(t *testing.T) {
+	db := newTestDB(t)
+	store := NewSignalMarkStore(db)
+	for i := 0; i < 10; i++ {
+		seedSignal(t, db)
+	}
+	// limit=0 should fall back to default 50; we only have 10 so all return.
+	rows, err := store.ListPending(time.Time{}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 10 {
+		t.Errorf("limit=0 default fallback: got %d, want 10", len(rows))
+	}
+	// limit=300 clamps to 200 (still all 10 since less than cap).
+	rows, _ = store.ListPending(time.Time{}, 300)
+	if len(rows) != 10 {
+		t.Errorf("limit=300 clamped: got %d, want 10", len(rows))
 	}
 }

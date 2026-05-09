@@ -464,7 +464,7 @@ func main() {
 				res.AggregatorReason,
 			), nil
 		}
-		tgBot := notifier.NewTelegramBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID, analysisHandler)
+		tgBot := notifier.NewTelegramBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID, analysisHandler, nil)
 		go tgBot.Start(ctx)
 		log.Info().Msg("Telegram bot command listener enabled (/analysis SYMBOL)")
 	}

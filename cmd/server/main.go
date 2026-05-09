@@ -26,6 +26,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/hub"
 	"github.com/Ju571nK/Chatter/internal/interpreter"
 	"github.com/Ju571nK/Chatter/internal/llm"
+	"github.com/Ju571nK/Chatter/internal/marks"
 	"github.com/Ju571nK/Chatter/internal/mcp"
 	"github.com/Ju571nK/Chatter/internal/ollama"
 	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
@@ -72,6 +73,10 @@ func main() {
 	log.Info().Str("path", cfg.DBPath).Msg("SQLite connected")
 
 	overrideStore := storage.NewSymbolOverrideStore(db)
+
+	// Signal performance tracking (v2.9).
+	markStore := storage.NewSignalMarkStore(db)
+	markAggregator := marks.NewAggregator(db, markStore)
 
 	// ── 컨텍스트 (SIGINT/SIGTERM 감지) ───────────────────────────────
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -226,6 +231,7 @@ func main() {
 	notif.SetAlertConfigHolder(alertHolder)
 	notif.WithProfileHolder(profileHolder)
 	notif.WithOverrideStore(overrideStore)
+	notif.WithMarkStore(markStore)
 
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
 		notif.Register(notifier.NewTelegramSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID))
@@ -359,6 +365,8 @@ func main() {
 	apiSrv.WithExecutionFeedback(feedbackIdem)
 	apiSrv.WithExecutionDB(db.Conn())
 	apiSrv.WithExecutionState(execState)
+	apiSrv.WithMarkStore(markStore)
+	apiSrv.WithAggregator(markAggregator)
 
 	// ── MCP 레지스트리 (로컬 LLM 통합) ────────────────────────────────────
 	mcpReg := mcp.NewRegistry()
@@ -368,8 +376,9 @@ func main() {
 	mcpReg.Register(mcp.NewGetSignalHistory(db))
 	mcpReg.Register(mcp.NewGetOHLCV(db))
 	mcpReg.Register(mcp.NewGetEconomicCalendar(db))
+	mcpReg.Register(mcp.NewGetMyPerformance(markAggregator))
 	apiSrv.WithMCPRegistry(mcpReg)
-	log.Info().Int("tools", 5).Msg("MCP registry wired")
+	log.Info().Int("tools", 6).Msg("MCP registry wired")
 
 	// ── Ollama detector (opt-in local LLM status endpoint) ───────────────
 	ollamaDet := ollama.NewDetector(cfg.Ollama.Host, cfg.Ollama.Model, ollama.DefaultRuntime())
@@ -464,7 +473,7 @@ func main() {
 				res.AggregatorReason,
 			), nil
 		}
-		tgBot := notifier.NewTelegramBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID, analysisHandler, nil)
+		tgBot := notifier.NewTelegramBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID, analysisHandler, markStore)
 		go tgBot.Start(ctx)
 		log.Info().Msg("Telegram bot command listener enabled (/analysis SYMBOL)")
 	}

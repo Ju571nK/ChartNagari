@@ -35,7 +35,7 @@ func TestSaveAndGetSignal_WithAIInterpretation(t *testing.T) {
 		CreatedAt:        time.Now().UTC().Truncate(time.Second),
 	}
 
-	if err := db.SaveSignal(sig); err != nil {
+	if _, err := db.SaveSignal(sig); err != nil {
 		t.Fatalf("SaveSignal: %v", err)
 	}
 

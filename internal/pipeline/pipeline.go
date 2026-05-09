@@ -33,7 +33,7 @@ type OHLCVReader interface {
 // SignalSaver persists generated signals for later retrieval (e.g., chart markers).
 // *storage.DB satisfies this interface.
 type SignalSaver interface {
-	SaveSignal(sig models.Signal) error
+	SaveSignal(sig models.Signal) (int64, error)
 }
 
 // PaperTrader tracks virtual paper positions driven by live signals.
@@ -565,11 +565,11 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	// Persist signals for chart dashboard markers (after AI enrichment).
 	// Only save signals above MinScore and not within the cooldown window.
 	if p.sigSaver != nil {
-		for _, sig := range enriched {
-			if sig.Score < p.cfg.SignalMinScore {
+		for i := range enriched {
+			if enriched[i].Score < p.cfg.SignalMinScore {
 				continue
 			}
-			key := sig.Symbol + ":" + sig.Rule
+			key := enriched[i].Symbol + ":" + enriched[i].Rule
 			p.sigCooldownMu.Lock()
 			last := p.sigLastSaved[key]
 			canSave := time.Since(last) >= p.cfg.SignalCooldown
@@ -580,9 +580,12 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 			if !canSave {
 				continue
 			}
-			if err := p.sigSaver.SaveSignal(sig); err != nil {
+			id, err := p.sigSaver.SaveSignal(enriched[i])
+			if err != nil {
 				p.log.Warn().Err(err).Str("symbol", sym).Msg("signal save failed")
+				continue
 			}
+			enriched[i].ID = id
 		}
 	}
 

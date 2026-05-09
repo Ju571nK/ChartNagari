@@ -176,14 +176,18 @@ func (s *SignalMarkStore) directSetStatus(signalID int64, status string) error {
 // nextFSMState returns (newStatus, deleteRow, error).
 func nextFSMState(from, action string) (string, bool, error) {
 	switch from {
-	case "":
+	case "", "PENDING":
 		switch action {
 		case "took":
 			return "TOOK", false, nil
 		case "skip":
 			return "SKIPPED", false, nil
 		default:
-			return "", false, fmt.Errorf("invalid transition: (no row) → %q", action)
+			label := "PENDING"
+			if from == "" {
+				label = "(no row)"
+			}
+			return "", false, fmt.Errorf("invalid transition: %s → %q", label, action)
 		}
 	case "TOOK":
 		switch action {

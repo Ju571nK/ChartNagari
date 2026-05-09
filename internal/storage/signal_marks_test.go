@@ -55,6 +55,13 @@ var fsmCases = []fsmCase{
 	{from: "BE", action: "loss", want: "LOSS"},
 	{from: "BE", action: "be", want: "BE"},
 	{from: "BE", action: "undo", want: "TOOK"},
+
+	{from: "PENDING", action: "took", want: "TOOK"},
+	{from: "PENDING", action: "skip", want: "SKIPPED"},
+	{from: "PENDING", action: "win", want: "ERR:invalid"},
+	{from: "PENDING", action: "loss", want: "ERR:invalid"},
+	{from: "PENDING", action: "be", want: "ERR:invalid"},
+	{from: "PENDING", action: "undo", want: "ERR:invalid"},
 }
 
 // seedSignal inserts a signal so signal_marks FK is satisfied.
@@ -159,6 +166,32 @@ func TestSignalMarkStore_SetMessageID_StubCreates(t *testing.T) {
 	row, _ := store.Get(id)
 	if row == nil || row.Status != "PENDING" || row.TgMessageID == nil || *row.TgMessageID != 999 {
 		t.Errorf("stub PENDING row not created: %#v", row)
+	}
+}
+
+func TestSignalMarkStore_StubThenMark(t *testing.T) {
+	// Realistic flow: alert sent → SetMessageID (creates stub PENDING)
+	// → user taps Took → Mark must accept the transition.
+	db := newTestDB(t)
+	store := NewSignalMarkStore(db)
+	id := seedSignal(t, db)
+
+	if err := store.SetMessageID(id, 5555); err != nil {
+		t.Fatalf("SetMessageID: %v", err)
+	}
+
+	got, err := store.Mark(id, "took")
+	if err != nil {
+		t.Fatalf("Mark took after stub: %v (this is the bug A3 amendment fixes)", err)
+	}
+	if got != "TOOK" {
+		t.Errorf("got %q, want TOOK", got)
+	}
+
+	// tg_message_id must persist through the Mark.
+	row, _ := store.Get(id)
+	if row == nil || row.TgMessageID == nil || *row.TgMessageID != 5555 {
+		t.Errorf("tg_message_id lost after Mark: %#v", row)
 	}
 }
 

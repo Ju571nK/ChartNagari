@@ -6,7 +6,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Justin-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/justin0830/)
 
 <img src="docs/demo.svg" alt="ChartNagari 데모 — ICT 시그널 감지 및 Telegram 알림" width="800"/>
 
@@ -249,4 +248,4 @@ MIT — [LICENSE](LICENSE) 참고.
 
 ## 만든 사람
 
-[Justin](https://www.linkedin.com/in/justin0830/) — Claude Code와의 바이브 코딩을 통해 AI 기반 개발을 탐구하고 금융 시장 지식을 적용하고 있습니다.
+Justin — Claude Code와의 바이브 코딩을 통해 AI 기반 개발을 탐구하고 금융 시장 지식을 적용하고 있습니다.

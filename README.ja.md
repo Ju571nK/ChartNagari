@@ -6,7 +6,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Justin-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/justin0830/)
 
 <img src="docs/demo.svg" alt="ChartNagari デモ — ICT シグナル検出と Telegram アラート" width="800"/>
 
@@ -249,4 +248,4 @@ MIT — [LICENSE](LICENSE) を参照してください。
 
 ## ビルダー
 
-[Justin](https://www.linkedin.com/in/justin0830/) が開発 — Claude Code とのバイブコーディングを通じて、AI 支援開発の探求と金融市場の知見の応用に取り組んでいます。
+Justin が開発 — Claude Code とのバイブコーディングを通じて、AI 支援開発の探求と金融市場の知見の応用に取り組んでいます。

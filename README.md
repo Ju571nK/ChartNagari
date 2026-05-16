@@ -6,7 +6,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Justin-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/justin0830/)
 
 <img src="docs/demo.svg" alt="ChartNagari demo — ICT signal detection and Telegram alert" width="800"/>
 
@@ -249,4 +248,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Builder
 
-Built by [Justin](https://www.linkedin.com/in/justin0830/) — exploring AI-assisted development and applying financial market knowledge through vibe coding with Claude Code.
+Built by Justin — exploring AI-assisted development and applying financial market knowledge through vibe coding with Claude Code.

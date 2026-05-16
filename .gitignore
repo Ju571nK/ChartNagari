@@ -31,6 +31,7 @@ go.work
 go.work.sum
 
 # ─── Frontend (Vite + React + TypeScript) ───
+/node_modules/
 web/node_modules/
 web/dist/
 web/.vite/

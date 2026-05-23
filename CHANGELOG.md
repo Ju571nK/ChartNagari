@@ -14,6 +14,20 @@ Format:
 
 ---
 
+## [2.10.0.0] - 2026-05-23
+
+### Added
+- **Signal-aware macro annotations.** When a high-impact economic event falls within the alert window of a dispatched signal, the alert now carries a `⚠️ High-impact macro event in Nm: <event> (<country>)` line. Renders on both Telegram and Discord. Fail-open: a calendar DB error never blocks the underlying signal alert. (Completes the final accepted scope item from the economic-calendar CEO review.)
+- **`finnhub.alert_window_minutes` setting** (env `CALENDAR_ALERT_WINDOW`, default 30). Drives both the pre-event calendar watcher and the new signal annotations. Validated in `config.Load()` — values outside `[5, 1440]` are clamped to the nearest bound so a typo can't silently disable alerts or schedule them days out.
+- **New read-only storage query `GetImminentHighImpact(window)`** — returns high-impact events inside the window, soonest-first, ignoring the `alerted` flag (orthogonal to the watcher's one-shot pre-event alert).
+- **Tests**: macro-annotation dispatch + fail-open + formatter coverage (notifier), `GetImminentHighImpact` (storage), alert-window clamp (config), and `GET /api/calendar` handler coverage (200 / empty-array / 500).
+
+### Changed
+- `models.Signal` gains a transient `MacroNote` field (set by the Notifier at dispatch, not persisted).
+- `notifier.Notifier` gains `WithMacroStore(store, window)`; `*storage.DB` is adapted to the lookup in `cmd/server`.
+
+---
+
 ## [2.9.0.0] - 2026-05-09
 
 ### Added

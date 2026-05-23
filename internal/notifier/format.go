@@ -65,6 +65,9 @@ func formatTelegram(sig models.Signal) string {
 		)
 	}
 	text += "\n⏰ " + sig.CreatedAt.UTC().Format("2006-01-02 15:04:05") + " UTC"
+	if sig.MacroNote != "" {
+		text += "\n" + sig.MacroNote
+	}
 	if sig.AIInterpretation != "" {
 		text += "\n\n💡 <i>" + sig.AIInterpretation + "</i>"
 	}

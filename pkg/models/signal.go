@@ -29,6 +29,10 @@ type Signal struct {
 	// HTF context and volatility regime metadata (filled by pipeline, persisted in DB).
 	HTFTrend      string  `json:"htf_trend,omitempty"`
 	ATRPercentile float64 `json:"atr_percentile,omitempty"`
+	// MacroNote is an optional macro-event warning (e.g. an imminent high-impact
+	// economic release) appended to outgoing alert text. Empty = no annotation.
+	// Set by the Notifier at dispatch time; not persisted.
+	MacroNote        string    `json:"macro_note,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

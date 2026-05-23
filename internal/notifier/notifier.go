@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -39,6 +40,23 @@ type TextSender interface {
 	SendText(ctx context.Context, text string) error
 }
 
+// MacroEvent is the minimal view of an economic event the Notifier needs to
+// annotate alerts. Defined locally to avoid a hard dependency on the storage
+// package (mirrors the MarkStoreSet pattern above).
+type MacroEvent struct {
+	EventTime time.Time
+	Country   string
+	Event     string
+}
+
+// MacroEventLookup returns imminent high-impact macro events within window,
+// soonest first. Read-only and non-consuming. *storage.DB is adapted to this
+// in main. When wired, the Notifier annotates alerts dispatched while a
+// high-impact event falls inside the window.
+type MacroEventLookup interface {
+	ImminentHighImpact(window time.Duration) ([]MacroEvent, error)
+}
+
 // Config holds Notifier tuning parameters.
 type Config struct {
 	// ScoreThreshold is the minimum signal score required to trigger a notification.
@@ -71,6 +89,8 @@ type Notifier struct {
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via WithProfileHolder
 	overrideStore appconfig.OverrideGetter        // optional; set via WithOverrideStore
 	markStore     MarkStoreSet                    // optional; nil disables message_id capture
+	macroStore    MacroEventLookup                // optional; nil disables macro annotations
+	macroWindow   time.Duration                   // lookahead for macro annotations
 }
 
 // New creates a Notifier from the given config and logger.
@@ -113,6 +133,38 @@ func (n *Notifier) WithOverrideStore(s appconfig.OverrideGetter) *Notifier {
 func (n *Notifier) WithMarkStore(s MarkStoreSet) *Notifier {
 	n.markStore = s
 	return n
+}
+
+// WithMacroStore wires an optional macro-event lookup. When a high-impact
+// economic event falls within window of dispatch time, outgoing alerts gain a
+// ⚠️ warning line. Fail-open: a nil store, window <= 0, or any lookup error
+// simply omits the annotation and never blocks the alert. Returns n for chaining.
+func (n *Notifier) WithMacroStore(store MacroEventLookup, window time.Duration) *Notifier {
+	n.macroStore = store
+	n.macroWindow = window
+	return n
+}
+
+// macroAnnotation returns a warning line when a high-impact macro event is
+// imminent, or "" otherwise. Fail-open: a nil store or any lookup error yields "".
+func (n *Notifier) macroAnnotation() string {
+	if n.macroStore == nil || n.macroWindow <= 0 {
+		return ""
+	}
+	events, err := n.macroStore.ImminentHighImpact(n.macroWindow)
+	if err != nil {
+		n.log.Warn().Err(err).Msg("macro annotation lookup failed — sending alert without it")
+		return ""
+	}
+	if len(events) == 0 {
+		return ""
+	}
+	e := events[0] // soonest
+	mins := int(time.Until(e.EventTime).Minutes())
+	if mins < 0 {
+		mins = 0
+	}
+	return fmt.Sprintf("⚠️ High-impact macro event in %dm: %s (%s)", mins, e.Event, e.Country)
 }
 
 // Announce sends a raw HTML text message to all senders that implement TextSender.
@@ -174,6 +226,12 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 				Int("limit", dailyLimit).
 				Msg("daily alert limit reached — skipping")
 			continue
+		}
+
+		// Annotate with an imminent high-impact macro event, if any (fail-open).
+		// sig is a loop-local copy, so this mutation never escapes the dispatch.
+		if note := n.macroAnnotation(); note != "" {
+			sig.MacroNote = note
 		}
 
 		n.log.Info().

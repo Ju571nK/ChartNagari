@@ -487,6 +487,15 @@ func Load(envFile, configDir string) (*Config, error) {
 		}
 	}
 
+	// Validate the economic-calendar alert window: clamp to [5, 1440] minutes.
+	// Out-of-range values are pinned to the nearest bound so a typo can't disable
+	// alerts (too small) or schedule them days ahead (too large).
+	if cfg.Finnhub.AlertWindowMinutes < 5 {
+		cfg.Finnhub.AlertWindowMinutes = 5
+	} else if cfg.Finnhub.AlertWindowMinutes > 1440 {
+		cfg.Finnhub.AlertWindowMinutes = 1440
+	}
+
 	return cfg, nil
 }
 

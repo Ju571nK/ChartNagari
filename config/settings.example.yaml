@@ -74,3 +74,6 @@ fmp:
 # https://finnhub.io → Dashboard → API Keys
 finnhub:
   api_key: ""
+  # 고임팩트 경제 이벤트 사전 알림 + 신호 알림 매크로 주석에 사용하는 선행 시간(분).
+  # 허용 범위 5–1440, 기본값 30. 범위를 벗어나면 가까운 경계값으로 자동 보정됨.
+  alert_window_minutes: 30

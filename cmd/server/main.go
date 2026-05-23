@@ -320,6 +320,9 @@ func main() {
 		alertWindow := time.Duration(cfg.Finnhub.AlertWindowMinutes) * time.Minute
 		calWatcher := calendar.NewWatcher(db, notif, alertWindow, log.Logger)
 		go calWatcher.Run(ctx)
+		// Annotate outgoing signal alerts when a high-impact event is within the
+		// same window. Fail-open inside the Notifier, so no extra guarding here.
+		notif.WithMacroStore(macroLookup{db}, alertWindow)
 		log.Info().Str("provider", calProvider).Msg("economic calendar enabled")
 	} else {
 		log.Info().Msg("economic calendar disabled (set FMP_API_KEY or FINNHUB_API_KEY)")
@@ -546,4 +549,25 @@ func toEngineConfig(rc appconfig.RulesConfig) engine.RuleConfig {
 		}
 	}
 	return engine.RuleConfig{Rules: rules}
+}
+
+// macroLookup adapts *storage.DB to notifier.MacroEventLookup, translating
+// storage.EconomicEvent into the notifier's minimal MacroEvent view. This keeps
+// the notifier package free of a hard dependency on storage.
+type macroLookup struct{ db *storage.DB }
+
+func (m macroLookup) ImminentHighImpact(window time.Duration) ([]notifier.MacroEvent, error) {
+	events, err := m.db.GetImminentHighImpact(window)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notifier.MacroEvent, 0, len(events))
+	for _, e := range events {
+		out = append(out, notifier.MacroEvent{
+			EventTime: e.EventTime,
+			Country:   e.Country,
+			Event:     e.Event,
+		})
+	}
+	return out, nil
 }

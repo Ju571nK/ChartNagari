@@ -471,6 +471,28 @@ func (db *DB) MarkEventAlerted(id int64) error {
 	return err
 }
 
+// GetImminentHighImpact returns high-impact events occurring within the next
+// window from now, soonest first, regardless of alerted status. Unlike
+// GetUpcomingAlerts (which is stateful and drives the pre-event watcher), this
+// is a read-only, non-consuming query used to annotate outgoing signal alerts.
+func (db *DB) GetImminentHighImpact(window time.Duration) ([]EconomicEvent, error) {
+	now := time.Now()
+	rows, err := db.conn.Query(`
+		SELECT id, event_time, country, event, impact, actual, forecast, previous, unit, alerted
+		FROM economic_events
+		WHERE impact = 'high'
+		  AND event_time >= ?
+		  AND event_time <= ?
+		ORDER BY event_time ASC`,
+		now.Unix(), now.Add(window).Unix(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEconomicEvents(rows)
+}
+
 func scanEconomicEvents(rows *sql.Rows) ([]EconomicEvent, error) {
 	var out []EconomicEvent
 	for rows.Next() {

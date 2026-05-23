@@ -63,6 +63,9 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 
 	desc := fmt.Sprintf("**룰:** %s\n**스코어:** %.2f\n**메시지:** %s",
 		sig.Rule, sig.Score, sig.Message)
+	if sig.MacroNote != "" {
+		desc += "\n\n" + sig.MacroNote
+	}
 	if sig.AIInterpretation != "" {
 		desc += "\n\n💡 " + sig.AIInterpretation
 	}

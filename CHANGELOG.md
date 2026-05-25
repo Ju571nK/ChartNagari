@@ -14,6 +14,13 @@ Format:
 
 ---
 
+## [2.10.0.1] - 2026-05-25
+
+### Fixed
+- **Onboarding footer actions now stack vertically.** "Try demo" and "Set up later" rendered side-by-side and touching (no space between them); they now stack left-aligned with proper spacing, matching the modal's intended layout.
+
+---
+
 ## [2.10.0.0] - 2026-05-23
 
 ### Added

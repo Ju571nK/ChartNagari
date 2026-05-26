@@ -452,7 +452,7 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
               className="ob-skip-btn"
               onClick={handleDemo}
               disabled={demoLoading || step2Done}
-              style={{ marginBottom: 6, color: 'var(--mint)' }}
+              style={{ color: 'var(--mint)' }}
             >
               {demoLoading ? t('onboarding.demo_loading') : t('onboarding.try_demo')}
             </button>

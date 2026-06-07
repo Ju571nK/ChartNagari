@@ -14,6 +14,13 @@ Format:
 
 ---
 
+## [2.10.0.2] - 2026-06-07
+
+### Docs
+- **Animated README hero.** Replaced the static `docs/demo.svg` placeholder with a real looping `docs/demo.gif` (820px, 2.6 MB) across all three READMEs (en/ko/ja). The loop crossfades the zero-key demo scan ("5 signals detected on sample data") with the full multi-timeframe chart view — overlay markers (Order Block / Spring / Upthrust) plus a live `LONG ... HIGH` signal toast. GitHub strips SVG animation, so a GIF is required for the hero to move.
+
+---
+
 ## [2.10.0.1] - 2026-05-25
 
 ### Fixed

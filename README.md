@@ -7,7 +7,7 @@
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
 
-<img src="docs/demo.svg" alt="ChartNagari demo — ICT signal detection and Telegram alert" width="800"/>
+<img src="docs/demo.gif" alt="ChartNagari demo — multi-timeframe ICT/Wyckoff signal detection with live alerts and zero-key demo mode" width="820"/>
 
 > **The only open-source platform that automates ICT and Wyckoff methodology across
 > multiple timeframes — with real-time alerts and AI interpretation.

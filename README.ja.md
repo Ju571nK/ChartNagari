@@ -7,7 +7,7 @@
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
 
-<img src="docs/demo.svg" alt="ChartNagari デモ — ICT シグナル検出と Telegram アラート" width="800"/>
+<img src="docs/demo.gif" alt="ChartNagari デモ — マルチタイムフレーム ICT/Wyckoff シグナル検出、リアルタイムアラート、キー不要のデモモード" width="820"/>
 
 > **ICT および Wyckoff 手法をマルチタイムフレームで自動化する唯一のオープンソースプラットフォーム
 > — リアルタイムアラートと AI 解釈機能付き。

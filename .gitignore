@@ -88,6 +88,8 @@ config/settings.yaml
 config/*.local.yaml
 TODOS.md
 *.gif
+# README hero asset — must be tracked despite the *.gif rule above
+!docs/demo.gif
 *.local.yaml
 docs/research/
 docs/community-posts.md

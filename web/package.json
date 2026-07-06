@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:demo": "tsc && BASE_PATH=/ChartNagari/ VITE_DEMO_STATIC=true vite build",
     "preview": "vite preview",
     "test": "vitest"
   },

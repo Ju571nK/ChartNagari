@@ -1,13 +1,42 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, Component } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
-import { AnalysisTab } from './AnalysisTab'
-import { MyTradesTab } from './MyTradesTab'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
-import ExecutionTab from './ExecutionTab'
-import MCPSettings from './MCPSettings'
-import OllamaSettings from './OllamaSettings'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
+
+// Lazy-loaded tab panels: split out of the initial bundle since they only
+// render when their tab/section is opened. AnalysisTab in particular pulls in
+// marked + dompurify, which would otherwise ship on first paint.
+const AnalysisTab = lazy(() => import('./AnalysisTab').then((m) => ({ default: m.AnalysisTab })))
+const MyTradesTab = lazy(() => import('./MyTradesTab').then((m) => ({ default: m.MyTradesTab })))
+const ExecutionTab = lazy(() => import('./ExecutionTab'))
+const MCPSettings = lazy(() => import('./MCPSettings'))
+const OllamaSettings = lazy(() => import('./OllamaSettings'))
+
+// Prefetch on hover/focus; swallow rejections (a failed prefetch just means
+// the chunk loads on click instead — no unhandled-rejection console noise).
+const prefetch = (load: () => Promise<unknown>) => () => { load().catch(() => {}) }
+
+// A hash-named chunk can 404 after a redeploy (old tab open across releases)
+// or be blocked by an ad-blocker; without a boundary, a failed lazy() import
+// white-screens the whole app. Reload restores the new chunk names.
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <p style={{ color: 'var(--muted)' }}>Failed to load this view — the app may have been updated.</p>
+          <button className="run-btn" onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+import { DEMO_STATIC } from './demoApi'
 import {
   createChart,
   createSeriesMarkers,
@@ -4038,6 +4067,8 @@ export function App() {
 
   // WebSocket auto-reconnecting connection
   useEffect(() => {
+    // No backend in the static demo build — skip the WS (shows offline badge).
+    if (DEMO_STATIC) return
     let ws: WebSocket
     let reconnectTimer: ReturnType<typeof setTimeout>
 
@@ -4160,17 +4191,21 @@ export function App() {
         </div>
         <nav className="tabs">
           <button className={`tab-btn${tab === 'chart' ? ' active' : ''}`} onClick={() => setTab('chart')}>{t('chart')}</button>
-          <button className={`tab-btn${tab === 'analysis' ? ' active' : ''}`} onClick={() => setTab('analysis')}>{t('analysis')}</button>
+          <button className={`tab-btn${tab === 'analysis' ? ' active' : ''}`} onClick={() => setTab('analysis')} onMouseEnter={prefetch(() => import('./AnalysisTab'))} onFocus={prefetch(() => import('./AnalysisTab'))}>{t('analysis')}</button>
           <button className={`tab-btn${tab === 'backtest' ? ' active' : ''}`} onClick={() => setTab('backtest')}>{t('backtest')}</button>
           <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>{t('performance')}</button>
           <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>{t('paper')}</button>
           <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
           <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>{t('calendar')}</button>
-          <button className={`tab-btn${tab === 'execution' ? ' active' : ''}`} onClick={() => setTab('execution')}>{t('execution')}</button>
-          <button className={`tab-btn${tab === 'my-trades' ? ' active' : ''}`} onClick={() => setTab('my-trades')}>{t('my_trades.title')}</button>
+          <button className={`tab-btn${tab === 'execution' ? ' active' : ''}`} onClick={() => setTab('execution')} onMouseEnter={prefetch(() => import('./ExecutionTab'))} onFocus={prefetch(() => import('./ExecutionTab'))}>{t('execution')}</button>
+          <button className={`tab-btn${tab === 'my-trades' ? ' active' : ''}`} onClick={() => setTab('my-trades')} onMouseEnter={prefetch(() => import('./MyTradesTab'))} onFocus={prefetch(() => import('./MyTradesTab'))}>{t('my_trades.title')}</button>
         </nav>
       </header>
       <main>
+        {/* null fallback: keeps chunk loads visually silent per DESIGN.md;
+            ChunkErrorBoundary catches stale-chunk 404s after a redeploy */}
+        <ChunkErrorBoundary>
+        <Suspense fallback={null}>
         {tab === 'chart' && <ChartTab uiMode={uiMode} />}
         {tab === 'analysis' && <AnalysisTab />}
         {tab === 'backtest' && <BacktestTab uiMode={uiMode} />}
@@ -4187,6 +4222,8 @@ export function App() {
         {tab === 'calendar' && <CalendarTab />}
         {tab === 'execution' && <ExecutionTab />}
         {tab === 'my-trades' && <MyTradesTab />}
+        </Suspense>
+        </ChunkErrorBoundary>
       </main>
       {showOnboarding && (
         <OnboardingModal

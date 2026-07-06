@@ -1,0 +1,67 @@
+name: Deploy Demo
+
+# Builds the zero-install static demo (web/ with VITE_DEMO_STATIC=true) and
+# publishes it to GitHub Pages. All /api calls are served from canned fixtures
+# in web/public/demo/, so no Go backend runs in the deployed demo.
+#
+# Live at: https://ju571nk.github.io/ChartNagari/
+#
+# Actions are pinned to full commit SHAs (not mutable tags): this job holds
+# pages:write + id-token:write, so a hijacked action tag could publish
+# attacker-controlled content to the demo domain.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment. Do NOT cancel in-progress runs — an
+# in-flight deploy job cancelled midway can leave Pages in a broken state
+# (GitHub's starter workflow uses cancel-in-progress: false for the same reason).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build static demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: cd web && npm ci
+      - name: Test
+        run: cd web && npx --no-install vitest run
+      - name: Build demo
+        run: cd web && npm run build:demo
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: web/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

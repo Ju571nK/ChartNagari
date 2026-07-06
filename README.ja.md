@@ -6,8 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
+[![Live Demo](https://img.shields.io/badge/▶_ライブデモ-ブラウザで試す-5B9279)](https://ju571nk.github.io/ChartNagari/)
 
 <img src="docs/demo.gif" alt="ChartNagari デモ — マルチタイムフレーム ICT/Wyckoff シグナル検出、リアルタイムアラート、キー不要のデモモード" width="820"/>
+
+**▶ [ライブデモを試す](https://ju571nk.github.io/ChartNagari/) — ブラウザだけで動作。インストール不要、API キー不要、サンプルデータ上で実際の検出結果を表示。**
 
 > **ICT および Wyckoff 手法をマルチタイムフレームで自動化する唯一のオープンソースプラットフォーム
 > — リアルタイムアラートと AI 解釈機能付き。

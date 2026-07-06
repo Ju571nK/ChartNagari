@@ -14,6 +14,21 @@ Format:
 
 ---
 
+## [2.11.0.0] - 2026-07-06
+
+### Added
+- **Zero-install live demo on GitHub Pages.** Try the full dashboard in the browser — no clone, no Docker, no API keys: https://ju571nk.github.io/ChartNagari/. The frontend now ships a static demo mode (`VITE_DEMO_STATIC=true`) that serves every `/api` call from fixtures captured verbatim from the real rule engine (`web/public/demo/scan-{1W,1D,4H,1H}.json`), so the candles and signals shown are authentic detector output. All three READMEs link the demo with a "▶ Live Demo" badge.
+- **Demo deploy pipeline.** New `deploy-demo.yml` workflow tests and publishes the static demo to GitHub Pages on every `main` push touching `web/` — actions pinned to commit SHAs, vitest gate before build.
+- **Demo endpoint regression tests.** Ungated Go test asserts `/api/demo/scan` returns a valid payload (bars, signals, no future candles) for all four timeframes; 23 new vitest cases cover the demo fetch shim end-to-end plus a fixture contract check.
+
+### Changed
+- **Faster first load.** Initial JS dropped 660 kB → 546 kB (gzip 201 → 168 kB): vendor chunks (`react`, `lightweight-charts`, `i18n`) split for parallel download and long-term caching, and heavy tab panels (Analysis, Execution, My Trades, MCP/Ollama settings) now lazy-load on demand with hover prefetch. A chunk-error boundary reloads gracefully when an open tab spans a redeploy.
+
+### Fixed
+- **Weekly demo bars no longer live in the future.** `generateDemoBars` walked back a fixed count of days regardless of timeframe, so 50 weekly bars ended ~10 months from now; the last bar of every timeframe now lands at the present.
+
+---
+
 ## [2.10.0.2] - 2026-06-07
 
 ### Docs

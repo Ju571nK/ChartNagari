@@ -14,7 +14,7 @@ Format:
 
 ---
 
-## [Unreleased]
+## [2.12.0.0] - 2026-09-11
 
 ### Changed
 - Reorganized all pages into a responsive trading workspace with grouped navigation and an accessible price-alert entry point.

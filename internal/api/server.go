@@ -2307,7 +2307,6 @@ func (s *Server) demoScan(w http.ResponseWriter, r *http.Request) {
 // Simulates a Wyckoff-like accumulation → markup → distribution pattern.
 func generateDemoBars(symbol, timeframe string, count int) []models.OHLCV {
 	bars := make([]models.OHLCV, count)
-	baseTime := time.Now().AddDate(0, 0, -count)
 
 	var tfDuration time.Duration
 	switch timeframe {
@@ -2320,6 +2319,11 @@ func generateDemoBars(symbol, timeframe string, count int) []models.OHLCV {
 	default: // "1D"
 		tfDuration = 24 * time.Hour
 	}
+
+	// Walk back count*tfDuration so the LAST bar lands at ~now for every
+	// timeframe. (A fixed count-days offset put weekly bars months into the
+	// future: 50 weekly bars stepped 7d each from now-50d ends at now+300d.)
+	baseTime := time.Now().Add(-time.Duration(count) * tfDuration)
 
 	// Start price and phases
 	price := 40000.0

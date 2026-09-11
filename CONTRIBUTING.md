@@ -267,6 +267,36 @@ The CI will run the same commands automatically when you open a PR that touches
 
 ---
 
+## Demo Mode & Fixtures
+
+The [live demo](https://ju571nk.github.io/ChartNagari/) is a static build of `web/` — no Go
+backend runs behind it. When built with `VITE_DEMO_STATIC=true` (`npm run build:demo`), a fetch
+shim (`web/src/demoApi.ts`) answers every `/api` call from canned fixtures in
+`web/public/demo/scan-{1W,1D,4H,1H}.json`. The fixtures are captured verbatim from the real rule
+engine, so the demo shows authentic detector output.
+
+**Regenerating the fixtures** — required whenever you change the rule roster, a rule's output,
+or an `/api` response shape the demo consumes:
+
+```bash
+CAPTURE_DEMO=1 go test ./internal/api -run TestCaptureDemoFixtures -count=1
+```
+
+The capture test is gated behind `CAPTURE_DEMO` so it never runs during a normal
+`go test ./...`. If fixtures drift out of shape, the Vitest fixture contract check in
+`web/src/demoApi.test.ts` fails.
+
+**Deploys:** `.github/workflows/deploy-demo.yml` rebuilds and publishes the demo to GitHub Pages
+on every `main` push that touches `web/` (Vitest gate first, actions pinned to commit SHAs).
+
+**Local demo build check:**
+
+```bash
+cd web && npm run build:demo
+```
+
+---
+
 ## PR Checklist
 
 Before opening a pull request, verify:
@@ -278,6 +308,7 @@ Before opening a pull request, verify:
 - [ ] Rule registered in `config/rules.yaml` (if adding a rule)
 - [ ] `cd web && npm run build` succeeds (if frontend was changed)
 - [ ] `.env.example` is updated if a new environment variable was added
+- [ ] Demo fixtures regenerated (`CAPTURE_DEMO=1 go test ./internal/api -run TestCaptureDemoFixtures -count=1`) if rule output or demo-consumed `/api` shapes changed
 - [ ] `CHANGELOG.md` has a brief entry under the current version/date
 - [ ] No `.env` file or real API keys are included in the diff
 

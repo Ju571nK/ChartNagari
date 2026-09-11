@@ -1,15 +1,40 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, Component } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
-import { AnalysisTab } from './AnalysisTab'
-import { MyTradesTab } from './MyTradesTab'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
-import ExecutionTab from './ExecutionTab'
-import MCPSettings from './MCPSettings'
-import OllamaSettings from './OllamaSettings'
 import { WorkspaceProvider, useWorkspace } from './Workspace'
 import { WorkspaceNav, pageKeys } from './WorkspaceNav'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
+
+// Lazy-loaded tab panels: split out of the initial bundle since they only
+// render when their tab/section is opened. AnalysisTab in particular pulls in
+// marked + dompurify, which would otherwise ship on first paint.
+const AnalysisTab = lazy(() => import('./AnalysisTab').then((m) => ({ default: m.AnalysisTab })))
+const MyTradesTab = lazy(() => import('./MyTradesTab').then((m) => ({ default: m.MyTradesTab })))
+const ExecutionTab = lazy(() => import('./ExecutionTab'))
+const MCPSettings = lazy(() => import('./MCPSettings'))
+const OllamaSettings = lazy(() => import('./OllamaSettings'))
+
+// A hash-named chunk can 404 after a redeploy (old tab open across releases)
+// or be blocked by an ad-blocker; without a boundary, a failed lazy() import
+// white-screens the whole app. Reload restores the new chunk names.
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <p style={{ color: 'var(--muted)' }}>Failed to load this view — the app may have been updated.</p>
+          <button className="run-btn" onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+import { DEMO_STATIC } from './demoApi'
 import {
   createChart,
   createSeriesMarkers,
@@ -4055,6 +4080,8 @@ function WorkspaceApp() {
 
   // WebSocket auto-reconnecting connection
   useEffect(() => {
+    // No backend in the static demo build — skip the WS (shows offline badge).
+    if (DEMO_STATIC) return
     let ws: WebSocket
     let reconnectTimer: ReturnType<typeof setTimeout>
     let signalTimer: ReturnType<typeof setTimeout>
@@ -4127,6 +4154,8 @@ function WorkspaceApp() {
           <div><p className="page-eyebrow">{t('workspace.terminal')}</p><h1>{t(pageKeys[tab])}</h1></div>
           {symbol && <span className="context-badge">{symbol}<span>{timeframe}</span></span>}
         </div>
+        <ChunkErrorBoundary>
+        <Suspense fallback={null}>
         {tab === 'chart' && <ChartTab uiMode={uiMode} />}
         {tab === 'analysis' && <AnalysisTab />}
         {tab === 'backtest' && <BacktestTab uiMode={uiMode} />}
@@ -4143,6 +4172,8 @@ function WorkspaceApp() {
         {tab === 'calendar' && <CalendarTab />}
         {tab === 'execution' && <ExecutionTab />}
         {tab === 'my-trades' && <MyTradesTab />}
+        </Suspense>
+        </ChunkErrorBoundary>
       </main>
       {showOnboarding && (
         <OnboardingModal

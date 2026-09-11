@@ -6,8 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
+[![Live Demo](https://img.shields.io/badge/▶_Live_Demo-try_in_browser-5B9279)](https://ju571nk.github.io/ChartNagari/)
 
 <img src="docs/demo.gif" alt="ChartNagari demo — multi-timeframe ICT/Wyckoff signal detection with live alerts and zero-key demo mode" width="820"/>
+
+**▶ [Try the live demo](https://ju571nk.github.io/ChartNagari/) — runs entirely in your browser. No install, no API keys, real detector output on sample data.**
 
 > **The only open-source platform that automates ICT and Wyckoff methodology across
 > multiple timeframes — with real-time alerts and AI interpretation.

@@ -17,6 +17,14 @@ export const pageKeys: Record<Page, string> = {
 export function WorkspaceNav() {
   const { t } = useTranslation()
   const { page, navigate } = useWorkspace()
+  const prefetchPage = (item: Page) => {
+    const loaders: Partial<Record<Page, () => Promise<unknown>>> = {
+      analysis: () => import('./AnalysisTab'),
+      execution: () => import('./ExecutionTab'),
+      'my-trades': () => import('./MyTradesTab'),
+    }
+    loaders[item]?.().catch(() => {})
+  }
   return <>
     <label className="mobile-navigation">{t('workspace.navigation')}
       <select value={page} onChange={event => navigate(event.target.value as Page)}>
@@ -31,6 +39,7 @@ export function WorkspaceNav() {
       <div className="nav-items">{group.pages.map((item, index) => <button
         type="button" key={item} className={`nav-link${page === item ? ' active' : ''}`}
         aria-current={page === item ? 'page' : undefined} onClick={() => navigate(item)}
+        onMouseEnter={() => prefetchPage(item)} onFocus={() => prefetchPage(item)}
       ><span className="nav-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>{t(pageKeys[item])}</button>)}</div>
     </section>)}
   </nav></>

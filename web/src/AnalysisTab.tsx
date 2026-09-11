@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { useWorkspace, timeframes } from './Workspace'
 
 interface ScenarioResult {
   id?: number
@@ -128,7 +129,7 @@ function AnalystPanel({ title, text }: { title: string; text: string }) {
 
 export function AnalysisTab() {
   const { t } = useTranslation()
-  const [symbol, setSymbol] = useState('SPY')
+  const { symbol, setSymbol, timeframe, setTimeframe } = useWorkspace()
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [result, setResult] = useState<ScenarioResult | null>(null)
@@ -145,7 +146,7 @@ export function AnalysisTab() {
       const query = sym ? `?symbol=${sym}&limit=30` : '?limit=30'
       const data = await getJSON<HistoryRecord[]>('/analysis/history' + query)
       setHistory(data || [])
-    } catch { /* silently ignore */ } finally {
+    } catch (e) { setError(e instanceof Error ? e.message : t('history_load_failed')) } finally {
       setHistoryLoading(false)
     }
   }, [])
@@ -170,7 +171,7 @@ export function AnalysisTab() {
     setElapsed(0)
     timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
     try {
-      const data = await postJSON<ScenarioResult>('/analysis/full', { symbol: symbol.toUpperCase(), timeframe: '1D', language: i18n.language })
+      const data = await postJSON<ScenarioResult>('/analysis/full', { symbol: symbol.toUpperCase(), timeframe, language: i18n.language })
       setResult(data)
       loadHistory(symbol.toUpperCase())
     } catch (e) {
@@ -231,8 +232,12 @@ export function AnalysisTab() {
         <div style={labelStyle}>{t('multi_analyst_ai')}</div>
 
         {/* Input row */}
-        <div className="no-print" style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
+        <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
+          <select aria-label={t('workspace.timeframe')} value={timeframe} disabled={loading} onChange={e => setTimeframe(e.target.value as typeof timeframe)}>
+            {timeframes.map(tf => <option key={tf}>{tf}</option>)}
+          </select>
           <input
+            aria-label={t('symbol_col')}
             value={symbol}
             onChange={e => setSymbol(e.target.value.toUpperCase())}
             placeholder={t('symbol_placeholder')}
@@ -245,7 +250,6 @@ export function AnalysisTab() {
               color: 'var(--text)',
               fontSize: '0.9rem',
               width: '120px',
-              outline: 'none',
             }}
           />
           <button

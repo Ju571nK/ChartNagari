@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import './i18n';
 import ExecutionTab from './ExecutionTab';
 
 beforeEach(() => {
@@ -21,6 +22,18 @@ beforeEach(() => {
 });
 
 describe('ExecutionTab', () => {
+  it('does not show a kill switch for unknown configuration and can recover', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('offline'));
+    render(<ExecutionTab />);
+    await waitFor(() => expect(screen.getByText(/Execution configuration could not be loaded/)).toBeInTheDocument());
+    expect(screen.getByTestId('kill-switch')).toBeEmptyDOMElement();
+    expect(screen.getByRole('button', { name: /Add Plugin/i })).toBeDisabled();
+    globalThis.fetch = original;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.getByText('Signal dispatch disabled')).toBeInTheDocument());
+    expect(screen.getByTestId('kill-switch')).not.toBeEmptyDOMElement();
+  });
 	it('fetches config, stats, and feedback in parallel on mount', async () => {
 		render(<ExecutionTab />);
 		await waitFor(() => {

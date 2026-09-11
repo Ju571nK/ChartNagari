@@ -28,6 +28,11 @@ const rows = [
 ];
 
 describe('FeedbackTable', () => {
+  it('keeps refresh available without claiming an empty result after failure', () => {
+    render(<FeedbackTable feedback={[]} filters={{ plugin: '', status: '', symbol: '' }} onFiltersChange={vi.fn()} onRefresh={vi.fn()} pluginNames={[]} unavailable />);
+    expect(screen.queryByText('No orders yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
+  });
 	it('applies status color classes', () => {
 		render(<FeedbackTable
 			feedback={rows}

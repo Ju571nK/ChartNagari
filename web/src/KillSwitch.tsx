@@ -20,10 +20,12 @@ export default function KillSwitch({ killed, killedAt, onToggle }: Props) {
 	const { t } = useTranslation();
 	const [modalOpen, setModalOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
 
 	const confirm = async () => {
 		setBusy(true);
-		try { await onToggle(); } finally { setBusy(false); setModalOpen(false); }
+    setError(false);
+		try { await onToggle(); setModalOpen(false); } catch { setError(true); } finally { setBusy(false); }
 	};
 
 	return (
@@ -50,8 +52,9 @@ export default function KillSwitch({ killed, killedAt, onToggle }: Props) {
 				<div role="dialog" className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
 					<div className="modal" style={{ background: 'var(--bg)', padding: 24, borderRadius: 8, minWidth: 320 }}>
 						<p>{killed ? t('execution.confirm_reenable') : t('execution.confirm_kill')}</p>
+            {error && <p role="alert" className="state-message">{t('workspace.actionFailed')}</p>}
 						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-							<button onClick={() => setModalOpen(false)}>{t('common.cancel')}</button>
+							<button disabled={busy} onClick={() => setModalOpen(false)}>{t('common.cancel')}</button>
 							<button onClick={confirm} disabled={busy}>{t('common.confirm')}</button>
 						</div>
 					</div>

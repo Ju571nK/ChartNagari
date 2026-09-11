@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/ws': { target: 'ws://localhost:8080', ws: true },
       // Forward /api/* to the Go server during development
       '/api': {
         target: 'http://localhost:8080',

@@ -8,6 +8,7 @@ type Props = {
 	onFiltersChange: (f: FeedbackFilters) => void;
 	onRefresh: () => Promise<void>;
 	pluginNames: string[];
+  unavailable?: boolean;
 };
 
 const STATUSES = ['', 'SUBMITTED', 'FILLED', 'PARTIAL_FILL', 'REJECTED', 'CANCELLED', 'ERROR', 'RECEIVED'];
@@ -23,7 +24,7 @@ function statusClass(s: string): string {
 	}
 }
 
-export default function FeedbackTable({ feedback, filters, onFiltersChange, onRefresh, pluginNames }: Props) {
+export default function FeedbackTable({ feedback, filters, onFiltersChange, onRefresh, pluginNames, unavailable = false }: Props) {
 	const { t } = useTranslation();
 
 	return (
@@ -52,7 +53,7 @@ export default function FeedbackTable({ feedback, filters, onFiltersChange, onRe
 				<button onClick={() => void onRefresh()}>{t('common.refresh')}</button>
 			</div>
 
-			<table>
+			{!unavailable && <table>
 				<thead>
 					<tr>
 						<th>{t('execution.col_time')}</th>
@@ -79,7 +80,7 @@ export default function FeedbackTable({ feedback, filters, onFiltersChange, onRe
 						</tr>
 					))}
 				</tbody>
-			</table>
+			</table>}
 		</div>
 	);
 }

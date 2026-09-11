@@ -60,14 +60,16 @@ Use `font-variant-numeric: tabular-nums` for all numeric columns (scores, prices
 - **Base unit:** 4px
 - **Density:** Compact — this is a data-dense dashboard, not a marketing page
 - **Common values:** 4px (tight gaps), 6px (button groups), 8px (section padding), 16px (medium gaps), 24px (section margins), 32px (large section separators), 36px (container padding)
-- **Container:** max-width 820px, 24px horizontal padding
+- **Container:** workspace max-width 1800px, 208px navigation rail, 30px content padding (16px on compact screens)
 
 ## Layout
-- **Approach:** Single-column, tab-based. Content flows vertically within the active tab
-- **Max content width:** 820px centered
-- **Tab navigation:** Horizontal button group, `.tab-btn` pattern
-- **Grid:** No multi-column grid. Tables for data, flex for control groups
-- **Responsive:** Desktop-only (local-run tool). No mobile breakpoints needed
+- **Approach:** Persistent grouped navigation: Explore, Validate, Trade, Configure. Every existing page remains reachable.
+- **Max content width:** 1800px workspace; settings content constrained to 1020px including padding.
+- **Navigation:** Labeled sidebar buttons with `aria-current`; navigation, selected symbol and timeframe are represented in the URL.
+- **Grid:** Main chart and 300px signal inspector side by side above 1200px; stacked below. Use minmax(0, 1fr) to avoid canvas/table overflow.
+- **Responsive:** Below 760px, a labeled select with grouped options replaces the sidebar. Tables may scroll within their own region.
+- **Reading hierarchy:** Page heading 1.5rem; normal form controls 0.875rem; compact metadata may remain smaller. Numeric data uses tabular figures.
+- **Status:** Never label failed requests as empty results. Execution controls require a successfully loaded configuration; failed writes show actionable errors.
 
 ## Components
 

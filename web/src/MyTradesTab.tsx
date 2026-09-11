@@ -50,40 +50,38 @@ export function MyTradesTab() {
     return d.toISOString()
   }, [period])
 
-  // Fetch rollup
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   useEffect(() => {
-    if (subtab !== 'rollup') return
-    let cancelled = false
-    fetch(`/api/marks/rollup?by=${groupBy}&since=${encodeURIComponent(sinceISO())}`)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then((data: RollupResponse) => { if (!cancelled) setRollup(data) })
-      .catch(() => { /* leave previous */ })
-    return () => { cancelled = true }
-  }, [subtab, groupBy, period, sinceISO, version])
-
-  // Fetch pending
-  useEffect(() => {
-    if (subtab !== 'pending') return
-    fetch(`/api/marks/pending?since=${encodeURIComponent(sinceISO())}&limit=200`)
-      .then(r => r.ok ? r.json() : [])
-      .then((rows: PendingRow[]) => setPending(rows ?? []))
-      .catch(() => setPending([]))
-  }, [subtab, sinceISO, version])
-
-  // Fetch history
-  useEffect(() => {
-    if (subtab !== 'history') return
-    fetch(`/api/marks/recent?since=${encodeURIComponent(sinceISO())}&limit=200`)
-      .then(r => r.ok ? r.json() : [])
-      .then((rows: MarkedRow[]) => setHistory(rows ?? []))
-      .catch(() => setHistory([]))
-  }, [subtab, sinceISO, version])
+    const controller = new AbortController()
+    const query = new URLSearchParams({ since: sinceISO() })
+    if (subtab === 'rollup') query.set('by', groupBy)
+    else query.set('limit', '200')
+    const endpoint = subtab === 'history' ? 'recent' : subtab
+    setLoading(true)
+    setError('')
+    setRollup(null)
+    setPending([])
+    setHistory([])
+    fetch('/api/marks/' + endpoint + '?' + query, { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+      .then(data => {
+        if (controller.signal.aborted) return
+        if (subtab === 'rollup') setRollup(data)
+        else if (subtab === 'pending') setPending(data ?? [])
+        else setHistory(data ?? [])
+      })
+      .catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [subtab, groupBy, sinceISO, version])
 
   const refresh = () => setVersion(v => v + 1)
 
   return (
     <div style={{ padding: 12 }}>
-      <h2>{t('my_trades.title')}</h2>
+      {loading && <p className="state-message" role="status">{t('loading')}</p>}
+      {error && <div className="state-message" role="alert"><p>{t('error')}: {error}</p><button onClick={refresh}>{t('workspace.retry')}</button></div>}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         {(['rollup', 'pending', 'history'] as Subtab[]).map(s => (
@@ -118,10 +116,10 @@ export function MyTradesTab() {
       {subtab === 'rollup' && (
         <RollupView rollup={rollup} groupBy={groupBy} setGroupBy={setGroupBy} t={t} />
       )}
-      {subtab === 'pending' && (
+      {!loading && !error && subtab === 'pending' && (
         <PendingView rows={pending} onMarked={refresh} t={t} />
       )}
-      {subtab === 'history' && (
+      {!loading && !error && subtab === 'history' && (
         <HistoryView rows={history} onMarked={refresh} t={t} />
       )}
     </div>

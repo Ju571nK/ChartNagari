@@ -7,6 +7,8 @@ import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import ExecutionTab from './ExecutionTab'
 import MCPSettings from './MCPSettings'
 import OllamaSettings from './OllamaSettings'
+import { WorkspaceProvider, useWorkspace } from './Workspace'
+import { WorkspaceNav, pageKeys } from './WorkspaceNav'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import {
   createChart,
@@ -814,10 +816,9 @@ const PHASE_LABELS: Record<string, string> = {
 
 function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
-  const [symbol, setSymbol] = useState('')
+  const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf, navigate } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [marketFilter, setMarketFilter] = useState('all')
-  const [tf, setTf] = useState<TF>('1H')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [signals, setSignals] = useState<SignalBar[]>([])
@@ -827,6 +828,8 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const [enabledOverlays, setEnabledOverlays] = useState<Set<OverlayType>>(loadOverlayToggles)
   const [overrideModalOpen, setOverrideModalOpen] = useState(false)
   const [profilesForChart, setProfilesForChart] = useState<ProfileInfo[]>([])
+  const [selectedSignal, setSelectedSignal] = useState(0)
+  const [reload, setReload] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -841,12 +844,16 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
 
   // Load enabled symbols for the selector
   useEffect(() => {
+    let cancelled = false
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
+      if (cancelled) return
       const enabled = items.filter((i) => i.enabled)
       setSymbols(enabled)
-      if (enabled.length > 0) setSymbol(enabled[0].symbol)
-    }).catch(() => {/* silently ignore */})
-  }, [])
+      if (!symbol && enabled.length > 0) setSymbol(enabled[0].symbol)
+      if (!symbol) setError('')
+    }).catch((e: Error) => { if (!cancelled) setError(e.message) })
+    return () => { cancelled = true }
+  }, [reload])
 
   useEffect(() => {
     apiFetch<ProfileInfo[]>('/profiles').then(setProfilesForChart).catch(() => {})
@@ -943,6 +950,8 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
   // Load OHLCV + signals whenever symbol or TF changes
   useEffect(() => {
     if (!symbol || !seriesRef.current) return
+    const controller = new AbortController()
+    setSelectedSignal(0)
     setLoading(true)
     setError('')
     // Detach old markers plugin before loading new data
@@ -960,8 +969,9 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
     volRef.current?.setData([])
     setSignals([])
 
-    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`)
+    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`, { signal: controller.signal })
       .then((bars) => {
+        if (controller.signal.aborted) return []
         seriesRef.current?.setData(
           bars.map((b) => ({
             time: b.time as UTCTimestamp,
@@ -980,14 +990,15 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
               : 'rgba(143,128,115,0.35)',
           })),
         )
-        return apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`)
+        return apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`, { signal: controller.signal })
       })
       .then((sigs) => {
-        setSignals(sigs)
+        if (!controller.signal.aborted) setSignals(sigs)
       })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [symbol, tf])
+      .catch((e: Error) => { if (!controller.signal.aborted) setError(e.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [symbol, tf, reload])
 
   // Build filtered signal markers (shared between signal and wyckoff effects)
   const buildFilteredMarkers = useCallback(() => {
@@ -1240,10 +1251,12 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
         )}
         <select
           className="chart-select"
+          aria-label={t('symbol_col')}
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
         >
           {filteredSymbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
+          {symbol && !filteredSymbols.some(i => i.symbol === symbol) && <option value={symbol}>{symbol}</option>}
           {filteredSymbols.map((i) => (
             <option key={i.symbol} value={i.symbol}>
               {i.symbol}
@@ -1252,6 +1265,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
         </select>
         <button
           onClick={() => setOverrideModalOpen(true)}
+          disabled={!symbol || profilesForChart.length === 0}
           title="Alert override"
           aria-label="Open alert override settings"
           style={{
@@ -1276,7 +1290,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
           ))}
         </div>
         {uiMode === 'expert' && (
-          <>
+          <div className="chart-overlays">
             <button
               className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
               onClick={() => setWyckoffEnabled((v) => !v)}
@@ -1341,7 +1355,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
             >
               {t('overlay_vix')}
             </button>
-          </>
+          </div>
         )}
       </div>
       {wyckoffEnabled && wyckoffData && (
@@ -1376,30 +1390,40 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
           ))}
         </div>
       )}
-      {loading && <p className="loading">{t('chart_loading')}</p>}
-      {error && <p className="error-msg">{t('no_data_error', { error })}</p>}
-      <div ref={containerRef} className="chart-area" />
-      {signals.some((s) => s.ai_interpretation) && (
-        <>
-          <p className="section-title" style={{ marginTop: 20 }}>{t('ai_interpretation')}</p>
-          <div className="ai-panel">
-            {signals
-              .filter((s) => s.ai_interpretation)
-              .map((s, i) => (
-                <div key={i} className="ai-signal-item">
-                  <div className="ai-signal-header">
-                    <span className={s.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
-                      {s.direction}
-                    </span>
-                    <span className="ai-rule-badge">{abbreviateRule(s.rule)}</span>
-                    <span className="ai-time">{new Date(s.time * 1000).toLocaleString()}</span>
-                  </div>
-                  <p className="ai-text">{s.ai_interpretation}</p>
-                </div>
-              ))}
+      <div className="chart-workspace">
+        <section className="chart-surface" aria-label={t('chart')} aria-busy={loading}>
+          <div className="surface-heading"><strong>{symbol || t('workspace.chooseSymbol')}</strong><span>{tf}</span></div>
+          {loading && <p className="state-message" role="status">{t('chart_loading')}</p>}
+          {error && <div className="state-message" role="alert"><p>{t('no_data_error', { error })}</p><button onClick={() => setReload(n => n + 1)}>{t('workspace.retry')}</button></div>}
+          {!symbol && !loading && !error && <div className="state-message"><p>{t('no_symbols_chart')}</p><button onClick={() => navigate('symbols')}>{t('workspace.addSymbols')}</button></div>}
+          <div ref={containerRef} className="chart-area" />
+        </section>
+        <aside className="signal-inspector" aria-label={t('workspace.signals')}>
+          <div className="surface-heading"><strong>{t('workspace.signals')}</strong><span>{signals.filter(s => s.timeframe === tf).length}</span></div>
+          {!loading && !error && signals.filter(s => s.timeframe === tf).length === 0 && <p className="state-message">{t('workspace.noSignals')}</p>}
+          <div className="signal-list">
+            {signals.filter(s => s.timeframe === tf).map((s, index) => <button key={s.time + s.rule + s.direction} className={'signal-row' + (index === selectedSignal ? ' selected' : '')} aria-pressed={index === selectedSignal} onClick={() => setSelectedSignal(index)}>
+              <span className={s.direction === 'LONG' ? 'dir-long' : s.direction === 'SHORT' ? 'dir-short' : ''}>{s.direction}</span>
+              <span>{abbreviateRule(s.rule)}<small>{new Date(s.time * 1000).toLocaleString(i18n.language)}</small></span>
+              <strong>{s.score.toFixed(1)}</strong>
+            </button>)}
           </div>
-        </>
-      )}
+          {(() => {
+            const signal = signals.filter(s => s.timeframe === tf)[selectedSignal]
+            if (!signal) return null
+            return <div className="signal-detail">
+              <h2>{t('workspace.signalDetail')}</h2>
+              <p>{signal.message || signal.rule}</p>
+              {signal.ai_interpretation && <><h3>{t('ai_interpretation')}</h3><p>{signal.ai_interpretation}</p></>}
+            </div>
+          })()}
+          <div className="inspector-actions">
+            <button disabled={!symbol} onClick={() => navigate('analysis')}>{t('workspace.analyzeSymbol')}</button>
+            <button disabled={!symbol} onClick={() => navigate('backtest')}>{t('workspace.testSymbol')}</button>
+            <button disabled={!symbol} onClick={() => navigate('price-alerts')}>{t('price_alerts')}</button>
+          </div>
+        </aside>
+      </div>
       {overrideModalOpen && (() => {
         const profileObj = profilesForChart[0] ?? null
         if (!profileObj) return null
@@ -1523,11 +1547,10 @@ function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
 function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
+  const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [marketFilter, setMarketFilter] = useState('all')
   const [rules, setRules] = useState<string[]>([])
-  const [symbol, setSymbol] = useState('')
-  const [tf, setTf] = useState<TF>('1H')
   const [ruleFilter, setRuleFilter] = useState('')
   const [tpMult, setTpMult] = useState(2.0)
   const [slMult, setSlMult] = useState(1.0)
@@ -1545,8 +1568,8 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
       const enabled = items.filter((i) => i.enabled)
       setSymbols(enabled)
-      if (enabled.length > 0) setSymbol(enabled[0].symbol)
-    }).catch(() => {/* silently ignore */})
+      if (!symbol && enabled.length > 0) setSymbol(enabled[0].symbol)
+    }).catch((e: Error) => setError(e.message))
 
     apiFetch<RuleItem[]>('/rules').then((items) => {
       setRules(items.filter((r) => r.enabled).map((r) => r.name))
@@ -1759,11 +1782,13 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
       <div className="backtest-controls">
         <select
           className="chart-select"
+          aria-label={t('symbol_col')}
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
           disabled={loading}
         >
           {btFilteredSymbols.length === 0 && <option value="">{t('no_symbols_chart')}</option>}
+          {symbol && !btFilteredSymbols.some(s => s.symbol === symbol) && <option value={symbol}>{symbol}</option>}
           {btFilteredSymbols.map((s) => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
         </select>
 
@@ -2203,9 +2228,11 @@ function PaperTab() {
   const [positions, setPositions] = useState<PaperPosition[]>([])
   const [history, setHistory] = useState<PaperPosition[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const reload = useCallback(() => {
     setLoading(true)
+    setError('')
     Promise.all([
       apiFetch<PaperSummary>('/paper/summary'),
       apiFetch<PaperPosition[]>('/paper/positions'),
@@ -2216,7 +2243,7 @@ function PaperTab() {
         setPositions(p ?? [])
         setHistory(h ?? [])
       })
-      .catch(() => {})
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 
@@ -2227,6 +2254,7 @@ function PaperTab() {
   return (
     <>
       <p className="section-title">{t('paper_title')}</p>
+      {error && <div className="state-message" role="alert"><p>{t('error')}: {error}</p><button onClick={reload}>{t('workspace.retry')}</button></div>}
 
       {summary && (
         <div className="backtest-stats">
@@ -2294,7 +2322,7 @@ function PaperTab() {
         </>
       )}
 
-      {positions.length === 0 && (
+      {!error && positions.length === 0 && (
         <p className="loading" style={{ marginTop: 16 }}>{t('no_open_positions')}</p>
       )}
 
@@ -2989,6 +3017,7 @@ function HistoryTab({ uiMode }: { uiMode: UIMode }) {
   const [signals, setSignals] = useState<SignalBar[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [revision, setRevision] = useState(0)
 
   useEffect(() => {
     apiFetch<SymbolItem[]>('/symbols').then((items) => {
@@ -2997,17 +3026,19 @@ function HistoryTab({ uiMode }: { uiMode: UIMode }) {
   }, [])
 
   const load = useCallback(() => {
+    const controller = new AbortController()
     setLoading(true)
     setError('')
     // Clear previous filter's rows so the table doesn't mismatch the selected filters during fetch
     setSignals([])
-    apiFetch<SignalBar[]>(`/history?symbol=${encodeURIComponent(symbol)}&direction=${direction}&limit=${limit}`)
-      .then(setSignals)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
+    apiFetch<SignalBar[]>(`/history?symbol=${encodeURIComponent(symbol)}&direction=${direction}&limit=${limit}`, { signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) setSignals(data) })
+      .catch((e: Error) => { if (!controller.signal.aborted) setError(e.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
   }, [symbol, direction, limit])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => load(), [load, revision])
 
   return (
     <>
@@ -3028,8 +3059,8 @@ function HistoryTab({ uiMode }: { uiMode: UIMode }) {
         </select>
       </div>
       {loading && <p className="loading">{t('loading')}</p>}
-      {error && <p className="error-msg">{t('error')}: {error}</p>}
-      {!loading && signals.length === 0 && (
+      {error && <div className="state-message" role="alert"><p>{t('error')}: {error}</p><button onClick={() => setRevision(n => n + 1)}>{t('workspace.retry')}</button></div>}
+      {!loading && !error && signals.length === 0 && (
         <p className="loading">{t('no_signals_hint')}</p>
       )}
       {signals.length > 0 && (
@@ -3725,11 +3756,12 @@ function DataManagementSection() {
 
 function PriceAlertsTab() {
   const { t } = useTranslation()
+  const { symbol: workspaceSymbol } = useWorkspace()
   const [alerts, setAlerts] = useState<PriceAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [symbol, setSymbol] = useState('')
+  const [symbol, setSymbol] = useState(workspaceSymbol)
   const [target, setTarget] = useState('')
   const [condition, setCondition] = useState<'above' | 'below'>('above')
   const [note, setNote] = useState('')
@@ -3878,24 +3910,7 @@ function PriceAlertsTab() {
 
 const CONFIG_TABS: Tab[] = ['symbols', 'rules', 'alert', 'price-alerts', 'report', 'status', 'settings']
 
-const TAB_KEYS: Record<Tab, string> = {
-  symbols: 'symbols',
-  rules: 'rules',
-  status: 'status',
-  chart: 'chart',
-  backtest: 'backtest',
-  paper: 'paper',
-  report: 'report',
-  history: 'history',
-  alert: 'alert',
-  performance: 'performance',
-  analysis: 'analysis',
-  settings: 'settings',
-  'price-alerts': 'price_alerts',
-  calendar: 'calendar',
-  execution: 'execution',
-  'my-trades': 'my_trades.title',
-}
+
 
 // ── Calendar Tab ─────────────────────────────────────────────────────────────
 
@@ -4022,11 +4037,13 @@ function CalendarTab() {
 }
 
 export function App() {
+  return <WorkspaceProvider><WorkspaceApp /></WorkspaceProvider>
+}
+
+function WorkspaceApp() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<Tab>('chart')
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { page: tab, navigate: setTab, symbol, timeframe } = useWorkspace()
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [liveSignal, setLiveSignal] = useState<SignalBar | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -4040,8 +4057,11 @@ export function App() {
   useEffect(() => {
     let ws: WebSocket
     let reconnectTimer: ReturnType<typeof setTimeout>
+    let signalTimer: ReturnType<typeof setTimeout>
+    let disposed = false
 
     const connect = () => {
+      if (disposed) return
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       ws = new WebSocket(`${proto}//${window.location.host}/ws`)
       wsRef.current = ws
@@ -4053,12 +4073,14 @@ export function App() {
           const msg = JSON.parse(event.data)
           if (msg.type === 'signal' && msg.payload) {
             setLiveSignal(msg.payload as SignalBar)
-            setTimeout(() => setLiveSignal(null), 6000)
+            clearTimeout(signalTimer)
+            signalTimer = setTimeout(() => setLiveSignal(null), 6000)
           }
         } catch {}
       }
 
       ws.onclose = () => {
+        if (disposed) return
         setWsConnected(false)
         reconnectTimer = setTimeout(connect, 3000)
       }
@@ -4068,7 +4090,9 @@ export function App() {
 
     connect()
     return () => {
+      disposed = true
       clearTimeout(reconnectTimer)
+      clearTimeout(signalTimer)
       ws?.close()
     }
   }, [])
@@ -4079,98 +4103,30 @@ export function App() {
     if (!done) setShowOnboarding(true)
   }, [])
 
-  const isConfigTab = CONFIG_TABS.includes(tab)
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [menuOpen])
-
-  const goConfig = (t: Tab) => {
-    setTab(t)
-    setMenuOpen(false)
-  }
-
   const handleGoToSettings = () => setTab('settings')
 
   return (
-    <div className="container">
-      <header className="header">
-        <div className="header-top">
-          <div>
-            <h1><span className="brand">Chart</span> Nagari
-              <span className={`ws-indicator ${wsConnected ? 'ws-live' : 'ws-offline'}`}>
-                {wsConnected ? '● LIVE' : '○ --'}
-              </span>
-            </h1>
-            <p className="header-sub">{t('header_sub')}</p>
-          </div>
-          <div ref={menuRef} style={{ position: 'relative' }}>
-            <button
-              className={`hamburger-btn${isConfigTab ? ' config-active' : ''}`}
-              onClick={() => setMenuOpen(o => !o)}
-              title="Config"
-            >
-              ☰
-            </button>
-            {menuOpen && (
-              <div className="config-menu">
-                {(['symbols', 'rules', 'alert', 'report', 'status', 'settings'] as const).map(tabKey => (
-                  <button
-                    key={tabKey}
-                    className={`config-menu-item${tab === tabKey ? ' active' : ''}`}
-                    onClick={() => goConfig(tabKey)}
-                  >
-                    {t(TAB_KEYS[tabKey])}
-                  </button>
-                ))}
-                <div style={{ borderTop: '1px solid rgba(91,146,121,0.2)', marginTop: '8px', paddingTop: '8px' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '6px' }}>{t('language')}</div>
-                  {(['en', 'ko', 'ja'] as const).map(lang => (
-                    <button
-                      key={lang}
-                      onClick={() => { i18n.changeLanguage(lang); localStorage.setItem('language', lang) }}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        textAlign: 'left' as const,
-                        padding: '5px 8px',
-                        background: i18n.language === lang ? 'rgba(91,146,121,0.2)' : 'transparent',
-                        border: 'none',
-                        color: 'var(--text)',
-                        fontSize: '0.82rem',
-                        cursor: 'pointer',
-                        borderRadius: '4px',
-                      }}
-                    >
-                      {lang === 'en' ? 'English' : lang === 'ko' ? '한국어' : '日本語'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+    <div className="container workspace-shell">
+      <a className="skip-link" href="#workspace-main">{t('workspace.skip')}</a>
+      <header className="workspace-header">
+        <div className="workspace-brand"><span>Chart</span> Nagari<small>{t('workspace.terminal')}</small></div>
+        <div className="workspace-tools">
+          <span className={'connection-state' + (wsConnected ? ' connected' : '')} role="status">
+            <span aria-hidden="true">●</span> {t(wsConnected ? 'workspace.connected' : 'workspace.disconnected')}
+          </span>
+          <label className="language-control"><span className="sr-only">{t('language')}</span>
+            <select value={i18n.language.split('-')[0]} onChange={e => { i18n.changeLanguage(e.target.value); localStorage.setItem('language', e.target.value) }}>
+              <option value="en">English</option><option value="ko">한국어</option><option value="ja">日本語</option>
+            </select>
+          </label>
         </div>
-        <nav className="tabs">
-          <button className={`tab-btn${tab === 'chart' ? ' active' : ''}`} onClick={() => setTab('chart')}>{t('chart')}</button>
-          <button className={`tab-btn${tab === 'analysis' ? ' active' : ''}`} onClick={() => setTab('analysis')}>{t('analysis')}</button>
-          <button className={`tab-btn${tab === 'backtest' ? ' active' : ''}`} onClick={() => setTab('backtest')}>{t('backtest')}</button>
-          <button className={`tab-btn${tab === 'performance' ? ' active' : ''}`} onClick={() => setTab('performance')}>{t('performance')}</button>
-          <button className={`tab-btn${tab === 'paper' ? ' active' : ''}`} onClick={() => setTab('paper')}>{t('paper')}</button>
-          <button className={`tab-btn${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>{t('history')}</button>
-          <button className={`tab-btn${tab === 'calendar' ? ' active' : ''}`} onClick={() => setTab('calendar')}>{t('calendar')}</button>
-          <button className={`tab-btn${tab === 'execution' ? ' active' : ''}`} onClick={() => setTab('execution')}>{t('execution')}</button>
-          <button className={`tab-btn${tab === 'my-trades' ? ' active' : ''}`} onClick={() => setTab('my-trades')}>{t('my_trades.title')}</button>
-        </nav>
       </header>
-      <main>
+      <WorkspaceNav />
+      <main id="workspace-main" tabIndex={-1} className={'workspace-main' + (CONFIG_TABS.includes(tab) ? ' workspace-narrow' : '')}>
+        <div className="page-heading">
+          <div><p className="page-eyebrow">{t('workspace.terminal')}</p><h1>{t(pageKeys[tab])}</h1></div>
+          {symbol && <span className="context-badge">{symbol}<span>{timeframe}</span></span>}
+        </div>
         {tab === 'chart' && <ChartTab uiMode={uiMode} />}
         {tab === 'analysis' && <AnalysisTab />}
         {tab === 'backtest' && <BacktestTab uiMode={uiMode} />}

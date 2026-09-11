@@ -14,6 +14,19 @@ Format:
 
 ---
 
+## [Unreleased]
+
+### Changed
+- Reorganized all pages into a responsive trading workspace with grouped navigation and an accessible price-alert entry point.
+- Share symbol and timeframe across chart, analysis and backtest using URL state and browser history.
+- Added a chart-side signal inspector, direct analysis/backtest actions, clearer connection status and consistent form controls.
+
+### Fixed
+- Cancel obsolete chart requests when the selected instrument changes; separate request failures from empty history results.
+- Show execution configuration and action failures instead of rendering unconfirmed execution controls.
+
+---
+
 ## [2.10.0.2] - 2026-06-07
 
 ### Docs

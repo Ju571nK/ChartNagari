@@ -35,6 +35,13 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('MyTradesTab', () => {
+  it('shows a failed request as an error instead of an empty pending list', async () => {
+    vi.mocked(globalThis.fetch).mockRejectedValue(new Error('offline'))
+    render(wrap(<MyTradesTab />))
+    fireEvent.click(screen.getByRole('button', { name: /Pending|대기 중|保留中/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('offline')
+    expect(screen.queryByText(/all caught up|대기 중인 시그널 없음|保留中のシグナルなし/)).not.toBeInTheDocument()
+  })
   it('renders Rollup table from fetch', async () => {
     render(wrap(<MyTradesTab />))
     await waitFor(() => expect(screen.queryByText('ict_liquidity_sweep')).toBeDefined())

@@ -63,10 +63,21 @@ export default function ExecutionTab() {
   const [editingOpen, setEditingOpen] = useState(false);
   const [versionConflict, setVersionConflict] = useState(false);
   const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string> | null>(null);
+  const [configError, setConfigError] = useState(false);
+  const [actionError, setActionError] = useState(false);
+  const [feedError, setFeedError] = useState(false);
 
   const loadConfig = useCallback(async () => {
-    const r = await fetch('/api/execution/config', { credentials: 'include' });
-    if (r.ok) setConfig(await r.json());
+    try {
+      const r = await fetch('/api/execution/config', { credentials: 'include' });
+      if (!r.ok) throw new Error('Configuration unavailable');
+      setConfig(await r.json());
+      setConfigError(false);
+    } catch (error) {
+      setConfigError(true);
+      setConfig(null);
+      throw error;
+    }
   }, []);
 
   const loadStats = useCallback(async () => {
@@ -75,6 +86,7 @@ export default function ExecutionTab() {
   }, []);
 
   const loadFeedback = useCallback(async () => {
+    try {
     const f = filtersRef.current;
     const qs = new URLSearchParams();
     if (f.plugin) qs.set('plugin', f.plugin);
@@ -82,7 +94,9 @@ export default function ExecutionTab() {
     if (f.symbol) qs.set('symbol', f.symbol);
     qs.set('limit', '100');
     const r = await fetch('/api/execution/feedback?' + qs.toString(), { credentials: 'include' });
-    if (r.ok) { const b = await r.json(); setFeedback(b.items ?? []); }
+    if (!r.ok) throw new Error('Feedback unavailable');
+    const b = await r.json(); setFeedback(b.items ?? []); setFeedError(false);
+    } catch { setFeedError(true); }
   }, []);
 
   useEffect(() => {
@@ -101,6 +115,8 @@ export default function ExecutionTab() {
   }, [loadStats, loadFeedback]);
 
   const putConfig = useCallback(async (next: ExecutionConfig): Promise<Response> => {
+    setActionError(false);
+    try {
     const resp = await fetch('/api/execution/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -115,33 +131,43 @@ export default function ExecutionTab() {
       await loadConfig();
       await loadStats();
     }
+    if (!resp.ok && resp.status !== 422) setActionError(true);
     return resp;
+    } catch {
+      setActionError(true);
+      return new Response(null, { status: 503 });
+    }
   }, [loadConfig, loadStats]);
 
   return (
     <div className="execution-tab">
+      {actionError && <div className="state-message" role="alert">{t('workspace.actionFailed')}</div>}
+      {configError && <div className="state-message" role="alert"><p>{t('workspace.executionUnavailable')}</p><button onClick={() => { void loadConfig().catch(() => {}); }}>{t('workspace.retry')}</button></div>}
+      {!config && !configError && <p className="state-message" role="status">{t('loading')}</p>}
+      {config && <p role="status">{t(config.killed_at ? 'workspace.executionKilled' : config.enabled ? 'workspace.executionOn' : 'workspace.executionOff')}</p>}
       {versionConflict && (
         <div role="alert" style={{ background: 'var(--danger)', color: '#fff', padding: 12, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>{t('execution.config_conflict')}</span>
-          <button onClick={async () => { await loadConfig(); setVersionConflict(false); }}>{t('common.refresh')}</button>
+          <button onClick={async () => { try { await loadConfig(); setVersionConflict(false); } catch { /* config error is visible */ } }}>{t('common.refresh')}</button>
         </div>
       )}
       <div data-testid="kill-switch">
-        <KillSwitch
+        {config && <KillSwitch
           killed={!!config?.killed_at}
           killedAt={config?.killed_at || null}
           onToggle={async () => {
             const currentlyKilled = !!config?.killed_at;
             const on = !currentlyKilled;
-            await fetch('/api/execution/kill', {
+            const response = await fetch('/api/execution/kill', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify({ on }),
             });
+            if (!response.ok) throw new Error(t('workspace.actionFailed'));
             await loadConfig();
           }}
-        />
+        />}
       </div>
       <div data-testid="plugins-area">
         {config?.plugins.map(p => {
@@ -165,7 +191,7 @@ export default function ExecutionTab() {
             />
           );
         })}
-        <button onClick={() => { setEditing(null); setEditingOpen(true); }}>{t('execution.add_plugin')}</button>
+        <button disabled={!config} onClick={() => { setEditing(null); setEditingOpen(true); }}>{t('execution.add_plugin')}</button>
       </div>
       <div data-testid="global-config">
         {config && (
@@ -179,12 +205,7 @@ export default function ExecutionTab() {
             onSave={async (partial: GlobalConfig) => {
               if (!config) return;
               const next = { ...config, ...partial };
-              const resp = await fetch('/api/execution/config', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(next),
-              });
+              const resp = await putConfig(next);
               if (resp.status === 422) {
                 try {
                   const body = await resp.json();
@@ -197,8 +218,6 @@ export default function ExecutionTab() {
                 return;
               }
               setServerFieldErrors(null);
-              await loadConfig();
-              await loadStats();
             }}
           />
         )}
@@ -220,7 +239,9 @@ export default function ExecutionTab() {
         />
       )}
       <div data-testid="feedback-table">
+        {feedError && <p className="state-message" role="alert">{t('workspace.actionFailed')}</p>}
         <FeedbackTable
+          unavailable={feedError}
           feedback={feedback}
           filters={filters}
           onFiltersChange={f => {

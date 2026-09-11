@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import KillSwitch from './KillSwitch';
 
 const mockTranslations: Record<string, string> = {
@@ -16,6 +16,17 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => moc
 vi.mock('./i18n/index', () => ({ default: { language: 'en' } }));
 
 describe('KillSwitch', () => {
+  it('keeps confirmation open and allows retry when the action fails', async () => {
+    const onToggle = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
+    render(<KillSwitch killed={false} killedAt={null} onToggle={onToggle} />);
+    fireEvent.click(screen.getByRole('button', { name: /kill/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('workspace.actionFailed');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
 	it('renders the Kill button when not killed', () => {
 		render(<KillSwitch killed={false} killedAt={null} onToggle={vi.fn()} />);
 		expect(screen.getByRole('button', { name: /kill/i })).toBeInTheDocument();

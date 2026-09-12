@@ -49,8 +49,8 @@ type Config struct {
 // DailyReportConfig mirrors config/report.yaml structure.
 type DailyReportConfig struct {
 	Enabled       bool    `yaml:"enabled"`
-	Time          string  `yaml:"time"`          // "HH:MM"
-	Timezone      string  `yaml:"timezone"`      // "Asia/Seoul"
+	Time          string  `yaml:"time"`     // "HH:MM"
+	Timezone      string  `yaml:"timezone"` // "Asia/Seoul"
 	AIMinScore    float64 `yaml:"ai_min_score"`
 	OnlyIfSignals bool    `yaml:"only_if_signals"`
 	Compact       bool    `yaml:"compact"`
@@ -93,13 +93,13 @@ type DiscordConfig struct {
 }
 
 type AlertConfig struct {
-	ScoreThreshold  float64 `yaml:"score_threshold"`
-	CooldownHours   int     `yaml:"cooldown_hours"`
-	MTFConsensusMin int     `yaml:"mtf_consensus_min"`
-	CryptoTPMult    float64 `yaml:"crypto_tp_mult"`
-	CryptoSLMult    float64 `yaml:"crypto_sl_mult"`
-	StockTPMult     float64 `yaml:"stock_tp_mult"`
-	StockSLMult     float64 `yaml:"stock_sl_mult"`
+	ScoreThreshold  float64 `yaml:"score_threshold" json:"score_threshold"`
+	CooldownHours   int     `yaml:"cooldown_hours" json:"cooldown_hours"`
+	MTFConsensusMin int     `yaml:"mtf_consensus_min" json:"mtf_consensus_min"`
+	CryptoTPMult    float64 `yaml:"crypto_tp_mult" json:"crypto_tp_mult"`
+	CryptoSLMult    float64 `yaml:"crypto_sl_mult" json:"crypto_sl_mult"`
+	StockTPMult     float64 `yaml:"stock_tp_mult" json:"stock_tp_mult"`
+	StockSLMult     float64 `yaml:"stock_sl_mult" json:"stock_sl_mult"`
 }
 
 // AlertConfigHolder is a mutex-protected holder for live-updated AlertConfig.
@@ -265,34 +265,34 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		return strconv.FormatFloat(f, 'f', -1, 64)
 	}
 	return map[string]string{
-		"ENV":                  s.Server.Env,
-		"SERVER_HOST":          s.Server.Host,
-		"SERVER_PORT":          s.Server.Port,
-		"LOG_LEVEL":            s.Server.LogLevel,
-		"API_TOKEN":            s.Server.APIToken,
-		"BINANCE_API_KEY":      s.Binance.APIKey,
-		"BINANCE_SECRET_KEY":   s.Binance.SecretKey,
-		"TIINGO_API_KEY":       s.Tiingo.APIKey,
-		"TIINGO_POLL_INTERVAL": itoa(s.Tiingo.PollInterval),
-		"YAHOO_POLL_INTERVAL":  itoa(s.Yahoo.PollInterval),
-		"TELEGRAM_BOT_TOKEN":   s.Telegram.BotToken,
-		"TELEGRAM_CHAT_ID":     s.Telegram.ChatID,
-		"DISCORD_WEBHOOK_URL":  s.Discord.WebhookURL,
-		"ALERT_COOLDOWN_HOURS": itoa(s.Alert.CooldownHours),
-		"LLM_PROVIDER":         s.LLM.Provider,
-		"LLM_LANGUAGE":         s.LLM.Language,
-		"AI_MIN_SCORE":         ftoa(s.LLM.MinScore),
-		"ANTHROPIC_API_KEY":    s.Anthropic.APIKey,
-		"OPENAI_API_KEY":       s.OpenAI.APIKey,
-		"GROQ_API_KEY":         s.Groq.APIKey,
-		"GEMINI_API_KEY":       s.Gemini.APIKey,
-		"OLLAMA_HOST":          s.Ollama.Host,
-		"OLLAMA_MODEL":         s.Ollama.Model,
-		"OLLAMA_TIMEOUT_SEC":   itoa(s.Ollama.TimeoutSec),
-		"ALPHAVANTAGE_API_KEY": s.AlphaVantage.APIKey,
-		"FINNHUB_API_KEY":        s.Finnhub.APIKey,
-		"CALENDAR_ALERT_WINDOW":  itoa(s.Finnhub.AlertWindowMinutes),
-		"FMP_API_KEY":            s.Fmp.APIKey,
+		"ENV":                   s.Server.Env,
+		"SERVER_HOST":           s.Server.Host,
+		"SERVER_PORT":           s.Server.Port,
+		"LOG_LEVEL":             s.Server.LogLevel,
+		"API_TOKEN":             s.Server.APIToken,
+		"BINANCE_API_KEY":       s.Binance.APIKey,
+		"BINANCE_SECRET_KEY":    s.Binance.SecretKey,
+		"TIINGO_API_KEY":        s.Tiingo.APIKey,
+		"TIINGO_POLL_INTERVAL":  itoa(s.Tiingo.PollInterval),
+		"YAHOO_POLL_INTERVAL":   itoa(s.Yahoo.PollInterval),
+		"TELEGRAM_BOT_TOKEN":    s.Telegram.BotToken,
+		"TELEGRAM_CHAT_ID":      s.Telegram.ChatID,
+		"DISCORD_WEBHOOK_URL":   s.Discord.WebhookURL,
+		"ALERT_COOLDOWN_HOURS":  itoa(s.Alert.CooldownHours),
+		"LLM_PROVIDER":          s.LLM.Provider,
+		"LLM_LANGUAGE":          s.LLM.Language,
+		"AI_MIN_SCORE":          ftoa(s.LLM.MinScore),
+		"ANTHROPIC_API_KEY":     s.Anthropic.APIKey,
+		"OPENAI_API_KEY":        s.OpenAI.APIKey,
+		"GROQ_API_KEY":          s.Groq.APIKey,
+		"GEMINI_API_KEY":        s.Gemini.APIKey,
+		"OLLAMA_HOST":           s.Ollama.Host,
+		"OLLAMA_MODEL":          s.Ollama.Model,
+		"OLLAMA_TIMEOUT_SEC":    itoa(s.Ollama.TimeoutSec),
+		"ALPHAVANTAGE_API_KEY":  s.AlphaVantage.APIKey,
+		"FINNHUB_API_KEY":       s.Finnhub.APIKey,
+		"CALENDAR_ALERT_WINDOW": itoa(s.Finnhub.AlertWindowMinutes),
+		"FMP_API_KEY":           s.Fmp.APIKey,
 	}
 }
 

@@ -1,4 +1,5 @@
 {
+  "patternOverlay": {"filters":"ICT / Wyckoff / SMC / TA filter stored signal markers; they do not run a new analysis.","count":"{{count}} active candidate ranges shown (latest 5 maximum).","none":"No matching ranges in the loaded candles.","wait":"Load price candles first.","help":"FVG: cyan · OB: amber. Upper/lower lines span formation to latest candle. Solid ↑ bullish, dashed ↓ bearish. Candle-based candidates, not entry signals; filled gaps / invalidated OBs are excluded. OB uses a local 1.5× true-range impulse filter; results may differ from the trading engine.","loading":"Loading…","ready":"Data loaded.","empty":"No stored data. Check the data source.","error":"Could not load data. Use Try again below."},
   "backtestPrep": {
     "title": "Backtest preparation",
     "select": "Select an instrument.",

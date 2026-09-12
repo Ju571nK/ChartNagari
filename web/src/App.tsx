@@ -6,6 +6,7 @@ import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import { WorkspaceProvider, useWorkspace } from './Workspace'
 import { WorkspaceNav, pageKeys } from './WorkspaceNav'
 import { MarketDataStatus, useMarketData } from './MarketDataStatus'
+import { chartPatterns } from './chartPatterns'
 import { ChartGuide, ExperienceMode, loadUIMode, UI_MODE_KEY, type UIMode } from './ExperienceMode'
 import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparation'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
@@ -872,6 +873,8 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(loadSignalFilter)
   const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
   const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
+  const [wyckoffStatus, setWyckoffStatus] = useState('')
+  const [vixStatus, setVixStatus] = useState('')
   const [enabledOverlays, setEnabledOverlays] = useState<Set<OverlayType>>(() => uiMode === 'expert' ? loadOverlayToggles() : new Set())
   useEffect(() => {
     setEnabledOverlays(uiMode === 'expert' ? loadOverlayToggles() : new Set())
@@ -882,6 +885,8 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const [selectedSignal, setSelectedSignal] = useState(0)
   const [reload, setReload] = useState(0)
   const marketData = useMarketData(symbol, tf, reload)
+  const patterns = useMemo(() => chartPatterns(marketData.bars), [marketData.bars])
+  const zonesEnabled = enabledOverlays.has('zones')
   const loading = marketData.phase === 'loading'
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -1049,6 +1054,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
     }
     const bestByKey = new Map<string, SignalBar>()
     for (const s of signals) {
+      if (s.timeframe !== tf) continue
       if (s.direction === 'NEUTRAL') continue
       if (!enabledRules.has(s.rule)) continue
       const key = `${s.time}:${s.direction}`
@@ -1066,7 +1072,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
       shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
       text: abbreviateRule(s.rule),
     }))
-  }, [signals, enabledCategories])
+  }, [signals, enabledCategories, tf])
 
   // Single unified marker effect: merges filtered signals + wyckoff events
   useEffect(() => {
@@ -1103,21 +1109,23 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
       seriesRef.current.removePriceLine(swingLowLineRef.current)
       swingLowLineRef.current = null
     }
-    if (!wyckoffEnabled) {
+    if (!wyckoffEnabled && !zonesEnabled) {
       setWyckoffData(null)
       return
     }
     if (!symbol) return
     // Clear stale phase badge/events while fetching the new symbol's Wyckoff analysis
     setWyckoffData(null)
+    setWyckoffStatus('loading')
 
     const controller = new AbortController()
     apiFetch<WyckoffAnalysis>(`/wyckoff/${encodeURIComponent(symbol)}/${tf}`, { signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return
         setWyckoffData(data)
+        setWyckoffStatus('ready')
         if (!seriesRef.current) return
-        if (data.swing_high > 0) {
+        if (wyckoffEnabled && data.swing_high > 0) {
           swingHighLineRef.current = seriesRef.current.createPriceLine({
             price: data.swing_high,
             color: 'rgba(143,203,155,0.7)',
@@ -1127,7 +1135,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
             title: 'Swing H',
           })
         }
-        if (data.swing_low > 0) {
+        if (wyckoffEnabled && data.swing_low > 0) {
           swingLowLineRef.current = seriesRef.current.createPriceLine({
             price: data.swing_low,
             color: 'rgba(143,128,115,0.7)',
@@ -1139,11 +1147,11 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
         }
         // Markers are rendered by the unified marker effect above via wyckoffData state
       })
-      .catch(() => {/* silently ignore wyckoff fetch errors */})
+      .catch(() => { if (!controller.signal.aborted) setWyckoffStatus('error') })
     return () => controller.abort()
-  }, [wyckoffEnabled, symbol, tf])
+  }, [wyckoffEnabled, zonesEnabled, symbol, tf, reload])
 
-  // Overlay price lines effect: FVG / OB zones from signals, Wyckoff phase zones
+  // Selected-candle FVG / OB ranges and independently loaded Wyckoff phase zones.
   useEffect(() => {
     if (!seriesRef.current) return
 
@@ -1155,61 +1163,31 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
 
     const lines: PriceLineRef[] = []
 
-    // FVG zone overlays
-    if (enabledOverlays.has('fvg')) {
-      for (const s of signals) {
-        if (s.rule !== 'ict_fair_value_gap') continue
-        if (!s.zone_low || !s.zone_high || s.zone_low === 0 || s.zone_high === 0) continue
-        lines.push(seriesRef.current.createPriceLine({
-          price: s.zone_low,
-          color: 'rgba(143,203,155,0.15)',
-          lineWidth: 1,
-          lineStyle: 3,
-          axisLabelVisible: false,
-          title: 'FVG',
-        }))
-        lines.push(seriesRef.current.createPriceLine({
-          price: s.zone_high,
-          color: 'rgba(143,203,155,0.15)',
-          lineWidth: 1,
-          lineStyle: 3,
-          axisLabelVisible: false,
-          title: '',
-        }))
-      }
-    }
-
-    // OB zone overlays
-    if (enabledOverlays.has('ob')) {
-      for (const s of signals) {
-        if (s.rule !== 'ict_order_block') continue
-        if (!s.zone_low || !s.zone_high || s.zone_low === 0 || s.zone_high === 0) continue
-        lines.push(seriesRef.current.createPriceLine({
-          price: s.zone_low,
-          color: 'rgba(91,146,121,0.15)',
-          lineWidth: 1,
-          lineStyle: 3,
-          axisLabelVisible: false,
-          title: 'OB',
-        }))
-        lines.push(seriesRef.current.createPriceLine({
-          price: s.zone_high,
-          color: 'rgba(91,146,121,0.15)',
-          lineWidth: 1,
-          lineStyle: 3,
-          axisLabelVisible: false,
-          title: '',
-        }))
+    // Time-bounded formation ranges from this chart, independent of saved signals.
+    const chart = chartRef.current
+    const patternSeries: ISeriesApi<'Line'>[] = []
+    if (chart) for (const p of patterns) {
+      if (!enabledOverlays.has(p.kind)) continue
+      for (const price of [p.low, p.high]) {
+        const line = chart.addSeries(LineSeries, {
+          color: p.kind === 'fvg' ? '#63C5DA' : '#E6AB62',
+          lineWidth: 2, lineStyle: p.direction === 'bull' ? 0 : 2,
+          priceLineVisible: false, lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: `${p.kind.toUpperCase()} ${p.direction === 'bull' ? '↑' : '↓'}`,
+        })
+        line.setData([{ time: p.from as UTCTimestamp, value: price }, { time: p.to as UTCTimestamp, value: price }])
+        patternSeries.push(line)
       }
     }
 
     // Wyckoff phase zone overlays
     if (enabledOverlays.has('zones') && wyckoffData?.phase_zones) {
       const phaseColors: Record<string, string> = {
-        accumulation: 'rgba(34,197,94,0.1)',
-        markup:       'rgba(143,203,155,0.1)',
-        distribution: 'rgba(245,158,11,0.1)',
-        markdown:     'rgba(239,68,68,0.1)',
+        accumulation: 'rgba(34,197,94,0.7)',
+        markup:       'rgba(143,203,155,0.7)',
+        distribution: 'rgba(245,158,11,0.7)',
+        markdown:     'rgba(239,68,68,0.7)',
       }
       for (const zone of wyckoffData.phase_zones) {
         const color = phaseColors[zone.phase] ?? 'rgba(143,128,115,0.1)'
@@ -1233,7 +1211,10 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
     }
 
     overlayLinesRef.current = lines
-  }, [signals, enabledOverlays, wyckoffData])
+    return () => {
+      if (chartRef.current === chart) for (const line of patternSeries) chart?.removeSeries(line)
+    }
+  }, [patterns, enabledOverlays, wyckoffData])
 
   // VIX overlay: load and display as a separate line series on chart bottom 20%
   useEffect(() => {
@@ -1247,11 +1228,14 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
     }
 
     if (!enabledOverlays.has('vix')) return
+    setVixStatus('loading')
 
     const controller = new AbortController()
     apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent('^VIX')}/1D?limit=200`, { signal: controller.signal })
       .then((bars) => {
         if (controller.signal.aborted || !chartRef.current || !enabledOverlays.has('vix')) return
+        setVixStatus(bars.length ? 'ready' : 'empty')
+        if (!bars.length) return
         const vixSeries = chartRef.current.addSeries(LineSeries, {
           color: '#94a3b8',
           lineWidth: 1,
@@ -1270,9 +1254,9 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
         )
         vixSeriesRef.current = vixSeries
       })
-      .catch(() => { /* VIX not collected — silently ignore */ })
+      .catch(() => { if (!controller.signal.aborted) setVixStatus('error') })
     return () => controller.abort()
-  }, [enabledOverlays, symbol, tf])
+  }, [enabledOverlays, symbol, tf, reload])
 
   return (
     <>
@@ -1337,6 +1321,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
           <div className="chart-overlays">
             <button
               className={`tf-btn${wyckoffEnabled ? ' active' : ''}`}
+              aria-pressed={wyckoffEnabled}
               onClick={() => setWyckoffEnabled((v) => !v)}
               title="Toggle Wyckoff phase overlay (swing levels + spring/upthrust markers)"
               style={{ marginLeft: 8, fontSize: '0.78rem', letterSpacing: '0.02em' }}
@@ -1348,6 +1333,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
               <button
                 key={cat}
                 className={`tf-btn${enabledCategories.has(cat) ? ' active' : ''}`}
+                aria-pressed={enabledCategories.has(cat)}
                 onClick={() => {
                   setEnabledCategories(prev => {
                     const next = new Set(prev)
@@ -1368,6 +1354,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
               <button
                 key={ov}
                 className={`tf-btn${enabledOverlays.has(ov) ? ' active' : ''}`}
+                aria-pressed={enabledOverlays.has(ov)}
                 onClick={() => {
                   setEnabledOverlays(prev => {
                     const next = new Set(prev)
@@ -1385,6 +1372,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
             ))}
             <button
               className={`tf-btn${enabledOverlays.has('vix') ? ' active' : ''}`}
+              aria-pressed={enabledOverlays.has('vix')}
               onClick={() => {
                 setEnabledOverlays(prev => {
                   const next = new Set(prev)
@@ -1402,6 +1390,18 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
           </div>
         )}
       </div>
+      {uiMode === 'expert' && <div className="item-meta" role="status" style={{ marginBottom: 12 }}>
+        <p>{t('patternOverlay.filters')}</p>
+        {(['fvg', 'ob'] as const).filter(kind => enabledOverlays.has(kind)).map(kind => <p key={kind}>
+          {kind.toUpperCase()}: {marketData.phase === 'ready'
+            ? t(patterns.some(p => p.kind === kind) ? 'patternOverlay.count' : 'patternOverlay.none', { count: patterns.filter(p => p.kind === kind).length })
+            : t('patternOverlay.wait')}
+        </p>)}
+        {(enabledOverlays.has('fvg') || enabledOverlays.has('ob')) && <p>{t('patternOverlay.help')}</p>}
+        {wyckoffEnabled && <p>W.Phase: {t(`patternOverlay.${wyckoffStatus || 'loading'}`)}</p>}
+        {zonesEnabled && <p>Zones: {t(`patternOverlay.${wyckoffStatus === 'ready' ? (wyckoffData?.phase_zones?.length ? 'ready' : 'none') : wyckoffStatus || 'loading'}`)}</p>}
+        {enabledOverlays.has('vix') && <p>VIX: {t(`patternOverlay.${vixStatus || 'loading'}`)}</p>}
+      </div>}
       {wyckoffEnabled && wyckoffData && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
           <span

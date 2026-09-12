@@ -1377,3 +1377,10 @@ input:checked + .slider::before {
   .backtest-controls > select { flex: 1 1 140px; min-width: 0; }
   .backtest-controls > .run-btn { flex: 1 1 140px; }
 }
+.runtime-status { border: 1px solid rgba(91,146,121,.35); border-radius: 8px; padding: 1rem; margin: 1rem 0; overflow-wrap: anywhere; }
+.runtime-status p { font-size: .85rem; color: var(--muted); margin: .65rem 0; }
+.runtime-status dl { margin: .75rem 0; }
+.runtime-status dl > div { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: .35rem 0; }
+.runtime-status dt { flex: 1 1 210px; color: var(--muted); }
+.runtime-status dd { flex: 1 1 180px; margin: 0; }
+.runtime-status button, .runtime-status summary { min-height: 44px; }

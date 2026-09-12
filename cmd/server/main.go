@@ -319,12 +319,12 @@ func main() {
 	defer func() { cancel(); <-runtimeDone }()
 
 	// ── 경제 캘린더 ───────────────────────────────────────────────────
+	calFetcher := calendar.New(cfg.Finnhub.APIKey, cfg.FMP.APIKey, db, log.Logger)
 	if cfg.Finnhub.APIKey != "" || cfg.FMP.APIKey != "" {
 		calProvider := "finnhub"
 		if cfg.FMP.APIKey != "" {
 			calProvider = "fmp"
 		}
-		calFetcher := calendar.New(cfg.Finnhub.APIKey, cfg.FMP.APIKey, db, log.Logger)
 		go calFetcher.Run(ctx)
 		alertWindow := time.Duration(cfg.Finnhub.AlertWindowMinutes) * time.Minute
 		calWatcher := calendar.NewWatcher(db, notif, alertWindow, log.Logger)
@@ -354,6 +354,8 @@ func main() {
 	apiSrv := api.New("config", "web/dist")
 	apiSrv.WithWatchlistChanged(watchRuntime.Update)
 	apiSrv.WithSettingsFile("config/settings.yaml")
+	apiSrv.WithStartupSettings(cfg.StartupSettings)
+	apiSrv.WithCalendarDiagnostics(func() any { return calFetcher.Status() })
 	apiSrv.WithDBPath(cfg.DBPath)
 	apiSrv.WithChartStore(db)
 	apiSrv.WithBacktestRunner(btRunner)

@@ -4,11 +4,13 @@ package calendar
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -35,6 +37,8 @@ type Store interface {
 // Fetcher periodically fetches economic events and caches them.
 // Uses FMP if fmpKey is set, otherwise falls back to Finnhub.
 type Fetcher struct {
+	mu             sync.RWMutex
+	status         CollectionStatus
 	finnhubKey     string
 	fmpKey         string
 	store          Store
@@ -100,11 +104,29 @@ func (f *Fetcher) fetchWithRetry(ctx context.Context) {
 
 // tryFetch executes a single fetch attempt. Returns true on success.
 func (f *Fetcher) tryFetch(ctx context.Context) bool {
+	f.mu.Lock()
+	f.status.State = "fetching"
+	f.status.LastAttempt = time.Now().UTC()
+	f.mu.Unlock()
 	var err error
 	if f.fmpKey != "" {
 		err = f.fetchFMP(ctx)
 	} else {
 		err = f.fetchFinnhub(ctx)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.status.State = "success"
+	f.status.Failure = ""
+	if err != nil {
+		f.status.State = "error"
+		f.status.Failure = "network"
+		var failure collectionError
+		if errors.As(err, &failure) {
+			f.status.Failure = string(failure)
+		}
+	} else {
+		f.status.LastSuccess = time.Now().UTC()
 	}
 	return err == nil
 }
@@ -116,10 +138,10 @@ type finnhubResponse struct {
 }
 
 type finnhubEvent struct {
-	Time     string `json:"time"`     // "2026-03-21 12:30:00"
-	Country  string `json:"country"`  // "US"
+	Time     string `json:"time"`    // "2026-03-21 12:30:00"
+	Country  string `json:"country"` // "US"
 	Event    string `json:"event"`
-	Impact   string `json:"impact"`   // "high" | "medium" | "low"
+	Impact   string `json:"impact"` // "high" | "medium" | "low"
 	Actual   string `json:"actual"`
 	Estimate string `json:"estimate"`
 	Prev     string `json:"prev"`
@@ -139,7 +161,7 @@ func (f *Fetcher) fetchFinnhub(ctx context.Context) error {
 		return err
 	}
 	if status != http.StatusOK {
-		err := fmt.Errorf("HTTP %d", status)
+		err := httpFailure(status)
 		f.log.Error().Int("status", status).Msg("calendar: Finnhub returned error")
 		return err
 	}
@@ -147,7 +169,10 @@ func (f *Fetcher) fetchFinnhub(ctx context.Context) error {
 	var result finnhubResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		f.log.Error().Err(err).Msg("calendar: Finnhub failed to parse response")
-		return err
+		return collectionError("invalid_response")
+	}
+	if result.EconomicCalendar == nil {
+		return collectionError("invalid_response")
 	}
 
 	var events []storage.EconomicEvent
@@ -174,17 +199,16 @@ func (f *Fetcher) fetchFinnhub(ctx context.Context) error {
 		})
 	}
 
-	f.upsert(events, from, to, "finnhub")
-	return nil
+	return f.upsert(events, from, to, "finnhub")
 }
 
 // ── Financial Modeling Prep ───────────────────────────────────────────────────
 
 type fmpEvent struct {
-	Date     string   `json:"date"`     // "2026-03-21 12:30:00" or "2026-03-21"
-	Country  string   `json:"country"`  // "US"
+	Date     string   `json:"date"`    // "2026-03-21 12:30:00" or "2026-03-21"
+	Country  string   `json:"country"` // "US"
 	Event    string   `json:"event"`
-	Impact   string   `json:"impact"`   // "High" | "Medium" | "Low"
+	Impact   string   `json:"impact"` // "High" | "Medium" | "Low"
 	Actual   *float64 `json:"actual"`
 	Estimate *float64 `json:"estimate"`
 	Previous *float64 `json:"previous"`
@@ -203,7 +227,7 @@ func (f *Fetcher) fetchFMP(ctx context.Context) error {
 		return err
 	}
 	if status != http.StatusOK {
-		err := fmt.Errorf("HTTP %d", status)
+		err := httpFailure(status)
 		f.log.Error().Int("status", status).Msg("calendar: FMP returned error")
 		return err
 	}
@@ -211,7 +235,10 @@ func (f *Fetcher) fetchFMP(ctx context.Context) error {
 	var result []fmpEvent
 	if err := json.Unmarshal(body, &result); err != nil {
 		f.log.Error().Err(err).Msg("calendar: FMP failed to parse response")
-		return err
+		return collectionError("invalid_response")
+	}
+	if result == nil {
+		return collectionError("invalid_response")
 	}
 
 	fmtNum := func(v *float64) string {
@@ -245,8 +272,7 @@ func (f *Fetcher) fetchFMP(ctx context.Context) error {
 		})
 	}
 
-	f.upsert(events, from, to, "fmp")
-	return nil
+	return f.upsert(events, from, to, "fmp")
 }
 
 // ── shared helpers ────────────────────────────────────────────────────────────
@@ -261,26 +287,34 @@ func (f *Fetcher) doGet(ctx context.Context, url string, headers map[string]stri
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		// Transport errors can embed the FMP URL (and its API key).
+		return nil, 0, collectionError("network")
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return body, resp.StatusCode, err
 }
 
-func (f *Fetcher) upsert(events []storage.EconomicEvent, from, to, provider string) {
+func (f *Fetcher) upsert(events []storage.EconomicEvent, from, to, provider string) error {
 	if len(events) == 0 {
 		f.log.Debug().Str("provider", provider).Msg("calendar: no US events in response")
-		return
+		f.mu.Lock()
+		f.status.EventCount = 0
+		f.mu.Unlock()
+		return nil
 	}
 	if err := f.store.UpsertEconomicEvents(events); err != nil {
 		f.log.Error().Err(err).Str("provider", provider).Msg("calendar: failed to cache events")
-		return
+		return collectionError("storage")
 	}
+	f.mu.Lock()
+	f.status.EventCount = len(events)
+	f.mu.Unlock()
 	f.log.Info().
 		Int("events", len(events)).
 		Str("from", from).
 		Str("to", to).
 		Str("provider", provider).
 		Msg("calendar: events cached")
+	return nil
 }

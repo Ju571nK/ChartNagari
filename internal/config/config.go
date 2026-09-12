@@ -16,6 +16,10 @@ import (
 
 // Config is the top-level application configuration.
 type Config struct {
+	// StartupSettings is the YAML input actually read during this process startup.
+	// It is not proof that an optional integration is connected or enabled.
+	StartupSettings map[string]string
+
 	Env        string
 	ServerHost string // bind address; default "127.0.0.1"
 	ServerPort string
@@ -433,6 +437,8 @@ func Load(envFile, configDir string) (*Config, error) {
 	}
 
 	cfg := &Config{
+		StartupSettings: s.ToMap(),
+
 		Env:        getEnvOr("ENV", s.Server.Env, "development"),
 		ServerHost: getEnvOr("SERVER_HOST", s.Server.Host, "127.0.0.1"),
 		ServerPort: getEnvOr("SERVER_PORT", s.Server.Port, "8080"),

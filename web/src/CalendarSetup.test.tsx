@@ -30,7 +30,7 @@ it('offers focused calendar settings on empty results and saves only edited fiel
   await waitFor(()=>expect(fetcher.mock.calls.some(([,init])=>init?.method==='PUT')).toBe(true))
   const request=fetcher.mock.calls.find(([,init])=>init?.method==='PUT')!
   expect(JSON.parse(String(request[1]?.body))).toEqual({CALENDAR_ALERT_WINDOW:'45'})
-  await screen.findByText(/Saved · restart required/, {selector:'.save-success'})
+  await screen.findByText(/Saved. See the startup comparison/, {selector:'.save-success'})
 })
 
 it('keeps setup reachable on calendar errors and does not confuse errors with empty data', async () => {

@@ -225,6 +225,9 @@ type Server struct {
 	ollamaTester       OllamaTester                    // optional; set via WithOllamaTester
 	mu                 sync.RWMutex
 	configUpdateOnce   sync.Once // guards the one-shot "execState nil" startup warning
+
+	startupSettings     map[string]string
+	calendarDiagnostics func() any
 }
 
 // ExecutionReleaser is the minimal dispatcher surface the feedback handler
@@ -525,6 +528,7 @@ func (s *Server) Handler() http.Handler {
 		// Authentication is enforced by the outer middleware; no configuration is changed.
 		mux.HandleFunc("POST /api/auth/check", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 		mux.HandleFunc("GET /api/settings/config", s.getEnvConfig)
+		mux.HandleFunc("GET /api/settings/status", s.getSettingsStatus)
 		mux.HandleFunc("PUT /api/settings/config", s.updateEnvConfig)
 		// backward-compat: old /api/env/config route
 		mux.HandleFunc("GET /api/env/config", s.getEnvConfig)
@@ -553,6 +557,7 @@ func (s *Server) Handler() http.Handler {
 	}
 
 	// Economic calendar
+	mux.HandleFunc("GET /api/calendar/status", s.getCalendarStatus)
 	if s.calendarStore != nil {
 		mux.HandleFunc("GET /api/calendar", s.getCalendarEvents)
 	}

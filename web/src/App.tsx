@@ -12,6 +12,7 @@ import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparati
 import { useUXCopy, readableRule, signalRange } from './uxCopy'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import { setSessionToken } from './apiAuth'
+import { CalendarCollectionStatus, SettingsRuntimeStatus, SettingsSavedNotice } from './RuntimeStatus'
 
 // Lazy-loaded tab panels: split out of the initial bundle since they only
 // render when their tab/section is opened. AnalysisTab in particular pulls in
@@ -3576,6 +3577,7 @@ const ENV_GROUPS: EnvGroup[] = [
 ]
 
 export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', channelsOnly = false, fieldKeys }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void; initialSection?: SettingsSection; channelsOnly?: boolean; fieldKeys?: string[] }) {
+  const [statusRevision, setStatusRevision] = useState(0)
   const { t } = useTranslation()
   const ux = useUXCopy()
   const setup = useSetupCopy()
@@ -3648,6 +3650,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
       })
       if (!res.ok) throw new Error(await res.text())
       setSaved(true)
+      setStatusRevision(v => v + 1)
       loadEnv()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -3746,9 +3749,10 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
           </p>
           {saved && (
             <div className="save-success" style={{ marginBottom: '1rem' }}>
-              {ux.saved}
+              <SettingsSavedNotice />
             </div>
           )}
+          <SettingsRuntimeStatus fields={groupsForSection.flatMap(group => group.fields.map(field => ({ key: field.key, label: fieldLabel(field) })))} edits={edits} revision={statusRevision} />
           {groupsForSection.map(group => (
             <div key={group.label} style={{ marginBottom: '2rem' }}>
               <h3 style={{
@@ -4156,6 +4160,7 @@ export function CalendarTab({ uiMode = 'beginner', onSetUiMode = () => {} }: { u
     <>
       <p className="section-title">{t('calendar')}</p>
       <ContextSettings kind="calendar" uiMode={uiMode} onSetUiMode={onSetUiMode} />
+      <CalendarCollectionStatus />
       <p>{copy.help}</p>
       <button disabled={loading} onClick={() => { setLoading(true); fetchEvents() }}>{fetchError ? t('calendar_retry') : ux.refresh}</button>
       {loading && <p role="status">{t('loading')}</p>}

@@ -17,6 +17,12 @@ Format:
 ## [Unreleased]
 
 ### Changed
+- Web-managed settings now show per-field startup comparisons, pending restarts,
+  and separately managed process states without exposing credentials. Calendar
+  diagnostics distinguish disabled, waiting, collecting, successful-empty and
+  failed collection, with last attempt/success and safe failure categories.
+- Calendar cache-write failures now fail collection and enter the existing retry
+  cycle instead of being reported as successful fetches.
 - Calendar now offers an inline provider-key/advance-alert form in empty, error
   and populated states, plus refresh. Empty results no longer assert a missing
   paid key. Analysis also exposes inline AI settings using the shared YAML form.

@@ -70,7 +70,7 @@ func (c *YahooCollector) Start(ctx context.Context) {
 			// outside market hours — poll daily/weekly only
 			if !isMarketOpen() {
 				log.Debug().Msg("[Yahoo] outside market hours — polling daily/weekly only")
-				c.fetchForTimeframes([]string{"1D", "1W"})
+				c.fetchForTimeframes(c.offHoursTimeframes())
 				continue
 			}
 			c.fetchAll()
@@ -80,6 +80,17 @@ func (c *YahooCollector) Start(ctx context.Context) {
 
 func (c *YahooCollector) fetchAll() {
 	c.fetchForTimeframes(c.timeframes)
+}
+
+// Preserve the configured scope: a daily-only index must not fetch weekly bars.
+func (c *YahooCollector) offHoursTimeframes() []string {
+	var timeframes []string
+	for _, tf := range c.timeframes {
+		if tf == "1D" || tf == "1W" {
+			timeframes = append(timeframes, tf)
+		}
+	}
+	return timeframes
 }
 
 func (c *YahooCollector) fetchForTimeframes(timeframes []string) {

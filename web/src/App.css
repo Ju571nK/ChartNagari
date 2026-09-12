@@ -67,7 +67,10 @@ table { font-variant-numeric: tabular-nums; }
 .workspace-brand { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
 .workspace-brand > span { color: var(--mint); }
 .workspace-brand small { display: block; font-size: 0.7rem; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; margin-top: 5px; }
-.workspace-tools { display: flex; align-items: center; gap: 20px; }
+.workspace-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+/* Reserve space for the 2px focus outline plus its 3px offset. */
+.language-control { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
+.language-control > select { flex-shrink: 0; }
 .connection-state { font-size: 0.75rem; color: var(--muted); }
 .connection-state.connected { color: var(--mint); }
 .connection-state > span { margin-right: 6px; }

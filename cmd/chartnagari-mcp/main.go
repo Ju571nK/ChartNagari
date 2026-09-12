@@ -2,10 +2,7 @@
 // from stdin (one per line), forwards them via HTTP POST to a running
 // ChartNagari server's /api/mcp endpoint, and writes responses to stdout.
 //
-// Configured via environment:
-//
-//	CHARTNAGARI_URL    (default http://localhost:8080)
-//	CHARTNAGARI_TOKEN  (required if server's API_TOKEN is set)
+// Configured via --settings /absolute/path/to/config/settings.yaml.
 package main
 
 import (
@@ -13,7 +10,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"io"
 	"net/http"
 	"os"
@@ -33,9 +32,17 @@ type bridgeConfig struct {
 }
 
 func main() {
+	settingsPath := flag.String("settings", "config/settings.yaml", "path to web-managed settings YAML")
+	flag.Parse()
+	settings, err := appconfig.MigrateSettings(".env", *settingsPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot load settings YAML")
+		os.Exit(1)
+	}
+	values := settings.ToMap()
 	cfg := bridgeConfig{
-		url:     envOr("CHARTNAGARI_URL", defaultURL),
-		token:   os.Getenv("CHARTNAGARI_TOKEN"),
+		url:     values["CHARTNAGARI_URL"],
+		token:   values["CHARTNAGARI_TOKEN"],
 		timeout: defaultTimeout,
 	}
 	cfg.url = strings.TrimRight(cfg.url, "/") + "/api/mcp"
@@ -44,13 +51,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "chartnagari-mcp: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 func runBridge(cfg bridgeConfig, in io.Reader, out, stderr io.Writer) error {

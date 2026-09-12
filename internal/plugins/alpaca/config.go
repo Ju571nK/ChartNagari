@@ -8,8 +8,8 @@
 //   - Enforce paper-only hard guard: refuse to start if ALPACA_API_URL is not
 //     the Alpaca paper endpoint.
 //   - Map TradeSignal.Direction → Alpaca order side:
-//       LONG  → buy (market)
-//       SHORT → sell (market; closes existing long position only in Phase 3)
+//     LONG  → buy (market)
+//     SHORT → sell (market; closes existing long position only in Phase 3)
 //   - Idempotency on signal_id stored in a tiny SQLite file so restarts do not
 //     re-submit an order for a signal that was already processed.
 //   - POST OrderFeedback back to ChartNagari, HMAC-signed with the same shared
@@ -19,6 +19,8 @@ package alpaca
 import (
 	"errors"
 	"fmt"
+	appconfig "github.com/Ju571nK/Chatter/internal/config"
+	"math"
 	"net/url"
 	"os"
 	"strconv"
@@ -26,10 +28,8 @@ import (
 	"time"
 )
 
-// Config is the runtime configuration resolved from environment variables. The
-// adapter is a single-binary sidecar, so env vars are the simplest deployment
-// surface — no YAML parser, no file discovery, no hot reload. Every field has
-// a sensible default except the four authentication/URL primitives.
+// Config is the runtime configuration resolved from web-managed YAML.
+// The independent adapter requires a restart after configuration changes.
 type Config struct {
 	// Alpaca endpoint. Paper-only. Anything that is not the Alpaca paper host
 	// is rejected at startup (hard guard).
@@ -73,17 +73,52 @@ var paperHosts = map[string]struct{}{
 
 // LoadConfigFromEnv resolves a Config from the process environment.
 func LoadConfigFromEnv() (Config, error) {
+	return loadConfig(os.Getenv)
+}
+
+// LoadConfig reads the same web-managed YAML as the server. Saving settings
+// never starts the adapter; it must be restarted separately to apply changes.
+func LoadConfig(path string) (Config, error) {
+	s, err := appconfig.MigrateSettings(".env", path)
+	if err != nil {
+		return Config{}, err
+	}
+	m := s.ToMap()
+	return loadConfig(func(key string) string { return m[key] })
+}
+
+func loadConfig(get func(string) string) (Config, error) {
+	floatValue := func(key string, fallback float64) float64 {
+		if get(key) == "" {
+			return fallback
+		}
+		v, err := strconv.ParseFloat(get(key), 64)
+		if err != nil {
+			return 0
+		}
+		return v
+	}
+	intValue := func(key string, fallback int) int {
+		if get(key) == "" {
+			return fallback
+		}
+		v, err := strconv.Atoi(get(key))
+		if err != nil {
+			return 0
+		}
+		return v
+	}
 	cfg := Config{
-		AlpacaAPIURL:     strings.TrimSpace(os.Getenv("ALPACA_API_URL")),
-		AlpacaAPIKey:     os.Getenv("ALPACA_API_KEY"),
-		AlpacaAPISecret:  os.Getenv("ALPACA_API_SECRET"),
-		FeedbackURL:      strings.TrimSpace(os.Getenv("CHARTNAGARI_FEEDBACK_URL")),
-		PluginSecret:     os.Getenv("CHARTNAGARI_PLUGIN_SECRET"),
-		PluginID:         strings.TrimSpace(os.Getenv("CHARTNAGARI_PLUGIN_ID")),
-		ListenAddr:       strings.TrimSpace(os.Getenv("LISTEN_ADDR")),
-		DBPath:           strings.TrimSpace(os.Getenv("ALPACA_DB_PATH")),
-		NotionalPerTrade: parseFloatEnv("ALPACA_NOTIONAL_PER_TRADE", 1000.0),
-		TimestampSkewSec: parseIntEnv("ALPACA_TIMESTAMP_SKEW_SEC", 300),
+		AlpacaAPIURL:     strings.TrimSpace(get("ALPACA_API_URL")),
+		AlpacaAPIKey:     get("ALPACA_API_KEY"),
+		AlpacaAPISecret:  get("ALPACA_API_SECRET"),
+		FeedbackURL:      strings.TrimSpace(get("CHARTNAGARI_FEEDBACK_URL")),
+		PluginSecret:     get("CHARTNAGARI_PLUGIN_SECRET"),
+		PluginID:         strings.TrimSpace(get("CHARTNAGARI_PLUGIN_ID")),
+		ListenAddr:       strings.TrimSpace(get("LISTEN_ADDR")),
+		DBPath:           strings.TrimSpace(get("ALPACA_DB_PATH")),
+		NotionalPerTrade: floatValue("ALPACA_NOTIONAL_PER_TRADE", 1000.0),
+		TimestampSkewSec: intValue("ALPACA_TIMESTAMP_SKEW_SEC", 300),
 	}
 	if cfg.AlpacaAPIURL == "" {
 		cfg.AlpacaAPIURL = "https://paper-api.alpaca.markets"
@@ -117,8 +152,11 @@ func (c Config) Validate() error {
 	if c.PluginSecret == "" {
 		return errors.New("CHARTNAGARI_PLUGIN_SECRET is required")
 	}
-	if c.NotionalPerTrade <= 0 {
+	if c.NotionalPerTrade <= 0 || math.IsNaN(c.NotionalPerTrade) || math.IsInf(c.NotionalPerTrade, 0) {
 		return errors.New("ALPACA_NOTIONAL_PER_TRADE must be > 0")
+	}
+	if c.TimestampSkewSec < 0 {
+		return errors.New("ALPACA_TIMESTAMP_SKEW_SEC must be nonnegative")
 	}
 	// Paper-only hard guard — this is the single most important refusal.
 	// Parse the URL; reject any host not in paperHosts (explicit allow-list).

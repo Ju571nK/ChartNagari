@@ -761,6 +761,10 @@ input:checked + .slider::before {
   border-color: rgba(91, 146, 121, 0.5);
 }
 
+.settings-config-row { flex-wrap: wrap; gap: 12px; }
+.settings-config-row label { flex: 1; }
+.settings-config-row .report-input { width: min(100%, 360px); min-width: 0; box-sizing: border-box; }
+
 .report-input:focus {
   outline: none;
   border-color: var(--green);

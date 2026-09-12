@@ -24,11 +24,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -36,13 +36,13 @@ import (
 )
 
 func main() {
-	// Best-effort .env load — silent if absent.
-	_ = godotenv.Load()
+	settingsPath := flag.String("settings", "config/settings.yaml", "path to web-managed YAML")
+	flag.Parse()
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "2006-01-02T15:04:05Z07:00"}).
 		With().Str("component", "plugin-alpaca").Logger()
 
-	cfg, err := alpaca.LoadConfigFromEnv()
+	cfg, err := alpaca.LoadConfig(*settingsPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("plugin-alpaca: invalid config")
 	}

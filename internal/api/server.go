@@ -521,6 +521,8 @@ func (s *Server) Handler() http.Handler {
 
 	// settings.yaml config (only when settingsFile is set)
 	if s.settingsFile != "" {
+		// Authentication is enforced by the outer middleware; no configuration is changed.
+		mux.HandleFunc("POST /api/auth/check", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 		mux.HandleFunc("GET /api/settings/config", s.getEnvConfig)
 		mux.HandleFunc("PUT /api/settings/config", s.updateEnvConfig)
 		// backward-compat: old /api/env/config route
@@ -2051,24 +2053,31 @@ const envSentinel = "__configured__"
 
 // envSensitiveKeys lists setting keys whose values are masked in GET responses.
 var envSensitiveKeys = map[string]bool{
-	"TELEGRAM_BOT_TOKEN":   true,
-	"DISCORD_WEBHOOK_URL":  true,
-	"TIINGO_API_KEY":       true,
-	"BINANCE_API_KEY":      true,
-	"BINANCE_SECRET_KEY":   true,
-	"ALPHAVANTAGE_API_KEY": true,
-	"FINNHUB_API_KEY":      true,
-	"FMP_API_KEY":          true,
-	"ANTHROPIC_API_KEY":    true,
-	"OPENAI_API_KEY":       true,
-	"GROQ_API_KEY":         true,
-	"GEMINI_API_KEY":       true,
-	"API_TOKEN":            true,
+	"CHARTNAGARI_TOKEN":         true,
+	"ALPACA_API_KEY":            true,
+	"ALPACA_API_SECRET":         true,
+	"CHARTNAGARI_PLUGIN_SECRET": true,
+	"TELEGRAM_BOT_TOKEN":        true,
+	"DISCORD_WEBHOOK_URL":       true,
+	"TIINGO_API_KEY":            true,
+	"BINANCE_API_KEY":           true,
+	"BINANCE_SECRET_KEY":        true,
+	"ALPHAVANTAGE_API_KEY":      true,
+	"FINNHUB_API_KEY":           true,
+	"FMP_API_KEY":               true,
+	"ANTHROPIC_API_KEY":         true,
+	"OPENAI_API_KEY":            true,
+	"GROQ_API_KEY":              true,
+	"GEMINI_API_KEY":            true,
+	"API_TOKEN":                 true,
 }
 
 // envExposedKeys is the ordered list of setting keys exposed via the API.
 var envExposedKeys = []string{
-	"ENV", "SERVER_HOST", "SERVER_PORT", "LOG_LEVEL", "ALERT_COOLDOWN_HOURS", "API_TOKEN",
+	"DB_PATH", "OLLAMA_HOST", "OLLAMA_MODEL", "OLLAMA_TIMEOUT_SEC",
+	"CHARTNAGARI_URL", "CHARTNAGARI_TOKEN", "ALPACA_API_URL", "ALPACA_API_KEY", "ALPACA_API_SECRET",
+	"CHARTNAGARI_FEEDBACK_URL", "CHARTNAGARI_PLUGIN_SECRET", "CHARTNAGARI_PLUGIN_ID", "LISTEN_ADDR", "ALPACA_DB_PATH", "ALPACA_NOTIONAL_PER_TRADE", "ALPACA_TIMESTAMP_SKEW_SEC",
+	"ENV", "SERVER_HOST", "SERVER_PORT", "LOG_LEVEL", "API_TOKEN",
 	"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL",
 	"TIINGO_API_KEY", "TIINGO_POLL_INTERVAL",
 	"YAHOO_POLL_INTERVAL",
@@ -2083,7 +2092,11 @@ var envExposedKeys = []string{
 // getEnvConfig handles GET /api/settings/config.
 // Returns all exposed setting keys; sensitive keys that are set are replaced with envSentinel.
 func (s *Server) getEnvConfig(w http.ResponseWriter, _ *http.Request) {
-	settings := s.readSettingsFile()
+	settings, err := appconfig.LoadSettings(s.settingsFile)
+	if err != nil {
+		http.Error(w, "cannot read settings.yaml", http.StatusInternalServerError)
+		return
+	}
 	flat := settings.ToMap()
 	out := make(map[string]string, len(envExposedKeys))
 	for _, k := range envExposedKeys {
@@ -2100,6 +2113,14 @@ func (s *Server) getEnvConfig(w http.ResponseWriter, _ *http.Request) {
 // Reads the current settings.yaml, applies non-sentinel updates, and writes the file back.
 // Fields set to envSentinel are left unchanged (client means "keep existing").
 func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || !((u.Scheme == "http" || u.Scheme == "https") && u.Host == r.Host) && !s.allowedOrigins[origin] {
+			http.Error(w, "untrusted origin", http.StatusForbidden)
+			return
+		}
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
 	var updates map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -2114,16 +2135,29 @@ func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	settings := s.readSettingsFile()
+	settings, err := appconfig.LoadSettings(s.settingsFile)
+	if err != nil {
+		http.Error(w, "cannot read settings.yaml", http.StatusInternalServerError)
+		return
+	}
 
 	filtered := make(map[string]string)
 	for k, v := range updates {
-		if !allowed[k] || v == envSentinel {
+		if !allowed[k] {
+			http.Error(w, "unknown setting", http.StatusBadRequest)
+			return
+		}
+		if v == envSentinel {
 			continue
 		}
 		filtered[k] = v
 	}
+	if err := appconfig.ValidateSettingsUpdates(filtered); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	settings.ApplyMap(filtered)
+	settings.Version = 1
 
 	if err := appconfig.SaveSettings(s.settingsFile, settings); err != nil {
 		http.Error(w, "failed to write settings.yaml: "+err.Error(), http.StatusInternalServerError)

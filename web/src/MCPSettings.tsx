@@ -35,15 +35,12 @@ function claudeDesktopSnippet(url: string, token: string): string {
   )
 }
 
-function codexSnippet(baseURL: string, token: string): string {
-  const base = baseURL.replace(/\/api\/mcp$/, '')
-  return `[[mcp_servers]]
-name = "chartnagari"
+function codexSnippet(): string {
+  return `# Set the bridge URL/token in ChartNagari Settings > MCP.
+# Replace the path below with the absolute path on this computer.
+[mcp_servers.chartnagari]
 command = "chartnagari-mcp"
-
-[mcp_servers.env]
-CHARTNAGARI_URL = "${base}"
-CHARTNAGARI_TOKEN = "${token}"`
+args = ["--settings", "/absolute/path/to/Chartter/config/settings.yaml"]`
 }
 
 export default function MCPSettings({ apiToken, endpointURL, toolNames }: Props) {
@@ -55,7 +52,7 @@ export default function MCPSettings({ apiToken, endpointURL, toolNames }: Props)
   const snippet =
     tab === 'claude-code' ? claudeCodeSnippet(endpointURL, apiToken)
     : tab === 'claude-desktop' ? claudeDesktopSnippet(endpointURL, apiToken)
-    : codexSnippet(endpointURL, apiToken)
+    : codexSnippet()
 
   const handleCopy = async () => {
     if (navigator.clipboard?.writeText) {

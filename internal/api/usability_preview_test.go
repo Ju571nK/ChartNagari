@@ -19,6 +19,7 @@ func TestUsabilityPreview(t *testing.T) {
 		t.Skip("manual browser fixture")
 	}
 	s, db := preparationServer(t)
+	s.WithSettingsFile(filepath.Join(s.configDir, "settings.yaml"))
 	s.WithPriceAlertStore(db)
 	s.WithAlertConfigHolder(appconfig.NewAlertConfigHolder(appconfig.AlertConfig{ScoreThreshold: 12, CooldownHours: 4, MTFConsensusMin: 2, CryptoTPMult: 2, CryptoSLMult: 1, StockTPMult: 2, StockSLMult: 1}))
 	execPath := filepath.Join(s.configDir, "execution.yaml")
@@ -40,5 +41,6 @@ func TestUsabilityPreview(t *testing.T) {
 	}))
 	defer preview.Close()
 	fmt.Println("ISOLATED_USABILITY_PREVIEW", preview.URL)
-	<-time.After(10 * time.Minute)
+	// Leave headroom below go test's default 10-minute timeout for cleanup.
+	<-time.After(9 * time.Minute)
 }

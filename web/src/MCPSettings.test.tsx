@@ -68,7 +68,8 @@ describe('MCPSettings', () => {
   it('shows Codex TOML when Codex tab selected', () => {
     render(<MCPSettings apiToken="tok" endpointURL="http://localhost:8080/api/mcp" toolNames={[]} />)
     fireEvent.click(screen.getByRole('button', { name: /codex cli/i }))
-    expect(screen.getByText(/\[\[mcp_servers\]\]/i)).toBeInTheDocument()
-    expect(screen.getByText(/CHARTNAGARI_URL/i)).toBeInTheDocument()
+    expect(screen.getByText(/\[mcp_servers.chartnagari\]/i)).toBeInTheDocument()
+    expect(screen.getByText(/--settings/i)).toBeInTheDocument()
+    expect(screen.queryByText(/CHARTNAGARI_TOKEN/i)).not.toBeInTheDocument()
   })
 })

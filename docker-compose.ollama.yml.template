@@ -19,8 +19,7 @@ services:
       retries: 3
 
   server:
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
+    # Set ollama.host to http://ollama:11434 in web Settings/YAML and restart server.
     depends_on:
       ollama:
         condition: service_healthy

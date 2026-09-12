@@ -1,5 +1,7 @@
 # ChartNagari
 
+> Configuration update: use the web settings UI and YAML. See [setup and migration](SETTINGS.md) before following older `.env` examples below.
+
 **🌐 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md)**
 
 [![CI](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml)

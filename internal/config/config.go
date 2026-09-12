@@ -1,4 +1,4 @@
-// Package config loads environment variables and YAML configuration files.
+// Package config loads web-managed YAML configuration files.
 package config
 
 import (
@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -185,7 +184,9 @@ type SymbolEntry struct {
 // SettingsYAML is the structure of config/settings.yaml.
 // It stores all secrets and runtime settings that were previously in .env.
 type SettingsYAML struct {
-	Server struct {
+	Version int               `yaml:"version"`
+	Clients map[string]string `yaml:"clients,omitempty"`
+	Server  struct {
 		Env      string `yaml:"env"`
 		Host     string `yaml:"host"`
 		Port     string `yaml:"port"`
@@ -264,7 +265,8 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		}
 		return strconv.FormatFloat(f, 'f', -1, 64)
 	}
-	return map[string]string{
+	m := map[string]string{
+		"DB_PATH":               s.Database.Path,
 		"ENV":                   s.Server.Env,
 		"SERVER_HOST":           s.Server.Host,
 		"SERVER_PORT":           s.Server.Port,
@@ -294,10 +296,25 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		"CALENDAR_ALERT_WINDOW": itoa(s.Finnhub.AlertWindowMinutes),
 		"FMP_API_KEY":           s.Fmp.APIKey,
 	}
+	for key, fallback := range ClientDefaults {
+		m[key] = fallback
+		if value, ok := s.Clients[key]; ok {
+			m[key] = value
+		}
+	}
+	return m
 }
 
 // ApplyMap applies a flat env-key map onto the SettingsYAML struct.
 func (s *SettingsYAML) ApplyMap(m map[string]string) {
+	if s.Clients == nil {
+		s.Clients = make(map[string]string)
+	}
+	for key := range ClientDefaults {
+		if value, ok := m[key]; ok {
+			s.Clients[key] = value
+		}
+	}
 	set := func(dst *string, key string) {
 		if v, ok := m[key]; ok {
 			*dst = v
@@ -305,6 +322,10 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	}
 	setInt := func(dst *int, key string) {
 		if v, ok := m[key]; ok {
+			if v == "" {
+				*dst = 0
+				return
+			}
 			if i, err := strconv.Atoi(v); err == nil {
 				*dst = i
 			}
@@ -312,6 +333,10 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	}
 	setFloat := func(dst *float64, key string) {
 		if v, ok := m[key]; ok {
+			if v == "" {
+				*dst = 0
+				return
+			}
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				*dst = f
 			}
@@ -319,6 +344,7 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	}
 
 	set(&s.Server.Env, "ENV")
+	set(&s.Database.Path, "DB_PATH")
 	set(&s.Server.Host, "SERVER_HOST")
 	set(&s.Server.Port, "SERVER_PORT")
 	set(&s.Server.LogLevel, "LOG_LEVEL")
@@ -348,9 +374,16 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.Fmp.APIKey, "FMP_API_KEY")
 }
 
-// LoadSettings reads settings.yaml. Returns an empty struct (no error) if the file is absent or empty.
+// LoadSettings reads settings.yaml over application defaults.
 func LoadSettings(path string) (*SettingsYAML, error) {
 	var s SettingsYAML
+	s.ApplyMap(map[string]string{
+		"ENV": "development", "SERVER_HOST": "127.0.0.1", "SERVER_PORT": "8080", "LOG_LEVEL": "debug",
+		"DB_PATH": "./data/chart_analyzer.db", "TIINGO_POLL_INTERVAL": "900", "YAHOO_POLL_INTERVAL": "60",
+		"ALERT_COOLDOWN_HOURS": "4", "AI_MIN_SCORE": "12", "LLM_LANGUAGE": "en",
+		"OLLAMA_HOST": "http://localhost:11434", "OLLAMA_MODEL": "gemma4:4b", "OLLAMA_TIMEOUT_SEC": "120",
+		"CALENDAR_ALERT_WINDOW": "30",
+	})
 	if err := loadYAML(path, &s); err != nil {
 		if os.IsNotExist(err) || errors.Is(err, io.EOF) {
 			return &s, nil
@@ -365,27 +398,34 @@ func SaveSettings(path string, s *SettingsYAML) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(path)
+	f, err := os.CreateTemp(filepath.Dir(path), ".settings-*.yaml")
 	if err != nil {
 		return err
 	}
+	defer os.Remove(f.Name())
 	defer f.Close()
 	enc := yaml.NewEncoder(f)
 	enc.SetIndent(2)
-	return enc.Encode(s)
+	if err := enc.Encode(s); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
-// Load reads settings.yaml (primary), falls back to .env (legacy), then OS env vars.
+// Load migrates legacy environment once, then reads YAML only.
 // configDir is typically "config/" relative to the binary location.
 func Load(envFile, configDir string) (*Config, error) {
 	// Primary: load config/settings.yaml
-	s, err := LoadSettings(configDir + "/settings.yaml")
+	s, err := MigrateSettings(envFile, configDir+"/settings.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load settings.yaml: %w", err)
 	}
-
-	// Legacy fallback: load .env (sets env vars only if not already set by OS)
-	_ = godotenv.Load(envFile)
 
 	ollamaTimeout := getEnvOrDuration("OLLAMA_TIMEOUT_SEC", s.Ollama.TimeoutSec, 120, time.Second)
 	if ollamaTimeout <= 0 {
@@ -541,11 +581,8 @@ func loadYAML(path string, v interface{}) error {
 	return yaml.NewDecoder(f).Decode(v)
 }
 
-// getEnvOr returns: OS env var > yamlVal > fallback.
+// Legacy helper names retained internally; resolution is YAML > fallback only.
 func getEnvOr(key, yamlVal, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
 	if yamlVal != "" {
 		return yamlVal
 	}
@@ -553,11 +590,6 @@ func getEnvOr(key, yamlVal, fallback string) string {
 }
 
 func getEnvOrInt(key string, yamlVal, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
-	}
 	if yamlVal != 0 {
 		return yamlVal
 	}
@@ -565,11 +597,6 @@ func getEnvOrInt(key string, yamlVal, fallback int) int {
 }
 
 func getEnvOrFloat(key string, yamlVal, fallback float64) float64 {
-	if v := os.Getenv(key); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f
-		}
-	}
 	if yamlVal != 0 {
 		return yamlVal
 	}
@@ -577,11 +604,6 @@ func getEnvOrFloat(key string, yamlVal, fallback float64) float64 {
 }
 
 func getEnvOrDuration(key string, yamlValSecs, fallbackSecs int, unit time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return time.Duration(i) * unit
-		}
-	}
 	if yamlValSecs != 0 {
 		return time.Duration(yamlValSecs) * unit
 	}

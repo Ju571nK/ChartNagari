@@ -15,14 +15,9 @@ services:
       - ./config:/app/config
       # 프론트엔드 (restart.sh에서 npm run build 후 마운트)
       - ./web/dist:/app/web/dist:ro
-    env_file:
-      - .env
-    environment:
-      - ENV=${ENV:-development}
-      - DB_PATH=/app/data/chart_analyzer.db
-      # 컨테이너 내부에서는 0.0.0.0으로 바인딩해야 Docker 포트 매핑이 도달 가능.
-      # 호스트 외부 노출은 ports: "8080:8080"이 127.0.0.1로만 제한하므로 안전.
-      - SERVER_HOST=0.0.0.0
+    # config/settings.yaml: server.host=0.0.0.0, server.port="8080"
+    # database.path=./data/chart_analyzer.db (container cwd=/app)
+    # Existing .env users: migrate on the host before starting this container.
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s

@@ -6,7 +6,7 @@ cd "$ROOT"
 
 # ── Usage ─────────────────────────────────────────────────────────────
 # ./restart.sh          → 풀 리빌드 (프론트엔드 + Go + Docker)
-# ./restart.sh quick    → .env 변경만 반영 (컨테이너 재시작, 빌드 없음)
+# ./restart.sh quick    → YAML 변경만 반영 (컨테이너 재시작, 빌드 없음)
 # ./restart.sh frontend → 프론트엔드만 빌드 (Go 재빌드 없음)
 # ./restart.sh backend  → Go만 재빌드 (프론트엔드 빌드 스킵)
 
@@ -14,9 +14,9 @@ MODE="${1:-full}"
 
 case "$MODE" in
   quick|env)
-    echo "▶ .env 변경 반영 (컨테이너 재시작만)..."
+    echo "▶ YAML 변경 반영 (컨테이너 재시작만)..."
     docker compose restart
-    echo "✓ 완료 — .env 변경이 반영되었습니다."
+    echo "✓ 완료 — YAML 변경이 반영되었습니다."
     ;;
 
   frontend|fe)
@@ -52,7 +52,7 @@ case "$MODE" in
   *)
     echo "사용법: ./restart.sh [quick|frontend|backend|full]"
     echo ""
-    echo "  quick     .env 변경만 반영 (재시작, 빌드 없음) — 2초"
+    echo "  quick     YAML 변경만 반영 (재시작, 빌드 없음) — 2초"
     echo "  frontend  프론트엔드만 빌드 — 5초"
     echo "  backend   Go만 재빌드 — 30초"
     echo "  full      전체 재빌드 (기본값) — 60초"

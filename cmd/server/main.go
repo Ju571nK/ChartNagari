@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -45,6 +46,15 @@ import (
 )
 
 func main() {
+	migrateOnly := flag.Bool("migrate-settings-only", false, "migrate legacy environment to YAML without starting services")
+	flag.Parse()
+	if *migrateOnly {
+		if _, err := appconfig.MigrateSettings(".env", "config/settings.yaml"); err != nil {
+			log.Fatal().Err(err).Msg("settings migration failed")
+		}
+		fmt.Println("Settings migration complete; no services started.")
+		return
+	}
 	// ── Load config ────────────────────────────────────────────────────
 	cfg, err := appconfig.Load(".env", "config")
 	if err != nil {

@@ -10,6 +10,7 @@ import { chartPatterns } from './chartPatterns'
 import { ChartGuide, ExperienceMode, loadUIMode, UI_MODE_KEY, type UIMode } from './ExperienceMode'
 import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparation'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
+import { setSessionToken } from './apiAuth'
 
 // Lazy-loaded tab panels: split out of the initial bundle since they only
 // render when their tab/section is opened. AnalysisTab in particular pulls in
@@ -3456,15 +3457,10 @@ const ENV_GROUPS: EnvGroup[] = [
     fields: [
       { key: 'ENV',           label: 'Environment', type: 'select', options: ['development', 'production'] },
       { key: 'SERVER_PORT',   label: 'Server Port', type: 'text' },
+      { key: 'SERVER_HOST', label: 'Server bind address (restart required)', type: 'text' },
+      { key: 'DB_PATH', label: 'Database path (restart required)', type: 'text' },
       { key: 'LOG_LEVEL',     label: 'Log Level',   type: 'select', options: ['debug', 'info', 'warn', 'error'] },
       { key: 'API_TOKEN',     label: 'API Token (MCP 인증용)', type: 'password' },
-    ],
-  },
-  {
-    tab: 'alerts',
-    label: 'Alert Timing',
-    fields: [
-      { key: 'ALERT_COOLDOWN_HOURS', label: 'Alert Cooldown (hours)', type: 'text' },
     ],
   },
   {
@@ -3498,6 +3494,26 @@ const ENV_GROUPS: EnvGroup[] = [
     ],
   },
   {
+    tab: 'mcp', label: 'MCP bridge — restart the bridge after saving', fields: [
+      { key: 'CHARTNAGARI_URL', label: 'ChartNagari server URL', type: 'text' },
+      { key: 'CHARTNAGARI_TOKEN', label: 'Bridge API token', type: 'password' },
+    ],
+  },
+  {
+    tab: 'advanced', label: 'Alpaca paper adapter — restart separately; saving does not enable orders', fields: [
+      { key: 'ALPACA_API_URL', label: 'Alpaca paper API URL', type: 'text' },
+      { key: 'ALPACA_API_KEY', label: 'Alpaca API key', type: 'password' },
+      { key: 'ALPACA_API_SECRET', label: 'Alpaca API secret', type: 'password' },
+      { key: 'CHARTNAGARI_FEEDBACK_URL', label: 'Execution feedback URL', type: 'text' },
+      { key: 'CHARTNAGARI_PLUGIN_SECRET', label: 'Plugin HMAC secret', type: 'password' },
+      { key: 'CHARTNAGARI_PLUGIN_ID', label: 'Plugin ID', type: 'text' },
+      { key: 'LISTEN_ADDR', label: 'Adapter listen address', type: 'text' },
+      { key: 'ALPACA_DB_PATH', label: 'Adapter database path', type: 'text' },
+      { key: 'ALPACA_NOTIONAL_PER_TRADE', label: 'Paper notional per trade (USD)', type: 'text' },
+      { key: 'ALPACA_TIMESTAMP_SKEW_SEC', label: 'Signature clock tolerance (seconds)', type: 'text' },
+    ],
+  },
+  {
     tab: 'ai',
     label: 'AI / LLM',
     fields: [
@@ -3508,11 +3524,14 @@ const ENV_GROUPS: EnvGroup[] = [
       { key: 'GEMINI_API_KEY',    label: 'Gemini API Key',    type: 'password' },
       { key: 'AI_MIN_SCORE',      label: 'AI Min Score',      type: 'text' },
       { key: 'LLM_LANGUAGE',      label: 'LLM Language',      type: 'select', options: ['en', 'ko', 'ja'] },
+      { key: 'OLLAMA_HOST', label: 'Ollama host (restart required)', type: 'text' },
+      { key: 'OLLAMA_MODEL', label: 'Ollama model (restart required)', type: 'text' },
+      { key: 'OLLAMA_TIMEOUT_SEC', label: 'Ollama timeout (seconds)', type: 'text' },
     ],
   },
 ]
 
-function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void }) {
+export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void }) {
   const { t } = useTranslation()
   const [env, setEnv] = useState<EnvMap>({})
   const [edits, setEdits] = useState<EnvMap>({})
@@ -3521,11 +3540,22 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [section, setSection] = useState<SettingsSection>('general')
+  const [authToken, setAuthToken] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const authorize = async () => {
+    try {
+      const response = await fetch('/api/auth/check', { method: 'POST', headers: { Authorization: `Bearer ${authToken}` } })
+      if (!response.ok) throw new Error('Authentication failed. Enter the currently active API token.')
+      setSessionToken(authToken)
+      setAuthToken('')
+      setAuthMessage('Authorized for this tab. Reloading forgets the token.')
+    } catch (e) { setAuthMessage(e instanceof Error ? e.message : 'Authentication failed') }
+  }
 
   const loadEnv = useCallback(() => {
     setLoading(true)
-    fetch('/api/env/config')
-      .then(r => r.json())
+    fetch('/api/settings/config')
+      .then(r => { if (!r.ok) throw new Error('Failed to load settings'); return r.json() })
       .then((data: EnvMap) => { setEnv(data); setEdits({}) })
       .catch(() => setError('Failed to load settings'))
       .finally(() => setLoading(false))
@@ -3541,7 +3571,7 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
 
   const getPlaceholder = (key: string, type: string) =>
     type === 'password' && env[key] === ENV_SENTINEL
-      ? 'already configured — leave blank to keep'
+      ? 'configured — enter replacement or use Clear'
       : ''
 
   const handleChange = (key: string, value: string) => {
@@ -3558,16 +3588,12 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
         const k = field.key
         if (k in edits) {
           const v = edits[k]
-          payload[k] = (v === '' && field.type === 'password' && env[k] === ENV_SENTINEL)
-            ? ENV_SENTINEL
-            : v
-        } else {
-          payload[k] = env[k] ?? ''
+          payload[k] = v
         }
       }
     }
     try {
-      const res = await fetch('/api/env/config', {
+      const res = await fetch('/api/settings/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -3611,6 +3637,13 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
   return (
     <div className="section">
       {/* 서브탭 네비 */}
+      <div className="report-field settings-config-row">
+        <label htmlFor="settings-current-token">Current API token — required only when server authentication is enabled</label>
+        <input id="settings-current-token" className="report-input" type="password" autoComplete="off" value={authToken} onChange={e => setAuthToken(e.target.value)} />
+        <button type="button" onClick={() => void authorize()}>Authorize changes</button>
+        <button type="button" onClick={() => { setSessionToken(''); setAuthToken(''); setAuthMessage('Token forgotten.') }}>Forget token</button>
+      </div>
+      {authMessage && <p role="status">{authMessage}</p>}
       <div role="tablist" aria-label="Settings sections" style={{
         display: 'flex', gap: 4, marginBottom: '1.5rem', flexWrap: 'wrap',
         borderBottom: '1px solid rgba(91,146,121,0.2)',
@@ -3677,21 +3710,24 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
                 borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
               }}>{group.label}</h3>
               {group.fields.map(field => (
-                <div key={field.key} className="report-field">
-                  <label style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
+                <div key={field.key} className="report-field settings-config-row">
+                  <label htmlFor={`setting-${field.key}`} style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
                     {field.label}
                   </label>
                   {field.type === 'select' ? (
-                    <select className="report-input" value={getValue(field.key)}
+                    <select disabled={saving} id={`setting-${field.key}`} className="report-input" value={getValue(field.key)}
                       onChange={e => handleChange(field.key, e.target.value)}>
                       {(field.options ?? []).map(o => (
                         <option key={o} value={o}>{o || '— auto —'}</option>
                       ))}
                     </select>
                   ) : (
-                    <input className="report-input" type={field.type} value={getValue(field.key)}
+                    <input disabled={saving} id={`setting-${field.key}`} className="report-input" type={field.type} value={getValue(field.key)}
                       placeholder={getPlaceholder(field.key, field.type)}
                       onChange={e => handleChange(field.key, e.target.value)} autoComplete="off" />
+                  )}
+                  {field.type === 'password' && env[field.key] === ENV_SENTINEL && (
+                    <button disabled={saving} type="button" onClick={() => handleChange(field.key, '')}>Clear {field.label}</button>
                   )}
                 </div>
               ))}
@@ -3709,6 +3745,7 @@ function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m:
           <OllamaSettings />
         </div>
       )}
+      {section === 'alerts' && <AlertTab uiMode={uiMode} />}
 
       {/* MCP 탭 */}
       {section === 'mcp' && (

@@ -1,5 +1,7 @@
 # ChartNagari
 
+> 設定変更: Web設定画面とYAMLを使用します。従来の `.env` 例より先に [設定・移行ガイド](SETTINGS.md) を確認してください。
+
 **🌐 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md)**
 
 [![CI](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml)

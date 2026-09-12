@@ -2,10 +2,14 @@
 # 이 파일을 복사하여 config/settings.yaml 로 저장하고 값을 채워주세요.
 # settings.yaml 은 .gitignore 에 등록되어 있으므로 절대 커밋되지 않습니다.
 #
-# 우선순위: OS 환경변수 > settings.yaml > 하드코딩 기본값
+# 신규 설치용. 기존 설치는 복사하지 말고 서버 최초 시작 시 자동 이전을 사용하세요.
+# version: 1 이후에는 .env/OS 환경변수가 이 파일을 덮어쓰지 않습니다.
+version: 1
 
 server:
   env: development          # development | production
+  host: "127.0.0.1"        # Docker에서는 0.0.0.0으로 변경 (호스트 포트는 루프백만 노출)
+  api_token: ""
   port: "8080"
   log_level: debug          # debug | info | warn | error
 
@@ -57,6 +61,27 @@ groq:
 
 gemini:
   api_key: ""
+
+ollama:
+  host: http://localhost:11434
+  model: gemma4:4b
+  timeout_sec: 120
+
+# 별도 실행되는 MCP/Alpaca 프로세스도 동일한 YAML을 읽습니다.
+# 웹에서 저장해도 주문 실행기가 시작되거나 활성화되지는 않습니다.
+clients:
+  CHARTNAGARI_URL: http://localhost:8080
+  CHARTNAGARI_TOKEN: ""
+  ALPACA_API_URL: https://paper-api.alpaca.markets
+  ALPACA_API_KEY: ""
+  ALPACA_API_SECRET: ""
+  CHARTNAGARI_FEEDBACK_URL: ""
+  CHARTNAGARI_PLUGIN_SECRET: ""
+  CHARTNAGARI_PLUGIN_ID: alpaca-paper
+  LISTEN_ADDR: ":9100"
+  ALPACA_DB_PATH: ./plugin-alpaca.db
+  ALPACA_NOTIONAL_PER_TRADE: "1000"
+  ALPACA_TIMESTAMP_SKEW_SEC: "300"
 
 # ── AlphaVantage (선택 — 20년 일봉 SPY 데이터) ──────────────────────────────
 alphavantage:

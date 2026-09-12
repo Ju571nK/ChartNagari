@@ -17,6 +17,9 @@ Format:
 ## [Unreleased]
 
 ### Changed
+- Calendar now offers an inline provider-key/advance-alert form in empty, error
+  and populated states, plus refresh. Empty results no longer assert a missing
+  paid key. Analysis also exposes inline AI settings using the shared YAML form.
 - Reworked desktop/mobile navigation: four everyday destinations in beginner mode,
   with other tools retained under More and full expert navigation preserved.
 - Compact chart data status, disclosure-based guidance, full localized rule names,

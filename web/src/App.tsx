@@ -3575,9 +3575,11 @@ const ENV_GROUPS: EnvGroup[] = [
   },
 ]
 
-export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', channelsOnly = false }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void; initialSection?: SettingsSection; channelsOnly?: boolean }) {
+export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', channelsOnly = false, fieldKeys }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void; initialSection?: SettingsSection; channelsOnly?: boolean; fieldKeys?: string[] }) {
   const { t } = useTranslation()
   const ux = useUXCopy()
+  const setup = useSetupCopy()
+  const fieldLabel = (field: EnvField) => field.key === 'FMP_API_KEY' ? setup.fmp : field.key === 'FINNHUB_API_KEY' ? setup.finnhub : field.key === 'CALENDAR_ALERT_WINDOW' ? setup.window : field.label
   const [env, setEnv] = useState<EnvMap>({})
   const [edits, setEdits] = useState<EnvMap>({})
   const [loading, setLoading] = useState(true)
@@ -3665,7 +3667,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
     { id: 'advanced', label: t('settings.section_advanced') },
   ]
 
-  const groupsForSection = ENV_GROUPS.filter(g => g.tab === section)
+  const groupsForSection = ENV_GROUPS.filter(g => g.tab === section).map(g => ({ ...g, fields: g.fields.filter(f => !fieldKeys || fieldKeys.includes(f.key)) })).filter(g => g.fields.length > 0)
   const showSaveButton = groupsForSection.length > 0
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
@@ -3753,11 +3755,11 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
                 fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
                 color: 'var(--accent)', marginBottom: '0.75rem',
                 borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
-              }}>{group.label}</h3>
+              }}>{group.fields.some(f => f.key === 'FMP_API_KEY') ? setup.calendar : group.label}</h3>
               {group.fields.map(field => (
                 <div key={field.key} className="report-field settings-config-row">
                   <label htmlFor={`setting-${field.key}`} style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
-                    {field.label}
+                    {fieldLabel(field)}
                   </label>
                   {field.type === 'select' ? (
                     <select disabled={saving} id={`setting-${field.key}`} className="report-input" value={getValue(field.key)}
@@ -3772,7 +3774,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
                       onChange={e => handleChange(field.key, e.target.value)} autoComplete="off" />
                   )}
                   {field.type === 'password' && env[field.key] === ENV_SENTINEL && (
-                    <button disabled={saving} type="button" onClick={() => handleChange(field.key, '')}>Clear {field.label}</button>
+                    <button disabled={saving} type="button" onClick={() => handleChange(field.key, '')}>Clear {fieldLabel(field)}</button>
                   )}
                 </div>
               ))}
@@ -4092,55 +4094,55 @@ function calendarDateHeader(dateKey: string, t: (key: string) => string): string
   return label
 }
 
-function CalendarTab() {
+const calendarSettingsKeys = ['FMP_API_KEY', 'FINNHUB_API_KEY', 'CALENDAR_ALERT_WINDOW']
+
+function useSetupCopy() {
+  const { i18n } = useTranslation()
+  const texts = {
+    en: { calendar: 'Configure calendar', ai: 'Configure AI / LLM', empty: 'No events were returned for the selected period. Check provider configuration, account access and collection status below. An empty calendar alone does not prove that a key is missing.', help: 'Configure a provider below. Saving does not fetch data or restart the server. After restarting the server, refresh the calendar to check collection.', fmp: 'FMP API Key', finnhub: 'Finnhub API Key', window: 'Advance alert window (minutes)' },
+    ko: { calendar: '캘린더 설정', ai: 'AI / LLM 설정', empty: '조회 기간에 반환된 일정이 없습니다. 아래에서 제공자 설정·계정 권한·수집 상태를 확인하세요. 일정이 없다는 사실만으로 키가 없다고 판단할 수는 없습니다.', help: '아래에서 제공자를 설정하세요. 저장만으로 수집하거나 서버를 재시작하지 않습니다. 서버 재시작 후 캘린더를 새로고침해 수집 여부를 확인하세요.', fmp: 'FMP API Key', finnhub: 'Finnhub API Key', window: '사전 알림 시간 (분)' },
+    ja: { calendar: 'カレンダー設定', ai: 'AI / LLM設定', empty: '対象期間のイベントが返されませんでした。以下でプロバイダー設定・アカウント権限・収集状況を確認してください。空のカレンダーだけではキーの有無は判断できません。', help: '以下でプロバイダーを設定してください。保存だけでは収集やサーバー再起動は行いません。再起動後にカレンダーを更新して収集を確認してください。', fmp: 'FMP API Key', finnhub: 'Finnhub API Key', window: '事前通知時間（分）' },
+  }
+  return texts[i18n.language.startsWith('ko') ? 'ko' : i18n.language.startsWith('ja') ? 'ja' : 'en']
+}
+
+export function ContextSettings({ kind, uiMode, onSetUiMode }: { kind: 'calendar' | 'ai'; uiMode: UIMode; onSetUiMode: (m: UIMode) => void }) {
+  const copy = useSetupCopy()
+  const [opened, setOpened] = useState(false)
+  return <details className="context-settings" onToggle={e => { if (e.currentTarget.open) setOpened(true) }}>
+    <summary>{copy[kind]}</summary>
+    {opened && <SettingsTab uiMode={uiMode} onSetUiMode={onSetUiMode} initialSection={kind === 'calendar' ? 'data' : 'ai'} channelsOnly fieldKeys={kind === 'calendar' ? calendarSettingsKeys : undefined} />}
+  </details>
+}
+
+export function CalendarTab({ uiMode = 'beginner', onSetUiMode = () => {} }: { uiMode?: UIMode; onSetUiMode?: (m: UIMode) => void }) {
   const { t } = useTranslation()
+  const copy = useSetupCopy()
+  const ux = useUXCopy()
   const [events, setEvents] = useState<EconomicEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
+  const requestRef = useRef<AbortController | null>(null)
 
   const fetchEvents = useCallback(() => {
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
     setFetchError(false)
     const now = new Date()
     const from = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10)
     const to = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10)
-    apiFetch<EconomicEvent[]>(`/calendar?from=${from}&to=${to}`)
-      .then((data) => setEvents(data ?? []))
-      .catch(() => { setEvents([]); setFetchError(true) })
-      .finally(() => setLoading(false))
+    apiFetch<EconomicEvent[]>(`/calendar?from=${from}&to=${to}`, { signal: controller.signal })
+      .then((data) => { if (!Array.isArray(data)) throw new Error('Invalid calendar response'); if (!controller.signal.aborted) setEvents(data) })
+      .catch(() => { if (!controller.signal.aborted) { setEvents([]); setFetchError(true) } })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
   }, [])
 
   useEffect(() => {
     fetchEvents()
     const id = setInterval(fetchEvents, 5 * 60 * 1000)
-    return () => clearInterval(id)
+    return () => { clearInterval(id); requestRef.current?.abort() }
   }, [fetchEvents])
-
-  if (loading) return <p className="loading">{t('loading')}</p>
-
-  if (fetchError) {
-    return (
-      <div className="calendar-error">
-        <p>⚠️ {t('calendar_load_error')}</p>
-        <button className="calendar-retry-btn" onClick={() => { setLoading(true); fetchEvents() }}>
-          {t('calendar_retry')}
-        </button>
-      </div>
-    )
-  }
-
-  if (events.length === 0) {
-    return (
-      <div className="calendar-empty">
-        <p className="calendar-empty-title">{t('calendar_no_data')}</p>
-        <p className="calendar-empty-desc">{t('calendar_api_key_required')}</p>
-        <ul className="calendar-empty-list">
-          <li>FMP API Key — <a href="https://financialmodelingprep.com/developer/docs" target="_blank" rel="noreferrer">financialmodelingprep.com</a></li>
-          <li>Finnhub API Key — <a href="https://finnhub.io/pricing" target="_blank" rel="noreferrer">finnhub.io</a></li>
-        </ul>
-        <p className="calendar-empty-desc">{t('calendar_restart_hint')}</p>
-      </div>
-    )
-  }
 
   const grouped: Record<string, EconomicEvent[]> = {}
   for (const ev of events) {
@@ -4153,6 +4155,12 @@ function CalendarTab() {
   return (
     <>
       <p className="section-title">{t('calendar')}</p>
+      <ContextSettings kind="calendar" uiMode={uiMode} onSetUiMode={onSetUiMode} />
+      <p>{copy.help}</p>
+      <button disabled={loading} onClick={() => { setLoading(true); fetchEvents() }}>{fetchError ? t('calendar_retry') : ux.refresh}</button>
+      {loading && <p role="status">{t('loading')}</p>}
+      {fetchError && <p role="alert">{t('calendar_load_error')}</p>}
+      {!loading && !fetchError && events.length === 0 && <div className="calendar-empty"><p className="calendar-empty-title">{t('calendar_no_data')}</p><p>{copy.empty}</p></div>}
       {Object.entries(grouped)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, items]) => (
@@ -4285,7 +4293,7 @@ function WorkspaceApp() {
         <ChunkErrorBoundary>
         <Suspense fallback={null}>
         {tab === 'chart' && <ChartTab uiMode={uiMode} />}
-        {tab === 'analysis' && <AnalysisTab />}
+        {tab === 'analysis' && <><ContextSettings kind="ai" uiMode={uiMode} onSetUiMode={handleSetUiMode} /><AnalysisTab /></>}
         {tab === 'backtest' && <BacktestTab uiMode={uiMode} />}
         {tab === 'performance' && <PerformanceTab />}
         {tab === 'paper' && <PaperTab />}
@@ -4297,7 +4305,7 @@ function WorkspaceApp() {
         {tab === 'status' && <StatusTab />}
         {tab === 'settings' && <SettingsTab uiMode={uiMode} onSetUiMode={handleSetUiMode} />}
         {tab === 'price-alerts' && <AlertHub key={tab} uiMode={uiMode} onSetUiMode={handleSetUiMode} price />}
-        {tab === 'calendar' && <CalendarTab />}
+        {tab === 'calendar' && <CalendarTab uiMode={uiMode} onSetUiMode={handleSetUiMode} />}
         {tab === 'execution' && <ExecutionTab />}
         {tab === 'my-trades' && <MyTradesTab />}
         </Suspense>

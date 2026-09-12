@@ -82,6 +82,9 @@ table { font-variant-numeric: tabular-nums; }
 .signal-range.archive { color: #d8b78c; }
 .signal-row > span { overflow-wrap: anywhere; }
 .settings-auth { margin-bottom: 16px; }
+.context-settings { margin: 12px 0; padding: 12px; border: 1px solid var(--green); border-radius: 6px; }
+.context-settings > summary { font-weight: 600; color: var(--mint); }
+.context-settings > .section { margin-top: 16px; }
 .backtest-risk-fields { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
 .backtest-advanced { flex-basis: 100%; order: 2; }
 .settings-save-bar { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--muted); padding: 12px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; z-index: 2; font-size: 0.85rem; }

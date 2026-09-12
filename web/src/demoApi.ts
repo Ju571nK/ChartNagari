@@ -183,6 +183,7 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
       symbol_map: {},
     })
   }
+  if (path === '/backtest/readiness') return new Response('Backtesting requires a local server', { status: 503 })
   if (path.startsWith('/execution')) return jsonResponse({})
   if (path === '/marks/rollup') return jsonResponse({ by: '', since: '', rows: [] })
   // apiFetch() maps 204 → null; PaperTab's summary render is null-guarded.

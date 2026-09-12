@@ -49,6 +49,7 @@ func NewYahooCollector(db *storage.DB, symbols, timeframes []string, pollInterva
 
 // Start begins polling in a ticker loop. Blocks until ctx is cancelled.
 func (c *YahooCollector) Start(ctx context.Context) {
+	c.httpClient = generationClient(c.httpClient, ctx)
 	log.Info().
 		Strs("symbols", c.symbols).
 		Dur("poll_interval", c.pollInterval).
@@ -107,10 +108,10 @@ func (c *YahooCollector) fetchForTimeframes(timeframes []string) {
 
 // yahooTFParams maps our TF keys to Yahoo interval + range query params.
 var yahooTFParams = map[string][2]string{
-	"1H": {"1h", "5d"},   // last 5 days 1-hour bars
-	"4H": {"1h", "30d"},  // last 30 days → rebuilt to 4H
-	"1D": {"1d", "60d"},  // last 60 days daily
-	"1W": {"1wk", "2y"},  // last 2 years weekly
+	"1H": {"1h", "5d"},  // last 5 days 1-hour bars
+	"4H": {"1h", "30d"}, // last 30 days → rebuilt to 4H
+	"1D": {"1d", "60d"}, // last 60 days daily
+	"1W": {"1wk", "2y"}, // last 2 years weekly
 }
 
 func (c *YahooCollector) fetchOHLCV(symbol, tf string) ([]models.OHLCV, error) {

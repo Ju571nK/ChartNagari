@@ -27,7 +27,7 @@ func parsePercentages(text string) (bull, bear, sideways float64) {
 // rsi1D is the 1D RSI_14 value used for RSI correction.
 func Aggregate(outputs []AnalystOutput, rsi1D float64) ScenarioResult {
 	if len(outputs) == 0 {
-		return ScenarioResult{Final: "SIDEWAYS", Confidence: "LOW"}
+		return ScenarioResult{Status: "failed", Final: "ERROR", AggregatorReason: "No analyst results available"}
 	}
 
 	var bullSum, bearSum, sidewaysSum float64
@@ -58,7 +58,7 @@ func Aggregate(outputs []AnalystOutput, rsi1D float64) ScenarioResult {
 		if len(errMsgs) > 0 {
 			reason += ": " + strings.Join(errMsgs, " | ")
 		}
-		return ScenarioResult{Final: "SIDEWAYS", Confidence: "LOW", AggregatorReason: reason}
+		return ScenarioResult{Status: "failed", Final: "ERROR", AggregatorReason: reason}
 	}
 
 	bull := bullSum / float64(count)
@@ -66,7 +66,7 @@ func Aggregate(outputs []AnalystOutput, rsi1D float64) ScenarioResult {
 	sw := sidewaysSum / float64(count)
 
 	// RSI correction
-	reason := fmt.Sprintf("3개 애널리스트 평균 — BULL:%.1f%% BEAR:%.1f%% SIDEWAYS:%.1f%%", bull, bear, sw)
+	reason := fmt.Sprintf("%d개 애널리스트 평균 — BULL:%.1f%% BEAR:%.1f%% SIDEWAYS:%.1f%%", count, bull, bear, sw)
 	if rsi1D > 70 {
 		bear += 5
 		bull -= 2.5
@@ -111,6 +111,7 @@ func Aggregate(outputs []AnalystOutput, rsi1D float64) ScenarioResult {
 	}
 
 	sr := ScenarioResult{
+		Status:           "success",
 		BullPct:          roundTo1(bull),
 		BearPct:          roundTo1(bear),
 		SidewaysPct:      roundTo1(sw),

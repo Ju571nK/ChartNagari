@@ -342,10 +342,18 @@ func setupTestWithChart(t *testing.T, cs ChartStore) *Server {
 	return srv
 }
 
-// Test 17: GET /api/ohlcv/{symbol}/{timeframe} with no chart store returns 200 empty array.
-func TestGetChartOHLCV_NoStore_ReturnsEmpty(t *testing.T) {
+// Missing storage is a service error, not evidence of an empty instrument.
+func TestGetChartOHLCV_NoStore_ReturnsUnavailable(t *testing.T) {
 	srv := setupTest(t) // no chart store wired
 	w := do(t, srv, "GET", "/api/ohlcv/BTCUSDT/1H", nil)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestGetChartOHLCV_EmptyStore_ReturnsEmpty(t *testing.T) {
+	srv := setupTestWithChart(t, &mockChartStore{})
+	w := do(t, srv, "GET", "/api/ohlcv/SPCX/1H", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}

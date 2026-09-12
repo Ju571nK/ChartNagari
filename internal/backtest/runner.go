@@ -1,10 +1,14 @@
 package backtest
 
 import (
+	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
+
+var ErrInsufficientHistory = errors.New("insufficient historical data")
 
 // RuleStats summarizes backtest performance for a single rule.
 type RuleStats struct {
@@ -43,6 +47,9 @@ func (r *Runner) RunBacktest(symbol, timeframe, ruleFilter string, tpMult, slMul
 	if err != nil {
 		return nil, err
 	}
+	if len(bars) < r.engine.cfg.WarmupBars+2 {
+		return nil, fmt.Errorf("%w: need at least %d candles", ErrInsufficientHistory, r.engine.cfg.WarmupBars+2)
+	}
 	eng := r.engine
 	if tpMult > 0 || slMult > 0 {
 		cfg := r.engine.cfg
@@ -65,6 +72,9 @@ func (r *Runner) RunPerRule(symbol, timeframe string, tpMult, slMult float64) ([
 	bars, err := r.store.GetOHLCVAll(symbol, timeframe)
 	if err != nil {
 		return nil, err
+	}
+	if len(bars) < r.engine.cfg.WarmupBars+2 {
+		return nil, fmt.Errorf("%w: need at least %d candles", ErrInsufficientHistory, r.engine.cfg.WarmupBars+2)
 	}
 	eng := r.engine
 	if tpMult > 0 || slMult > 0 {

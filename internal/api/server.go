@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -181,6 +182,7 @@ type PriceAlertStore interface {
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
+	watchlistChanged   func(appconfig.WatchlistConfig)
 	configDir          string
 	static             http.Handler                    // nil when webDist is absent or not built yet
 	chartStore         ChartStore                      // optional; set via WithChartStore
@@ -211,7 +213,7 @@ type Server struct {
 	execFeedback       FeedbackRecorder                // optional; set via WithExecutionFeedback
 	execDB             *sql.DB                         // optional; set via WithExecutionDB for feedback queries
 	execState          *execution.StateStore           // optional; set via WithExecutionState for config versioning
-	markStore          *storage.SignalMarkStore         // optional; set via WithMarkStore
+	markStore          *storage.SignalMarkStore        // optional; set via WithMarkStore
 	aggregator         *marks.Aggregator               // optional; set via WithAggregator
 	mcpRegistry        *mcp.Registry                   // optional; set via WithMCPRegistry
 	mcpSessions        *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
@@ -346,6 +348,9 @@ func (s *Server) WithMCPRegistry(reg *mcp.Registry) {
 func (s *Server) WithChartStore(cs ChartStore) {
 	s.chartStore = cs
 }
+
+// WithWatchlistChanged wires nonblocking runtime reconciliation after persistence.
+func (s *Server) WithWatchlistChanged(fn func(appconfig.WatchlistConfig)) { s.watchlistChanged = fn }
 
 // WithBacktestRunner wires the backtest runner to the server.
 func (s *Server) WithBacktestRunner(br BacktestRunner) {
@@ -491,6 +496,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
+	mux.HandleFunc("GET /api/backtest/readiness", s.getBacktestReadiness)
 	mux.HandleFunc("GET /api/backtest/rules", s.runPerRuleBacktest)
 	mux.HandleFunc("GET /api/performance/rules", s.getPerformanceRules)
 	mux.HandleFunc("GET /api/export/pinescript", s.exportPineScript)
@@ -550,8 +556,8 @@ func (s *Server) Handler() http.Handler {
 	// Signal performance marks
 	if s.markStore != nil {
 		mux.HandleFunc("POST /api/marks/{signal_id}", s.postMark)
-		mux.HandleFunc("GET /api/marks/pending",      s.getPending)
-		mux.HandleFunc("GET /api/marks/recent",       s.getRecent)
+		mux.HandleFunc("GET /api/marks/pending", s.getPending)
+		mux.HandleFunc("GET /api/marks/recent", s.getRecent)
 	}
 	if s.aggregator != nil {
 		mux.HandleFunc("GET /api/marks/rollup", s.getRollup)
@@ -862,7 +868,7 @@ func (s *Server) updateRule(w http.ResponseWriter, r *http.Request) {
 // Query param: limit (default 200).
 func (s *Server) getChartOHLCV(w http.ResponseWriter, r *http.Request) {
 	if s.chartStore == nil {
-		jsonOK(w, []OHLCVBar{})
+		http.Error(w, "price data store not configured", http.StatusServiceUnavailable)
 		return
 	}
 	symbol := r.PathValue("symbol")
@@ -1055,6 +1061,10 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.backtestRunner.RunBacktest(req.Symbol, req.Timeframe, req.Rule, req.TPMult, req.SLMult)
 	if err != nil {
+		if errors.Is(err, backtest.ErrInsufficientHistory) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1083,6 +1093,10 @@ func (s *Server) runPerRuleBacktest(w http.ResponseWriter, r *http.Request) {
 	}
 	stats, err := s.backtestRunner.RunPerRule(symbol, timeframe, tpMult, slMult)
 	if err != nil {
+		if errors.Is(err, backtest.ErrInsufficientHistory) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1251,6 +1265,8 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
+	body.Symbol = strings.ToUpper(strings.TrimSpace(body.Symbol))
+	body.Exchange = strings.TrimSpace(body.Exchange)
 	if body.Symbol == "" || (body.Type != "crypto" && body.Type != "stock") {
 		http.Error(w, "symbol required; type must be 'crypto' or 'stock'", http.StatusBadRequest)
 		return
@@ -1269,6 +1285,12 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 		Symbol:   strings.ToUpper(body.Symbol),
 		Exchange: body.Exchange,
 		Enabled:  true,
+	}
+	for _, existing := range append(append([]appconfig.SymbolEntry{}, wl.Symbols.Crypto...), wl.Symbols.Stocks...) {
+		if strings.EqualFold(existing.Symbol, body.Symbol) {
+			http.Error(w, "symbol already registered", http.StatusConflict)
+			return
+		}
 	}
 	switch body.Type {
 	case "crypto":
@@ -1535,7 +1557,13 @@ func (s *Server) writeWatchlistLocked(wl appconfig.WatchlistConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal watchlist: %w", err)
 	}
-	return os.WriteFile(s.configDir+"/watchlist.yaml", data, 0o644)
+	if err := os.WriteFile(s.configDir+"/watchlist.yaml", data, 0o644); err != nil {
+		return err
+	}
+	if s.watchlistChanged != nil {
+		s.watchlistChanged(wl)
+	}
+	return nil
 }
 
 // readRules acquires a read lock and reads rules.yaml.
@@ -1693,36 +1721,48 @@ func (s *Server) validateSymbol(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	if exch, name, ok := checkBinanceSymbol(ctx, symbol); ok {
+	exch, name, ok, binanceErr := checkBinanceSymbol(ctx, symbol)
+	if ok {
 		jsonOK(w, ValidateResult{Found: true, Type: "crypto", Exchange: exch, Name: name})
 		return
 	}
-	if exch, name, ok := checkYahooSymbol(ctx, symbol); ok {
+	exch, name, ok, yahooErr := checkYahooSymbol(ctx, symbol)
+	if ok {
 		jsonOK(w, ValidateResult{Found: true, Type: "stock", Exchange: exch, Name: name})
+		return
+	}
+	if binanceErr != nil || yahooErr != nil {
+		http.Error(w, "symbol validation provider unavailable", http.StatusBadGateway)
 		return
 	}
 	jsonOK(w, ValidateResult{Found: false})
 }
 
-func checkBinanceSymbol(ctx context.Context, symbol string) (string, string, bool) {
-	url := "https://api.binance.com/api/v3/ticker/price?symbol=" + symbol
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func checkBinanceSymbol(ctx context.Context, symbol string) (string, string, bool, error) {
+	endpoint := "https://api.binance.com/api/v3/ticker/price?symbol=" + url.QueryEscape(symbol)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", "", false
+		return "", "", false, err
 	}
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return "", "", false
+	if err != nil {
+		return "", "", false, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound {
+		return "", "", false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", "", false, fmt.Errorf("validation HTTP %d", resp.StatusCode)
+	}
 	var result struct {
 		Symbol string `json:"symbol"`
 		Price  string `json:"price"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Symbol == "" {
-		return "", "", false
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", false, err
 	}
-	return "binance", result.Symbol, true
+	return "binance", result.Symbol, result.Symbol != "", nil
 }
 
 func normalizeExchange(fullExchangeName string) string {
@@ -1746,18 +1786,24 @@ func normalizeExchange(fullExchangeName string) string {
 	}
 }
 
-func checkYahooSymbol(ctx context.Context, symbol string) (string, string, bool) {
-	url := "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol + "?interval=1d&range=1d"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func checkYahooSymbol(ctx context.Context, symbol string) (string, string, bool, error) {
+	endpoint := "https://query1.finance.yahoo.com/v8/finance/chart/" + url.PathEscape(symbol) + "?interval=1d&range=1d"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", "", false
+		return "", "", false, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return "", "", false
+	if err != nil {
+		return "", "", false, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", "", false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", "", false, fmt.Errorf("validation HTTP %d", resp.StatusCode)
+	}
 	var result struct {
 		Chart struct {
 			Result []struct {
@@ -1772,17 +1818,17 @@ func checkYahooSymbol(ctx context.Context, symbol string) (string, string, bool)
 		} `json:"chart"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", "", false
+		return "", "", false, err
 	}
 	if len(result.Chart.Result) == 0 || result.Chart.Error != nil {
-		return "", "", false
+		return "", "", false, nil
 	}
 	meta := result.Chart.Result[0].Meta
 	name := meta.LongName
 	if name == "" {
 		name = meta.ShortName
 	}
-	return normalizeExchange(meta.FullExchangeName), name, true
+	return normalizeExchange(meta.FullExchangeName), name, true, nil
 }
 
 // exportPineScript handles GET /api/export/pinescript?rule=<name>&win_rate=<float>&avg_rr=<float>
@@ -1970,6 +2016,10 @@ func (s *Server) runAnalysisExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := req.Result
+	if res.Failed() {
+		http.Error(w, "failed analysis cannot be exported; check AI provider and model settings", http.StatusUnprocessableEntity)
+		return
+	}
 	finalEmoji := map[string]string{"BULL": "🟢", "BEAR": "🔴", "SIDEWAYS": "🟡"}[res.Final]
 	confColor := map[string]string{"HIGH": "🔵", "MEDIUM": "🟣", "LOW": "⚪"}[res.Confidence]
 

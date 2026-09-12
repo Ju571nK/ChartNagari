@@ -95,9 +95,9 @@ func DefaultConfig() Config {
 type Pipeline struct {
 	cfg         Config
 	db          OHLCVReader
-	sigSaver    SignalSaver                    // optional; set via SetSignalSaver
-	paperTrader PaperTrader                    // optional; set via SetPaperTrader
-	alertHolder *appconfig.AlertConfigHolder   // optional; set via SetAlertConfigHolder
+	sigSaver    SignalSaver                  // optional; set via SetSignalSaver
+	paperTrader PaperTrader                  // optional; set via SetPaperTrader
+	alertHolder *appconfig.AlertConfigHolder // optional; set via SetAlertConfigHolder
 	eng         *engine.RuleEngine
 	interp      *interpreter.Interpreter
 	notif       *notifier.Notifier
@@ -105,19 +105,19 @@ type Pipeline struct {
 	timeframes  []string
 	log         zerolog.Logger
 	cryptoSyms  map[string]bool
-	marketOpen   bool // tracks NYSE open/close state for transition logging
+	marketOpen  bool // tracks NYSE open/close state for transition logging
 
-	priceAlertWatcher PriceAlertWatcher // optional; set via SetPriceAlertWatcher
-	broadcaster       SignalBroadcaster  // optional; set via SetBroadcaster
+	priceAlertWatcher PriceAlertWatcher   // optional; set via SetPriceAlertWatcher
+	broadcaster       SignalBroadcaster   // optional; set via SetBroadcaster
 	dispatcher        ExecutionDispatcher // optional; set via SetExecutionDispatcher
 
 	seqTracker *sequence.Tracker // tracks signal sequences for bonus scoring
 
 	profileHolder *appconfig.SymbolProfilesHolder // optional; set via SetSymbolProfiles
-	tuningHolder  *appconfig.SignalTuningHolder  // optional; set via SetSignalTuningHolder
+	tuningHolder  *appconfig.SignalTuningHolder   // optional; set via SetSignalTuningHolder
 	overrideStore appconfig.OverrideGetter        // optional; set via SetOverrideStore. nil → profile-only resolution
 
-	forwardReturnDB   ForwardReturnDB          // optional; set via SetForwardReturnStore
+	forwardReturnDB    ForwardReturnDB          // optional; set via SetForwardReturnStore
 	forwardReturnOHLCV ForwardReturnOHLCVReader // optional; set via SetForwardReturnStore
 
 	sigCooldownMu sync.Mutex
@@ -250,6 +250,9 @@ func (p *Pipeline) runOnce(ctx context.Context) {
 	}
 
 	for _, sym := range p.symbols {
+		if ctx.Err() != nil {
+			return
+		}
 		if !p.isCrypto(sym) && !isOpen {
 			continue
 		}
@@ -561,6 +564,9 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		Indicators: indicators,
 	}
 	enriched := p.interp.Enrich(ctx, []interpreter.SignalGroup{group})
+	if ctx.Err() != nil {
+		return
+	}
 
 	// Persist signals for chart dashboard markers (after AI enrichment).
 	// Only save signals above MinScore and not within the cooldown window.
@@ -768,4 +774,3 @@ func enrichSignalLevels(sig *models.Signal, allBars map[string][]models.OHLCV, i
 		sig.SL = entry + atr*slMult
 	}
 }
-

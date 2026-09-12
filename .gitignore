@@ -102,6 +102,8 @@ docs/*.svg
 docs/*.png
 docs/*.html
 docs/*.md
+!docs/architecture.md
+!docs/getting-started.md
 !docs/OLLAMA_SETUP.md
 !docs/usability-audit-2026-09-11.md
 docs/market-research.md

@@ -37,9 +37,10 @@ go mod download
 # Install frontend dependencies
 cd web && npm install && cd ..
 
-# Copy and configure environment
-cp .env.example .env
-# Edit .env — see README for variable descriptions
+# New installations only: copy web-managed settings
+cp config/settings.example.yaml config/settings.yaml
+chmod 600 config/settings.yaml
+# Existing installations: read SETTINGS.md instead of replacing your settings.
 
 # Start the backend (port 8080)
 go run ./cmd/server
@@ -59,6 +60,8 @@ make test        # run all Go tests
 ---
 
 ## Project Structure
+
+See the [architecture overview](docs/architecture.md) for the system diagram formerly in the README.
 
 | Package | Purpose |
 |---|---|
@@ -83,7 +86,7 @@ make test        # run all Go tests
 | `internal/analyst/` | AI analysis layer |
 | `internal/config/` | Configuration loading |
 | `internal/market/` | Market session helpers |
-| `config/` | YAML configuration files (rules, symbols, timeframes) |
+| `config/` | YAML settings, watchlist, rules, alerts and execution configuration |
 | `web/` | TypeScript + React 18 + Vite frontend |
 
 ---

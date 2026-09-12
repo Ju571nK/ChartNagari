@@ -14,6 +14,26 @@ Format:
 
 ---
 
+## [2.13.0.0] - 2026-09-12
+
+### Changed
+- General application, MCP bridge and Alpaca adapter settings use web-managed YAML. Legacy environment values migrate once; later web edits are no longer overridden by `.env`.
+- Added masked-secret removal, atomic owner-only settings writes and tab-memory API authorization. See [upgrade notes](SETTINGS.md).
+- Improved beginner guidance, instrument-data status and backtest history-readiness checks.
+
+### Fixed
+- Render candle-derived FVG/OB candidate boundaries independently of stored engine signals and filter signal markers by the selected timeframe.
+- Correct alert JSON persistence and apply watchlist collector changes after successful saves.
+- Route VIX index collection through Yahoo even when a Tiingo key is configured.
+- Improve display-mode label spacing and analysis failure feedback.
+
+### Docs
+- Reworked English, Korean and Japanese READMEs around the user workflow.
+- Moved Mermaid architecture and installation details into dedicated guides.
+- Replaced the old README GIF with a September 12 capture of the current sample-data build; retained the original screenshots and reproduction instructions.
+
+---
+
 ## [2.12.0.0] - 2026-09-11
 
 ### Changed

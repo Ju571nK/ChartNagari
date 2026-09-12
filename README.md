@@ -1,256 +1,60 @@
 # ChartNagari
 
-> Configuration update: use the web settings UI and YAML. See [setup and migration](SETTINGS.md) before following older `.env` examples below.
-
-**🌐 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md)**
-
-[![CI](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ju571nK/ChartNagari/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go 1.26](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](Dockerfile)
-[![Live Demo](https://img.shields.io/badge/▶_Live_Demo-try_in_browser-5B9279)](https://ju571nk.github.io/ChartNagari/)
-
-<img src="docs/demo.gif" alt="ChartNagari demo — multi-timeframe ICT/Wyckoff signal detection with live alerts and zero-key demo mode" width="820"/>
-
-**▶ [Try the live demo](https://ju571nk.github.io/ChartNagari/) — runs entirely in your browser. No install, no API keys, real detector output on sample data.**
-
-> **The only open-source platform that automates ICT and Wyckoff methodology across
-> multiple timeframes — with real-time alerts and AI interpretation.
-> Self-hosted. No cloud required.**
-
----
-
-## What You Get in 5 Minutes
-
-1. Clone → configure one `.env` file → `docker compose up`
-2. ChartNagari scans US stocks and crypto across 1W / 1D / 4H / 1H — simultaneously
-3. When an ICT Order Block, Fair Value Gap, Wyckoff phase shift, or RSI signal fires,
-   you get a Telegram (or Discord) alert with an optional AI interpretation
-4. Everything runs locally — your data never leaves your machine
-
-No cloud account. No subscription. No API rate-limit surprises.
-
----
-
-## Why ChartNagari
-
-The ICT and Wyckoff methodology space on GitHub is surprisingly empty:
-the top Wyckoff automation repo has 17 stars, and the best ICT library
-is a collection of Python functions with no alerts, no backtest, and no UI.
-
-ChartNagari fills that gap:
-
-| What you need | Status |
-|---|---|
-| Multi-timeframe ICT signal detection (Order Blocks, FVGs, Liquidity Sweeps) | ✅ |
-| Wyckoff phase detection (Accumulation, Distribution, Spring, Upthrust) | ✅ |
-| Real-time Telegram / Discord alerts with cooldown | ✅ |
-| Optional AI interpretation (Anthropic, OpenAI, Groq, Gemini) | ✅ |
-| Multi-timeframe consensus scoring | ✅ |
-| Signal quality scoring (volume, wick ratio, reversal strength) | ✅ |
-| Top-down HTF context filter (suppress counter-trend signals) | ✅ |
-| Signal sequence tracking (sweep → displacement bonus) | ✅ |
-| Chart signal category filter (ICT / Wyckoff / SMC / TA toggle) | ✅ |
-| Demo mode (try signals on sample data, no setup required) | ✅ |
-| Backtest on historical data | ✅ |
-| Self-hosted, local-first, no cloud required | ✅ |
-| AI output language: `LLM_LANGUAGE: en \| ko \| ja` | ✅ |
-| Guided first-run onboarding with AI scenario scan | ✅ |
-
-> **Vibe-coded** — this project was built entirely through vibe coding with [Claude Code](https://claude.ai/claude-code).
-
-> **Local-first** — all data stays on your machine. No cloud accounts required to run.
-
----
-
-## Features
-
-- **30+ trading rules** — ICT (Order Blocks, FVG, Liquidity Sweeps, Breaker Blocks), Wyckoff (Spring, Upthrust, Accumulation/Distribution), SMC (BOS, CHoCH), General TA (RSI, EMA, volume), 14 candlestick patterns
-- **Multi-timeframe analysis** — 1W, 1D, 4H, 1H scanned in parallel
-- **Signal quality scoring** — not all signals are equal. Sweeps scored by volume ratio, wick depth, reversal strength. FVGs scored by gap size vs ATR and impulse strength
-- **Top-down HTF context filter** — 1H/4H signals suppressed when they contradict the 1D/1W trend direction
-- **Signal sequence tracking** — sweep followed by displacement in same direction gets a bonus score. Multi-pattern detection
-- **Wyckoff phase boosting** — accumulation/markup boosts LONG signals, distribution/markdown boosts SHORT signals
-- **Chart category filter** — toggle ICT / Wyckoff / SMC / TA signal groups on/off with one click
-- **Demo mode** — try the signal engine on sample data without adding symbols or API keys
-- **Multi-timeframe consensus** — signals ranked by how many timeframes agree
-- **AI interpretation layer** — optional LLM commentary (Anthropic, OpenAI, Groq, Gemini)
-- **Telegram & Discord alerts** — configurable cooldown to prevent alert spam
-- **Backtest & paper trading** — validate rules on historical data before going live
-- **Web dashboard** — React frontend with guided first-run onboarding, Settings UI, and AI scenario card
-- **Multiple data sources** — Binance WebSocket (crypto, free), Tiingo (stocks, recommended), Yahoo Finance (fallback)
-- **Economic calendar** — US macro event tracker (FMP or Finnhub); pre-event Telegram alerts for high-impact releases
-
----
-
-## Architecture
-
-```mermaid
-flowchart TB
-    subgraph UI["Web Dashboard — TypeScript + React 18 + Vite"]
-        direction LR
-        Chart["Chart"]
-        Analysis["Analysis"]
-        Backtest["Backtest"]
-        Paper["Paper"]
-        Calendar["Calendar"]
-        Settings["Settings"]
-    end
-
-    subgraph Backend["Go Backend"]
-        direction TB
-        Collector["Collector\n(data sources)"]
-        Engine["Engine\n(rule eval)"]
-        Interpreter["Interpreter\n(MTF score)"]
-        LLM["LLM\n(optional)"]
-        Report["Report\n(daily)"]
-        Notifier["Notifier\n(TG / DC)"]
-        History["History\n(SQLite)"]
-        Calendar2["Calendar\n(FMP / Finnhub)"]
-
-        Collector --> Engine
-        Engine --> Interpreter
-        Interpreter --> LLM
-        Interpreter --> Report
-        Report --> Notifier
-        Engine --> History
-    end
-
-    subgraph Sources["Data Sources"]
-        Binance["Binance WS\n(crypto)"]
-        Tiingo["Tiingo REST\n(stocks)"]
-        Yahoo["Yahoo Finance\n(fallback)"]
-    end
-
-    Sources --> Collector
-    UI -- "REST API" --> Backend
-```
-
----
-
-## Quick Start — Docker
-
-```bash
-# 1. Clone
-git clone https://github.com/Ju571nK/ChartNagari.git
-cd ChartNagari
-
-# 2. Configure
-cp .env.example .env
-# Edit .env — at minimum set one alert destination (Telegram or Discord)
-
-# 3. Run
-docker compose up -d
-
-# 4. Open dashboard
-open http://localhost:8080
-```
+A personal workspace for exploring US stocks and crypto — from chart patterns to alerts and strategy review.
 
----
+[Try the demo](https://ju571nk.github.io/ChartNagari/) · [Latest release](https://github.com/Ju571nK/ChartNagari/releases/latest) · [Get started](#get-started)
 
-## Quick Start — Local Dev
+[English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md)
 
-**Prerequisites:** Go 1.26+, Node.js 20+
+![ChartNagari: expert chart overlays, timeframe switching and web settings](docs/demo.gif)
 
-```bash
-# Backend
-go mod download
-go run ./cmd/server
+*Captured from the current main build on September 12, 2026. This short tour uses sample candles, not a live feed. [View still screenshots](docs/screenshots/README.md).*
 
-# Frontend (separate terminal)
-cd web
-npm install
-npm run dev        # dev server at :5173, proxies API to :8080
-```
+## One place to follow your market
 
-Or use the Makefile:
+- **See the setup.** Explore charts in a simpler beginner view or switch to expert mode for FVG, Order Block and signal overlays.
+- **Keep your context.** Carry the selected instrument and timeframe into analysis and backtesting.
+- **Make alerts your own.** Manage watchlists, price alerts and Telegram/Discord notification preferences.
+- **Review before acting.** Check available history, run backtests and follow paper trades without treating simulated results as predictions.
+- **Set things up in the browser.** Configure data providers, optional AI and connection settings through the web UI.
 
-```bash
-make build-all     # build frontend + backend binary
-make run           # build and start server
-make test          # run all Go tests
-```
+English, Korean and Japanese interfaces are available. AI interpretation is optional, including a local Ollama option.
 
----
+## What's new
 
-## Environment Variables
+**Latest release: [v2.13.0.0 — Web Settings & Clearer Charts](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.13.0.0)**
 
-Copy `.env.example` to `.env` and fill in the values you need. The server starts without any alerts configured — you only need the variables for features you actually use.
+Grouped navigation, a chart-side signal inspector and shared chart → analysis → backtest context.
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `ENV` | No | `development` | `development` \| `production` |
-| `SERVER_PORT` | No | `8080` | HTTP listen port |
-| `LOG_LEVEL` | No | `debug` | `debug` \| `info` \| `warn` \| `error` |
-| `DB_PATH` | No | `./data/chart_analyzer.db` | SQLite file path |
-| `BINANCE_API_KEY` | No | — | Binance API key (public WebSocket needs no key) |
-| `BINANCE_SECRET_KEY` | No | — | Binance secret |
-| `TIINGO_API_KEY` | No | — | When set, Tiingo is used instead of Yahoo Finance |
-| `TIINGO_POLL_INTERVAL` | No | `900` | Poll interval in seconds (free tier: 900 recommended) |
-| `YAHOO_POLL_INTERVAL` | No | `60` | Yahoo Finance poll interval in seconds |
-| `TELEGRAM_BOT_TOKEN` | No* | — | Token from @BotFather |
-| `TELEGRAM_CHAT_ID` | No* | — | Chat, group, or channel ID |
-| `DISCORD_WEBHOOK_URL` | No* | — | Discord incoming webhook URL |
-| `ALERT_COOLDOWN_HOURS` | No | `4` | Hours before re-alerting same symbol+rule |
-| `LLM_PROVIDER` | No | — | `anthropic` \| `openai` \| `groq` \| `gemini` |
-| `ANTHROPIC_API_KEY` | No | — | Required when `LLM_PROVIDER=anthropic` |
-| `OPENAI_API_KEY` | No | — | Required when `LLM_PROVIDER=openai` |
-| `GROQ_API_KEY` | No | — | Required when `LLM_PROVIDER=groq` |
-| `GEMINI_API_KEY` | No | — | Required when `LLM_PROVIDER=gemini` |
-| `AI_MIN_SCORE` | No | `12.0` | Minimum MTF score to trigger AI interpretation |
-| `LLM_LANGUAGE` | No | `en` | AI output language: `en` \| `ko` \| `ja` |
-| `ALPHAVANTAGE_API_KEY` | No | — | For fetching 20-year daily SPY data |
+**Included in this release**
 
-*Alerts won't fire without at least one destination configured, but the server runs fine.
+- Visible FVG/OB candidate ranges with distinct colors and counts.
+- Clearer loading, missing-data and retry states; history checks before backtesting.
+- YAML-backed web settings, masked keys and explicit key removal.
+- Fixes for symbol settings, alert persistence, timeframe filtering and VIX collection.
 
----
+Upgrading? Read the [YAML migration notes](SETTINGS.md) and [release notes](docs/releases/v2.13.0.0.md) before restarting your server.
 
-## Configuration Files
+## Get started
 
-| File | Purpose |
-|---|---|
-| `config/rules.yaml` | Enable/disable individual trading rules and set their parameters |
-| `config/symbols.yaml` | List of symbols to monitor (stocks and crypto) |
-| `config/timeframes.yaml` | Timeframe settings for each asset class |
+**Just looking?** [Open the browser demo](https://ju571nk.github.io/ChartNagari/). It uses bundled sample data; live collection, persistent settings and connected services require a self-hosted server.
 
----
+**Ready to use your own watchlist?** Follow the [installation guide](docs/getting-started.md) for local or Docker setup. Then:
 
-## Adding a New Rule
+1. Add an instrument in **Symbols**.
+2. Open **Chart**, choose a timeframe and start in beginner mode.
+3. Visit **Settings** to connect only the data, AI or notification services you need.
 
-1. Create a file in `internal/methodology/<category>/` implementing the `rule.AnalysisRule` interface.
-2. Register it in `config/rules.yaml` with a unique ID, category, and default parameters.
-3. Add table-driven tests in a `_test.go` file alongside the rule.
-4. Run `go test ./...` — all tests must pass before opening a PR.
+Already using an older version? Read the [YAML migration guide](SETTINGS.md) before upgrading. General configuration changes need a restart; the interface identifies the relevant settings.
 
-See `CONTRIBUTING.md` for the full workflow.
+## A few things to know
 
----
+ChartNagari is a research tool, not investment advice. FVG/OB overlays are visual candidates, not instructions to trade. Historical and paper results do not guarantee future performance.
 
-## Running Tests
+Your database and settings are stored locally. Enabled market-data, hosted AI and notification integrations communicate with their providers; availability, fees and limits depend on those services. Saving settings does not start an execution adapter.
 
-```bash
-# All tests
-go test ./...
+## Learn more
 
-# With race detector
-go test -race ./...
+[Settings & upgrades](SETTINGS.md) · [Architecture](docs/architecture.md) · [Contributing & development](CONTRIBUTING.md) · [Report an issue](https://github.com/Ju571nK/ChartNagari/issues)
 
-# Coverage report
-make test-coverage   # opens coverage.html
-```
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR checklist.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-## Builder
-
-Built by Justin — exploring AI-assisted development and applying financial market knowledge through vibe coding with Claude Code.
+Built by Justin. Open source under the [MIT License](LICENSE).

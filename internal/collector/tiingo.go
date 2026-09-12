@@ -78,6 +78,7 @@ func (c *TiingoCollector) SetStateFile(path string) {
 
 // Start begins polling. Blocks until ctx is cancelled.
 func (c *TiingoCollector) Start(ctx context.Context) {
+	c.httpClient = generationClient(c.httpClient, ctx)
 	c.loadState()
 
 	log.Info().

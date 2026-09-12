@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,13 +29,13 @@ import (
 	"github.com/Ju571nK/Chatter/internal/llm"
 	"github.com/Ju571nK/Chatter/internal/marks"
 	"github.com/Ju571nK/Chatter/internal/mcp"
-	"github.com/Ju571nK/Chatter/internal/ollama"
 	candlestick "github.com/Ju571nK/Chatter/internal/methodology/candlestick"
 	general_ta "github.com/Ju571nK/Chatter/internal/methodology/general_ta"
 	"github.com/Ju571nK/Chatter/internal/methodology/ict"
 	"github.com/Ju571nK/Chatter/internal/methodology/smc"
 	"github.com/Ju571nK/Chatter/internal/methodology/wyckoff"
 	"github.com/Ju571nK/Chatter/internal/notifier"
+	"github.com/Ju571nK/Chatter/internal/ollama"
 	"github.com/Ju571nK/Chatter/internal/paper"
 	"github.com/Ju571nK/Chatter/internal/pipeline"
 	"github.com/Ju571nK/Chatter/internal/pricealert"
@@ -83,34 +84,10 @@ func main() {
 	defer cancel()
 
 	// ── 수집기 시작 (goroutine) ──────────────────────────────────────
-	timeframes := cfg.Watchlist.Timeframes
-
-	cryptoSymbols := cfg.EnabledCryptoSymbols()
-	if len(cryptoSymbols) > 0 {
-		binance := collector.NewBinanceCollector(db, cryptoSymbols, timeframes)
-		go binance.Start(ctx)
-		log.Info().Strs("symbols", cryptoSymbols).Msg("Binance collector started")
-	} else {
-		log.Warn().Msg("no enabled crypto symbols — check watchlist.yaml")
-	}
-
 	stockSymbols := cfg.EnabledStockSymbols()
-	if len(stockSymbols) > 0 {
-		if cfg.Tiingo.APIKey != "" {
-			// Use Tiingo if configured instead of Yahoo
-			tiingo := collector.NewTiingoCollector(cfg.Tiingo.APIKey, db, stockSymbols, timeframes, cfg.Tiingo.PollInterval)
-			tiingo.SetStateFile(filepath.Join(filepath.Dir(cfg.DBPath), "tiingo_state.json"))
-			go tiingo.Start(ctx)
-			log.Info().Strs("symbols", stockSymbols).Msg("Tiingo collector started")
-		} else {
-			// Yahoo fallback when Tiingo API key not set
-			yahoo := collector.NewYahooCollector(db, stockSymbols, timeframes, cfg.Yahoo.PollInterval)
-			go yahoo.Start(ctx)
-			log.Info().Strs("symbols", stockSymbols).Msg("Yahoo Finance collector started (Tiingo not configured — fallback)")
-		}
-	} else {
-		log.Info().Msg("no enabled stock symbols — set enabled: true in watchlist.yaml")
-	}
+	allSymbols := append(cfg.EnabledCryptoSymbols(), stockSymbols...)
+
+	watchRuntime := collector.NewRuntime(cfg.Watchlist)
 
 	// ── Index (VIX) data collector — 1D only, not included in pipeline ──
 	indexSymbols := cfg.EnabledIndexSymbols()
@@ -278,36 +255,62 @@ func main() {
 		Msg("execution dispatcher wired")
 
 	// ── 분석 파이프라인 시작 ──────────────────────────────────────────
-	allSymbols := append(cryptoSymbols, stockSymbols...)
-	if len(allSymbols) > 0 {
-		pipe := pipeline.New(
-			pipeline.DefaultConfig(),
-			db,
-			eng,
-			interp,
-			notif,
-			allSymbols,
-			timeframes,
-			log.Logger,
-		)
-		pipe.SetSignalSaver(db)
-		pipe.SetPaperTrader(paperTrader)
-		priceWatcher := pricealert.New(db, notif, log.Logger)
-		pipe.SetPriceAlertWatcher(priceWatcher)
-		pipe.SetBroadcaster(wsHub)
-		pipe.SetAlertConfigHolder(alertHolder)
-		pipe.SetSymbolProfiles(profileHolder)
-		pipe.SetOverrideStore(overrideStore)
-		pipe.SetSignalTuningHolder(tuningHolder)
-		pipe.SetForwardReturnStore(db, db)
-		pipe.SetCryptoSymbols(cryptoSymbols)
-		pipe.SetExecutionDispatcher(dispatcher)
-		go pipe.Run(ctx)
-		log.Info().
-			Strs("symbols", allSymbols).
-			Dur("interval", pipeline.DefaultConfig().Interval).
-			Msg("analysis pipeline started")
-	}
+	runtimeDone := make(chan struct{})
+	go func() {
+		defer close(runtimeDone)
+		watchRuntime.Run(ctx, func(workerCtx context.Context, wl appconfig.WatchlistConfig) {
+			generation := &appconfig.Config{Watchlist: wl}
+			cryptoSymbols, stockSymbols := generation.EnabledCryptoSymbols(), generation.EnabledStockSymbols()
+			timeframes := wl.Timeframes
+			var workers sync.WaitGroup
+			start := func(run func(context.Context)) { workers.Add(1); go func() { defer workers.Done(); run(workerCtx) }() }
+			if len(cryptoSymbols) > 0 {
+				start(collector.NewBinanceCollector(db, cryptoSymbols, timeframes).Start)
+			}
+			if len(stockSymbols) > 0 {
+				if cfg.Tiingo.APIKey != "" {
+					stocks := collector.NewTiingoCollector(cfg.Tiingo.APIKey, db, stockSymbols, timeframes, cfg.Tiingo.PollInterval)
+					stocks.SetStateFile(filepath.Join(filepath.Dir(cfg.DBPath), "tiingo_state.json"))
+					start(stocks.Start)
+				} else {
+					start(collector.NewYahooCollector(db, stockSymbols, timeframes, cfg.Yahoo.PollInterval).Start)
+				}
+			}
+			allSymbols := append(cryptoSymbols, stockSymbols...)
+			if len(allSymbols) > 0 {
+				pipe := pipeline.New(
+					pipeline.DefaultConfig(),
+					db,
+					eng,
+					interp,
+					notif,
+					allSymbols,
+					timeframes,
+					log.Logger,
+				)
+				pipe.SetSignalSaver(db)
+				pipe.SetPaperTrader(paperTrader)
+				priceWatcher := pricealert.New(db, notif, log.Logger)
+				pipe.SetPriceAlertWatcher(priceWatcher)
+				pipe.SetBroadcaster(wsHub)
+				pipe.SetAlertConfigHolder(alertHolder)
+				pipe.SetSymbolProfiles(profileHolder)
+				pipe.SetOverrideStore(overrideStore)
+				pipe.SetSignalTuningHolder(tuningHolder)
+				pipe.SetForwardReturnStore(db, db)
+				pipe.SetCryptoSymbols(cryptoSymbols)
+				pipe.SetExecutionDispatcher(dispatcher)
+				start(pipe.Run)
+				log.Info().
+					Strs("symbols", allSymbols).
+					Dur("interval", pipeline.DefaultConfig().Interval).
+					Msg("analysis pipeline started")
+			}
+			<-workerCtx.Done()
+			workers.Wait()
+		})
+	}()
+	defer func() { cancel(); <-runtimeDone }()
 
 	// ── 경제 캘린더 ───────────────────────────────────────────────────
 	if cfg.Finnhub.APIKey != "" || cfg.FMP.APIKey != "" {
@@ -343,6 +346,7 @@ func main() {
 
 	// ── HTTP API + 설정 UI 서버 ───────────────────────────────────────
 	apiSrv := api.New("config", "web/dist")
+	apiSrv.WithWatchlistChanged(watchRuntime.Update)
 	apiSrv.WithSettingsFile("config/settings.yaml")
 	apiSrv.WithDBPath(cfg.DBPath)
 	apiSrv.WithChartStore(db)
@@ -373,7 +377,7 @@ func main() {
 
 	// ── MCP 레지스트리 (로컬 LLM 통합) ────────────────────────────────────
 	mcpReg := mcp.NewRegistry()
-	watchSrc := &mcpWatchlistShim{cfg: cfg}
+	watchSrc := watchRuntime
 	mcpReg.Register(mcp.NewListWatchlist(watchSrc))
 	mcpReg.Register(mcp.NewGetAnalysis(watchSrc, db))
 	mcpReg.Register(mcp.NewGetSignalHistory(db))
@@ -482,11 +486,11 @@ func main() {
 	}
 
 	// 활성 데이터 소스 목록 전달 (상태탭 표시용)
-	activeSources := []string{"Binance (BTC/ETH)"}
+	activeSources := []string{"Binance"}
 	if cfg.Tiingo.APIKey != "" {
-		activeSources = append(activeSources, "Tiingo ("+strings.Join(stockSymbols, "/")+")")
-	} else if len(stockSymbols) > 0 {
-		activeSources = append(activeSources, "Yahoo Finance ("+strings.Join(stockSymbols, "/")+")")
+		activeSources = append(activeSources, "Tiingo")
+	} else {
+		activeSources = append(activeSources, "Yahoo Finance")
 	}
 	apiSrv.WithDataSources(activeSources)
 	if cfg.APIToken != "" {

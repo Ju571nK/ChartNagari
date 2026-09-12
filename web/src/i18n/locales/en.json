@@ -1,4 +1,93 @@
 {
+  "backtestPrep": {
+    "title": "Backtest preparation",
+    "select": "Select an instrument.",
+    "loading": "Checking complete backtest history…",
+    "error": "Could not check backtest data. Check the server version and connection, then retry.",
+    "empty": "No historical data. Enable the instrument and wait for collection.",
+    "insufficient": "Not enough candles for the engine warmup and an entry/exit. Wait for more data or choose another timeframe.",
+    "ready": "Data is sufficient to run. This does not guarantee that a rule will produce trades.",
+    "count": "{{count}} candles in full history; minimum {{minimum}} required.",
+    "range": "Stored candle start times",
+    "multipliers": "TP× is the take-profit distance in ATR units (default 2); SL× is the stop-loss distance (default 1). ATR measures recent price movement. These are not return percentages. Valid range: 0.5–10.",
+    "caution": "Simulated historical results are not live orders or a forecast. Rule matches, costs and market conditions can change; past performance does not guarantee future returns.",
+    "tp": "Take-profit ATR multiplier",
+    "sl": "Stop-loss ATR multiplier",
+    "runError": "Backtest failed. Check the data and retry",
+    "noTrades": "No simulated trades matched these settings. This is not a 0% success forecast; try another rule, timeframe or a longer history."
+  },
+  "experience": {
+    "label": "View mode",
+    "help": "How to read this chart",
+    "beginnerHelp": "Start with price, timeframe and recent signals. Advanced overlays are hidden; choose Expert in the header to show them.",
+    "expertHelp": "Advanced overlays are available. Expand the explanations below before interpreting a pattern.",
+    "terms": {
+      "timeframe": {
+        "name": "Timeframe",
+        "help": "1H means one candle per hour; 1D means one candle per day."
+      },
+      "signal": {
+        "name": "Signal",
+        "help": "A rule matched historical prices. It is not a guaranteed outcome or an order."
+      },
+      "ict": {
+        "name": "ICT",
+        "help": "A collection of price-pattern rules around liquidity and trading sessions."
+      },
+      "smc": {
+        "name": "SMC",
+        "help": "Rules describing breaks or changes in market price structure."
+      },
+      "fvg": {
+        "name": "FVG",
+        "help": "Fair Value Gap: a three-candle price gap zone, not a guaranteed fill."
+      },
+      "ob": {
+        "name": "OB",
+        "help": "Order Block: a candle-based potential reaction zone, not proof of institutional orders."
+      },
+      "wyckoff": {
+        "name": "Wyckoff / W.Phase / Zones",
+        "help": "Pattern-based estimates of accumulation or distribution phases and their price zones."
+      },
+      "ta": {
+        "name": "TA",
+        "help": "Technical Analysis: indicators such as RSI, averages, volume and support/resistance."
+      },
+      "vix": {
+        "name": "VIX",
+        "help": "A separate US equity volatility index, not the selected instrument price."
+      }
+    }
+  },
+  "symbolFlow": {
+    "duplicate": "This instrument is already registered.",
+    "registered": "{{symbol}} registered. Registration does not mean price data is ready.",
+    "notFound": "Instrument not confirmed. Check the symbol and supported market before adding.",
+    "validationError": "The validation provider could not be reached. Edit the symbol to retry; registration is disabled until verified.",
+    "runtimeHelp": "Changes are applied to collection and analysis automatically. Existing workers stop before the new list starts; initial data collection may take time."
+  },
+  "marketData": {
+    "title": "Instrument data",
+    "idle": "Select an instrument",
+    "loading": "Loading price data…",
+    "empty": "No stored candles",
+    "ready": "Stored price data loaded",
+    "error": "Price data request failed",
+    "count": "{{count}} candles loaded (up to 200; not the full history)",
+    "lastCandle": "Last candle start",
+    "checkedAt": "Checked in this browser",
+    "timeNote": "Candle time is not collection time. Collection time is not recorded. Market hours and trading activity affect the latest candle; this display does not certify a live or healthy feed.",
+    "emptyHelp": "No candles are stored for this instrument and timeframe. Check that the instrument is enabled, try another timeframe, or retry after automatic collection.",
+    "errorHelp": "Price data could not be read. Check the server connection and retry. This is different from having no stored data.",
+    "details": "Technical details",
+    "signalsLoading": "Loading signals…",
+    "signalsError": "Signals could not be loaded. Price data is shown separately.",
+    "sourcesNote": "Configured providers, not a real-time health check."
+  },
+  "analysis_failure_title": "Analysis failed",
+  "analysis_failure_help": "No valid AI analysis was produced. This is not a neutral market signal. Check the AI provider, model name and access permissions in Settings before running again.",
+  "analysis_failure_details": "Technical error details",
   "workspace": {
     "navigation": "Workspace navigation",
     "explore": "Explore markets",
@@ -7,8 +96,8 @@
     "configure": "Configuration",
     "skip": "Skip to content",
     "terminal": "Market research workspace",
-    "connected": "Live feed connected",
-    "disconnected": "Live feed reconnecting",
+    "connected": "Server connection established",
+    "disconnected": "Reconnecting to server",
     "timeframe": "Timeframe",
     "chooseSymbol": "Select an instrument",
     "retry": "Try again",
@@ -458,7 +547,7 @@
   "settings.section_ai": "AI / LLM",
   "settings.section_mcp": "MCP",
   "settings.section_advanced": "Advanced",
-    "settings.ai_provider_ollama": "AI Provider (Ollama)",
+  "settings.ai_provider_ollama": "AI Provider (Ollama)",
   "ollama.state_ready": "Ready — model loaded",
   "ollama.state_no_model": "Ready, model not pulled",
   "ollama.state_not_running": "Installed, not running",
@@ -468,7 +557,7 @@
   "ollama.start_ollama": "Start Ollama",
   "ollama.install_ollama": "Install Ollama",
   "ollama.enable_sidecar": "Enable Docker sidecar",
-  "ollama.loading": "Loading\u2026",
+  "ollama.loading": "Loading…",
   "ollama.test_connection": "Test connection",
   "ollama.retry_status": "Refresh status",
   "ollama.detector_not_configured": "Ollama detector not configured on the server",
@@ -491,7 +580,7 @@
   "ollama.sidecar_already_configured": "Already configured",
   "ollama.try_again": "Try again",
   "ollama.test_ok": "OK ({{ms}} ms)",
-  "ollama.testing": "Testing\u2026",
+  "ollama.testing": "Testing…",
   "my_trades.title": "My Trades",
   "my_trades.summary.took": "Took",
   "my_trades.summary.win_rate": "Win Rate",
@@ -509,14 +598,14 @@
   "my_trades.period.90d": "90 days",
   "my_trades.period.365d": "1 year",
   "my_trades.period.all": "All time",
-  "my_trades.action.took": "\u2705 Took",
-  "my_trades.action.skipped": "\u274c Skipped",
-  "my_trades.action.win": "\ud83d\udcb0 Win",
-  "my_trades.action.loss": "\ud83d\udcb8 Loss",
-  "my_trades.action.be": "\u2696 BE",
-  "my_trades.action.undo": "\u21ba Undo",
-  "my_trades.action.edit": "\u21ba Edit",
-  "my_trades.empty.pending": "No pending signals \u2014 all caught up \ud83c\udf89",
+  "my_trades.action.took": "✅ Took",
+  "my_trades.action.skipped": "❌ Skipped",
+  "my_trades.action.win": "💰 Win",
+  "my_trades.action.loss": "💸 Loss",
+  "my_trades.action.be": "⚖ BE",
+  "my_trades.action.undo": "↺ Undo",
+  "my_trades.action.edit": "↺ Edit",
+  "my_trades.empty.pending": "No pending signals — all caught up 🎉",
   "my_trades.empty.history": "No marked trades yet.",
   "my_trades.column.hit_rate": "Hit Rate",
   "my_trades.column.skip_rate": "Skip Rate",
@@ -524,7 +613,7 @@
   "performance.my_took": "My Took",
   "performance.my_hit_rate": "My Hit Rate",
   "performance.my_skip_rate": "My Skip Rate",
-  "performance.delta_vs_bt": "\u0394 vs BT",
+  "performance.delta_vs_bt": "Δ vs BT",
   "override": {
     "score_threshold": "Score threshold",
     "cooldown_hours": "Cooldown (hours)",

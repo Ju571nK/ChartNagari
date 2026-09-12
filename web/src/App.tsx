@@ -5,6 +5,9 @@ import i18n from './i18n'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import { WorkspaceProvider, useWorkspace } from './Workspace'
 import { WorkspaceNav, pageKeys } from './WorkspaceNav'
+import { MarketDataStatus, useMarketData } from './MarketDataStatus'
+import { ChartGuide, ExperienceMode, loadUIMode, UI_MODE_KEY, type UIMode } from './ExperienceMode'
+import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparation'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 
 // Lazy-loaded tab panels: split out of the initial bundle since they only
@@ -51,12 +54,6 @@ import {
 
 type Tab = 'symbols' | 'rules' | 'status' | 'chart' | 'backtest' | 'paper' | 'report' | 'history' | 'alert' | 'performance' | 'analysis' | 'settings' | 'price-alerts' | 'calendar' | 'execution' | 'my-trades'
 
-type UIMode = 'beginner' | 'expert'
-const UI_MODE_KEY = 'chartnagari_ui_mode'
-function loadUIMode(): UIMode {
-  const v = localStorage.getItem(UI_MODE_KEY)
-  return v === 'beginner' ? 'beginner' : 'expert'
-}
 
 interface OHLCVBar {
   time: number
@@ -326,8 +323,12 @@ interface SymbolProfileData {
   profile: string
 }
 
-function SymbolsTab() {
+export function SymbolsTab() {
   const { t } = useTranslation()
+  const { navigate, setSymbol } = useWorkspace()
+  const [addedSymbol, setAddedSymbol] = useState('')
+  const [dataRevision, setDataRevision] = useState(0)
+  const addedData = useMarketData(addedSymbol, '1H', dataRevision)
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -336,7 +337,7 @@ function SymbolsTab() {
   const [newExchange, setNewExchange] = useState('')
   const [adding, setAdding] = useState(false)
   const [marketFilter, setMarketFilter] = useState('all')
-  const [validateStatus, setValidateStatus] = useState<'idle' | 'loading' | 'found' | 'not_found'>('idle')
+  const [validateStatus, setValidateStatus] = useState<'idle' | 'loading' | 'found' | 'not_found' | 'error'>('idle')
   const [validatedName, setValidatedName] = useState('')
   const [profiles, setProfiles] = useState<ProfileInfo[]>([])
   const [symbolProfiles, setSymbolProfiles] = useState<Record<string, string>>({})
@@ -417,18 +418,21 @@ function SymbolsTab() {
   // Debounced symbol validation against external APIs
   useEffect(() => {
     const sym = newSymbol.trim()
-    if (sym.length < 2) {
+    if (!sym) {
       setValidateStatus('idle')
       setValidatedName('')
       return
     }
     setValidateStatus('loading')
+    setNewExchange('')
+    const controller = new AbortController()
     const timer = setTimeout(async () => {
       try {
         const result = await apiFetch<{ found: boolean; type?: string; exchange?: string; name?: string }>(
-          `/symbols/validate?symbol=${encodeURIComponent(sym)}`
+          `/symbols/validate?symbol=${encodeURIComponent(sym)}`, { signal: controller.signal }
         )
-        if (result.found && result.type && result.exchange !== undefined) {
+        if (controller.signal.aborted) return
+        if (result.found && result.type && result.exchange) {
           setNewType(result.type as 'crypto' | 'stock')
           setNewExchange(result.exchange)
           setValidatedName(result.name ?? '')
@@ -438,11 +442,12 @@ function SymbolsTab() {
           setValidatedName('')
         }
       } catch {
-        setValidateStatus('not_found')
+        if (controller.signal.aborted) return
+        setValidateStatus('error')
         setValidatedName('')
       }
     }, 600)
-    return () => clearTimeout(timer)
+    return () => { clearTimeout(timer); controller.abort() }
   }, [newSymbol])
 
   const toggle = useCallback(async (sym: SymbolItem, enabled: boolean) => {
@@ -465,7 +470,9 @@ function SymbolsTab() {
   }, [t])
 
   const add = useCallback(async () => {
-    if (!newSymbol.trim()) return
+    if (!newSymbol.trim() || adding || validateStatus !== 'found' || !newExchange.trim()) return
+    if (symbols.some(item => item.symbol.toUpperCase() === newSymbol.trim().toUpperCase())) { setError(t('symbolFlow.duplicate')); return }
+    setError('')
     setAdding(true)
     try {
       await apiFetch<null>('/symbols', {
@@ -473,6 +480,7 @@ function SymbolsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol: newSymbol.trim().toUpperCase(), type: newType, exchange: newExchange.trim() }),
       })
+      setAddedSymbol(newSymbol.trim().toUpperCase())
       setNewSymbol('')
       setNewExchange('')
       setValidateStatus('idle')
@@ -483,14 +491,18 @@ function SymbolsTab() {
     } finally {
       setAdding(false)
     }
-  }, [newSymbol, newType, newExchange, reload, t])
+  }, [newSymbol, newType, newExchange, reload, t, adding, validateStatus, symbols])
 
   if (loading) return <p className="loading">{t('loading')}</p>
-  if (error) return <p className="error-msg">{t('error')}: {error}</p>
-
   return (
     <>
       <p className="section-title">{t('symbol_management')}</p>
+      {error && <p role="alert" className="error-msg">{error}</p>}
+      {addedSymbol && <div>
+        <p role="status">{t('symbolFlow.registered', { symbol: addedSymbol })}</p>
+        <MarketDataStatus data={addedData} symbol={addedSymbol} timeframe="1H" onRetry={() => setDataRevision(n => n + 1)} onManage={() => setAddedSymbol('')} />
+        <button onClick={() => { setSymbol(addedSymbol); navigate('chart') }}>{t('chart')}</button>
+      </div>}
       {markets.length > 1 && (
         <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
           {markets.map(m => (
@@ -564,6 +576,7 @@ function SymbolsTab() {
         <select
           className="chart-select"
           value={newType}
+          disabled={adding || validateStatus === 'found'}
           onChange={(e) => setNewType(e.target.value as 'crypto' | 'stock')}
         >
           <option value="stock">{t('stock')}</option>
@@ -575,7 +588,7 @@ function SymbolsTab() {
             style={{ width: '100%' }}
             placeholder={t('symbol_placeholder_nvda')}
             value={newSymbol}
-            onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+            onChange={(e) => { setValidateStatus('idle'); setNewSymbol(e.target.value.toUpperCase()) }}
             onKeyDown={(e) => e.key === 'Enter' && add()}
           />
           {validateStatus === 'loading' && (
@@ -585,8 +598,9 @@ function SymbolsTab() {
             <span className="item-meta" style={{ color: 'var(--safe)' }}>✓ {validatedName}</span>
           )}
           {validateStatus === 'not_found' && (
-            <span className="item-meta" style={{ color: 'var(--warning)' }}>{t('not_verified')}</span>
+            <span role="status" className="item-meta">{t('symbolFlow.notFound')}</span>
           )}
+          {validateStatus === 'error' && <span role="alert">{t('symbolFlow.validationError')}</span>}
         </div>
         {newType === 'crypto' ? (
           <input
@@ -600,16 +614,17 @@ function SymbolsTab() {
             className="symbol-input"
             placeholder={t('exchange_placeholder')}
             value={newExchange}
+            readOnly={validateStatus === 'found'}
             onChange={(e) => setNewExchange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && add()}
           />
         )}
-        <button className="run-btn" onClick={add} disabled={adding || !newSymbol.trim()}>
+        <button className="run-btn" onClick={add} disabled={adding || validateStatus !== 'found' || !newSymbol.trim() || !newExchange.trim()}>
           {adding ? '...' : t('add')}
         </button>
       </div>
       <p className="item-meta" style={{ marginTop: 8 }}>
-        {t('restart_notice')}
+        {t('symbolFlow.runtimeHelp')}
       </p>
     </>
   )
@@ -698,6 +713,9 @@ function vixStatusLabel(vix: number, t: (k: string) => string): { label: string;
 
 function StatusTab() {
   const { t } = useTranslation()
+  const { symbol, timeframe, navigate } = useWorkspace()
+  const [dataRevision, setDataRevision] = useState(0)
+  const marketData = useMarketData(symbol, timeframe, dataRevision)
   const [status, setStatus] = useState<StatusData | null>(null)
   const [vix, setVix] = useState<VIXData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -735,6 +753,8 @@ function StatusTab() {
         <span>{t('pipeline_running')}</span>
         <span className="status-uptime">{t('uptime_label', { time: fmtUptime(status.uptime_sec) })}</span>
       </div>
+
+      <MarketDataStatus data={marketData} symbol={symbol} timeframe={timeframe} onRetry={() => setDataRevision(n => n + 1)} onManage={() => navigate('symbols')} />
 
       {vix && vix.available && (() => {
         const { label, color } = vixStatusLabel(vix.current, t)
@@ -786,10 +806,11 @@ function StatusTab() {
       })()}
 
       <p className="section-title">{t('data_sources')}</p>
+      <p className="market-data-note">{t('marketData.sourcesNote')}</p>
       <div className="source-list">
         {(status.data_sources ?? []).map((src) => (
           <div key={src} className="source-item">
-            <span className="source-dot">✅</span>
+            <span className="source-dot" aria-hidden="true">•</span>
             <span>{src}</span>
           </div>
         ))}
@@ -839,22 +860,29 @@ const PHASE_LABELS: Record<string, string> = {
   ranging:      'Ranging',
 }
 
-function ChartTab({ uiMode }: { uiMode: UIMode }) {
+export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf, navigate } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [marketFilter, setMarketFilter] = useState('all')
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [signalLoading, setSignalLoading] = useState(false)
+  const [signalError, setSignalError] = useState('')
   const [signals, setSignals] = useState<SignalBar[]>([])
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(loadSignalFilter)
   const [wyckoffEnabled, setWyckoffEnabled] = useState(false)
   const [wyckoffData, setWyckoffData] = useState<WyckoffAnalysis | null>(null)
-  const [enabledOverlays, setEnabledOverlays] = useState<Set<OverlayType>>(loadOverlayToggles)
+  const [enabledOverlays, setEnabledOverlays] = useState<Set<OverlayType>>(() => uiMode === 'expert' ? loadOverlayToggles() : new Set())
+  useEffect(() => {
+    setEnabledOverlays(uiMode === 'expert' ? loadOverlayToggles() : new Set())
+    if (uiMode === 'beginner') setWyckoffEnabled(false)
+  }, [uiMode])
   const [overrideModalOpen, setOverrideModalOpen] = useState(false)
   const [profilesForChart, setProfilesForChart] = useState<ProfileInfo[]>([])
   const [selectedSignal, setSelectedSignal] = useState(0)
   const [reload, setReload] = useState(0)
+  const marketData = useMarketData(symbol, tf, reload)
+  const loading = marketData.phase === 'loading'
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -972,13 +1000,13 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
     }
   }, [])
 
-  // Load OHLCV + signals whenever symbol or TF changes
+  // Price and signal requests have independent readiness and error states.
   useEffect(() => {
-    if (!symbol || !seriesRef.current) return
+    if (!seriesRef.current) return
     const controller = new AbortController()
     setSelectedSignal(0)
-    setLoading(true)
-    setError('')
+    setSignalLoading(!!symbol)
+    setSignalError('')
     // Detach old markers plugin before loading new data
     if (markersPluginRef.current) {
       markersPluginRef.current.detach()
@@ -994,36 +1022,22 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
     volRef.current?.setData([])
     setSignals([])
 
-    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent(symbol)}/${tf}?limit=200`, { signal: controller.signal })
-      .then((bars) => {
-        if (controller.signal.aborted) return []
-        seriesRef.current?.setData(
-          bars.map((b) => ({
-            time: b.time as UTCTimestamp,
-            open: b.open,
-            high: b.high,
-            low: b.low,
-            close: b.close,
-          })),
-        )
-        volRef.current?.setData(
-          bars.map((b) => ({
-            time: b.time as UTCTimestamp,
-            value: b.volume,
-            color: b.close >= b.open
-              ? 'rgba(143,203,155,0.35)'
-              : 'rgba(143,128,115,0.35)',
-          })),
-        )
-        return apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`, { signal: controller.signal })
-      })
+    if (!symbol) return () => controller.abort()
+    apiFetch<SignalBar[]>(`/signals?symbol=${encodeURIComponent(symbol)}&limit=50`, { signal: controller.signal })
       .then((sigs) => {
         if (!controller.signal.aborted) setSignals(sigs)
       })
-      .catch((e: Error) => { if (!controller.signal.aborted) setError(e.message) })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      .catch((e: Error) => { if (!controller.signal.aborted) setSignalError(e.message) })
+      .finally(() => { if (!controller.signal.aborted) setSignalLoading(false) })
     return () => controller.abort()
   }, [symbol, tf, reload])
+
+  useEffect(() => {
+    const bars = marketData.bars
+    seriesRef.current?.setData(bars.map(b => ({ time: b.time as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close })))
+    volRef.current?.setData(bars.map(b => ({ time: b.time as UTCTimestamp, value: b.volume, color: b.close >= b.open ? 'rgba(143,203,155,0.35)' : 'rgba(143,128,115,0.35)' })))
+    if (bars.length) chartRef.current?.timeScale().fitContent()
+  }, [marketData.bars])
 
   // Build filtered signal markers (shared between signal and wyckoff effects)
   const buildFilteredMarkers = useCallback(() => {
@@ -1097,8 +1111,10 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
     // Clear stale phase badge/events while fetching the new symbol's Wyckoff analysis
     setWyckoffData(null)
 
-    apiFetch<WyckoffAnalysis>(`/wyckoff/${encodeURIComponent(symbol)}/${tf}`)
+    const controller = new AbortController()
+    apiFetch<WyckoffAnalysis>(`/wyckoff/${encodeURIComponent(symbol)}/${tf}`, { signal: controller.signal })
       .then((data) => {
+        if (controller.signal.aborted) return
         setWyckoffData(data)
         if (!seriesRef.current) return
         if (data.swing_high > 0) {
@@ -1124,6 +1140,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
         // Markers are rendered by the unified marker effect above via wyckoffData state
       })
       .catch(() => {/* silently ignore wyckoff fetch errors */})
+    return () => controller.abort()
   }, [wyckoffEnabled, symbol, tf])
 
   // Overlay price lines effect: FVG / OB zones from signals, Wyckoff phase zones
@@ -1231,9 +1248,10 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
 
     if (!enabledOverlays.has('vix')) return
 
-    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent('^VIX')}/1D?limit=200`)
+    const controller = new AbortController()
+    apiFetch<OHLCVBar[]>(`/ohlcv/${encodeURIComponent('^VIX')}/1D?limit=200`, { signal: controller.signal })
       .then((bars) => {
-        if (!chartRef.current || !enabledOverlays.has('vix')) return
+        if (controller.signal.aborted || !chartRef.current || !enabledOverlays.has('vix')) return
         const vixSeries = chartRef.current.addSeries(LineSeries, {
           color: '#94a3b8',
           lineWidth: 1,
@@ -1253,6 +1271,7 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
         vixSeriesRef.current = vixSeries
       })
       .catch(() => { /* VIX not collected — silently ignore */ })
+    return () => controller.abort()
   }, [enabledOverlays, symbol, tf])
 
   return (
@@ -1415,17 +1434,19 @@ function ChartTab({ uiMode }: { uiMode: UIMode }) {
           ))}
         </div>
       )}
+      <ChartGuide mode={uiMode} />
       <div className="chart-workspace">
         <section className="chart-surface" aria-label={t('chart')} aria-busy={loading}>
           <div className="surface-heading"><strong>{symbol || t('workspace.chooseSymbol')}</strong><span>{tf}</span></div>
-          {loading && <p className="state-message" role="status">{t('chart_loading')}</p>}
+          <MarketDataStatus data={marketData} symbol={symbol} timeframe={tf} onRetry={() => setReload(n => n + 1)} onManage={() => navigate('symbols')} />
           {error && <div className="state-message" role="alert"><p>{t('no_data_error', { error })}</p><button onClick={() => setReload(n => n + 1)}>{t('workspace.retry')}</button></div>}
-          {!symbol && !loading && !error && <div className="state-message"><p>{t('no_symbols_chart')}</p><button onClick={() => navigate('symbols')}>{t('workspace.addSymbols')}</button></div>}
-          <div ref={containerRef} className="chart-area" />
+          <div ref={containerRef} className="chart-area" style={{ visibility: marketData.phase === 'ready' ? 'visible' : 'hidden', height: marketData.phase === 'ready' ? undefined : 0 }} aria-hidden={marketData.phase !== 'ready'} />
         </section>
         <aside className="signal-inspector" aria-label={t('workspace.signals')}>
           <div className="surface-heading"><strong>{t('workspace.signals')}</strong><span>{signals.filter(s => s.timeframe === tf).length}</span></div>
-          {!loading && !error && signals.filter(s => s.timeframe === tf).length === 0 && <p className="state-message">{t('workspace.noSignals')}</p>}
+          {signalLoading && <p className="state-message" role="status">{t('marketData.signalsLoading')}</p>}
+          {signalError && <div className="state-message" role="alert"><p>{t('marketData.signalsError')}</p><button onClick={() => setReload(n => n + 1)}>{t('workspace.retry')}</button></div>}
+          {!signalLoading && !signalError && marketData.phase === 'ready' && signals.filter(s => s.timeframe === tf).length === 0 && <p className="state-message">{t('workspace.noSignals')}</p>}
           <div className="signal-list">
             {signals.filter(s => s.timeframe === tf).map((s, index) => <button key={s.time + s.rule + s.direction} className={'signal-row' + (index === selectedSignal ? ' selected' : '')} aria-pressed={index === selectedSignal} onClick={() => setSelectedSignal(index)}>
               <span className={s.direction === 'LONG' ? 'dir-long' : s.direction === 'SHORT' ? 'dir-short' : ''}>{s.direction}</span>
@@ -1570,7 +1591,7 @@ interface RuleStats {
 function fmt2(n: number) { return n.toFixed(2) }
 function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
-function BacktestTab({ uiMode }: { uiMode: UIMode }) {
+export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
@@ -1579,11 +1600,23 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   const [ruleFilter, setRuleFilter] = useState('')
   const [tpMult, setTpMult] = useState(2.0)
   const [slMult, setSlMult] = useState(1.0)
+  const [preparationRevision, setPreparationRevision] = useState(0)
+  const preparation = useBacktestPreparation(symbol, tf, preparationRevision)
+  const canRun = preparation.data?.ready === true && Number.isFinite(tpMult) && Number.isFinite(slMult) && tpMult >= 0.5 && tpMult <= 10 && slMult >= 0.5 && slMult <= 10
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [ruleStats, setRuleStats] = useState<RuleStats[] | null>(null)
   const [rulesLoading, setRulesLoading] = useState(false)
+  const runController = useRef<AbortController | null>(null)
+  useEffect(() => {
+    setResult(null)
+    setRuleStats(null)
+    setError('')
+    setLoading(false)
+    setRulesLoading(false)
+    return () => runController.current?.abort()
+  }, [symbol, tf, ruleFilter, tpMult, slMult])
   const [selectedTrade, setSelectedTrade] = useState<number | null>(null)
   const btContainerRef = useRef<HTMLDivElement>(null)
   const btChartRef = useRef<IChartApi | null>(null)
@@ -1629,39 +1662,47 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   }, [symbols, marketFilter])
 
   const run = useCallback(async () => {
-    if (!symbol) return
+    if (!symbol || !canRun) return
+    runController.current?.abort()
+    const controller = new AbortController()
+    runController.current = controller
     setLoading(true)
     setError('')
     setResult(null)
     try {
       const r = await apiFetch<BacktestResult>('/backtest', {
+        signal: controller.signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol, timeframe: tf, rule: ruleFilter, tp_mult: tpMult, sl_mult: slMult }),
       })
-      setResult(r)
+      if (!controller.signal.aborted) setResult(r)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('unknown_error'))
+      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : t('unknown_error'))
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }, [symbol, tf, ruleFilter, tpMult, slMult, t])
+  }, [symbol, tf, ruleFilter, tpMult, slMult, t, canRun])
 
   const runPerRule = useCallback(async () => {
-    if (!symbol) return
+    if (!symbol || !canRun) return
+    runController.current?.abort()
+    const controller = new AbortController()
+    runController.current = controller
+    setError('')
     setRulesLoading(true)
     setRuleStats(null)
     try {
       const stats = await apiFetch<RuleStats[]>(
-        `/backtest/rules?symbol=${encodeURIComponent(symbol)}&timeframe=${tf}&tp_mult=${tpMult}&sl_mult=${slMult}`
+        `/backtest/rules?symbol=${encodeURIComponent(symbol)}&timeframe=${tf}&tp_mult=${tpMult}&sl_mult=${slMult}`, { signal: controller.signal }
       )
-      setRuleStats(stats)
+      if (!controller.signal.aborted) setRuleStats(stats)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('unknown_error'))
+      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : t('unknown_error'))
     } finally {
-      setRulesLoading(false)
+      if (!controller.signal.aborted) setRulesLoading(false)
     }
-  }, [symbol, tf, tpMult, slMult, t])
+  }, [symbol, tf, tpMult, slMult, t, canRun])
 
   // Create backtest chart once the result container is rendered
   useEffect(() => {
@@ -1788,6 +1829,7 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   return (
     <>
       <p className="section-title">{t('backtest_settings')}</p>
+      <BacktestPreparation data={preparation.data} error={preparation.error} symbol={symbol} onRetry={() => setPreparationRevision(n => n + 1)} />
       {btMarkets.length > 1 && (
         <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
           {btMarkets.map(m => (
@@ -1843,6 +1885,7 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="item-meta">TP×</span>
           <input
+            aria-label={t('backtestPrep.tp')}
             className="symbol-input"
             type="number"
             step="0.5"
@@ -1857,6 +1900,7 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="item-meta">SL×</span>
           <input
+            aria-label={t('backtestPrep.sl')}
             className="symbol-input"
             type="number"
             step="0.5"
@@ -1869,22 +1913,23 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
           />
         </div>
 
-        <button className="run-btn" onClick={run} disabled={loading || !symbol}>
+        <button className="run-btn" onClick={run} disabled={loading || rulesLoading || !canRun}>
           {loading ? t('calculating') : t('run')}
         </button>
         <button
           className="run-btn"
           onClick={runPerRule}
-          disabled={rulesLoading || !symbol}
+          disabled={rulesLoading || loading || !canRun}
           style={{ background: 'rgba(91,146,121,0.12)', color: 'var(--green)', border: '1px solid rgba(91,146,121,0.4)' }}
         >
           {rulesLoading ? t('analyzing_rules') : t('per_rule_analysis')}
         </button>
       </div>
 
-      {error && <p className="error-msg">{t('error')}: {error}</p>}
+      {error && <p role="alert" className="error-msg">{t('backtestPrep.runError')}: {error}</p>}
 
-      {result && !loading && (
+      {result && !loading && result.trades === 0 && <p role="status">{t('backtestPrep.noTrades')}</p>}
+      {result && !loading && result.trades > 0 && (
         <>
           <p className="section-title">
             {t('backtest_result_summary', { symbol: result.symbol, timeframe: result.timeframe, bars: result.bars, trades: result.trades, tp: tpMult, sl: slMult })}
@@ -2095,7 +2140,7 @@ function BacktestTab({ uiMode }: { uiMode: UIMode }) {
             {t('per_rule_result_summary', { symbol, timeframe: tf, tp: tpMult, sl: slMult })}
           </p>
           {ruleStats.length === 0 ? (
-            <p className="loading">{t('no_trade_data')}</p>
+            <p role="status" className="loading">{t('backtestPrep.noTrades')}</p>
           ) : (
             <>
               <div className="backtest-table-wrap">
@@ -4138,6 +4183,7 @@ function WorkspaceApp() {
       <header className="workspace-header">
         <div className="workspace-brand"><span>Chart</span> Nagari<small>{t('workspace.terminal')}</small></div>
         <div className="workspace-tools">
+          <ExperienceMode mode={uiMode} onChange={handleSetUiMode} />
           <span className={'connection-state' + (wsConnected ? ' connected' : '')} role="status">
             <span aria-hidden="true">●</span> {t(wsConnected ? 'workspace.connected' : 'workspace.disconnected')}
           </span>

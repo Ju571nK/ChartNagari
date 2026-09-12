@@ -94,6 +94,16 @@ table { font-variant-numeric: tabular-nums; }
 .state-message { padding: 20px; font-size: 0.85rem; line-height: 1.6; color: var(--muted); }
 .state-message[role="alert"] { color: var(--danger); }
 .state-message button { margin-top: 12px; }
+.market-data-status { padding: 12px 16px; font-size: 0.8rem; line-height: 1.5; border-bottom: 1px solid rgba(91,146,121,0.2); }
+.market-data-status p { margin: 6px 0; overflow-wrap: anywhere; }
+.market-data-status [role="alert"] { color: var(--danger); }
+.market-data-note { color: var(--muted); }
+.market-data-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.chart-guide { margin: 12px 0; padding: 12px; border: 1px solid rgba(91,146,121,0.25); border-radius: 8px; font-size: 0.85rem; line-height: 1.6; }
+.chart-guide summary { cursor: pointer; }
+.chart-guide dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.chart-guide dt { font-weight: 600; }
+.chart-guide dd { margin: 4px 0 0; color: var(--muted); }
 .signal-list { max-height: 260px; overflow-y: auto; }
 .signal-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid rgba(91,146,121,0.15); border-radius: 0; padding: 12px 14px; font-size: 0.75rem; }
 .signal-row.selected { background: rgba(91,146,121,0.12); }

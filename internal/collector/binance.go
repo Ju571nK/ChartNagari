@@ -51,7 +51,7 @@ func (c *BinanceCollector) Start(ctx context.Context) {
 		Msg("[Binance] collector started")
 
 	// ── 과거 데이터 선행 수집 (REST) ─────────────────────────────────
-	c.fetchHistory()
+	c.fetchHistoryContext(ctx)
 
 	for {
 		select {
@@ -80,6 +80,8 @@ func (c *BinanceCollector) connect(ctx context.Context, url string) error {
 		return fmt.Errorf("WebSocket connection failed: %w", err)
 	}
 	defer conn.Close()
+	stopClose := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopClose()
 
 	log.Info().Msg("[Binance] WebSocket connected")
 
@@ -152,15 +154,15 @@ func (s *flexStr) UnmarshalJSON(data []byte) error {
 }
 
 type binanceKline struct {
-	Symbol    string  `json:"s"`
-	Interval  string  `json:"i"`
-	OpenTime  int64   `json:"t"` // milliseconds
-	Open      flexStr `json:"o"`
-	High      flexStr `json:"h"`
-	Low       flexStr `json:"l"`
-	Close     flexStr `json:"c"`
-	Volume    flexStr `json:"v"`
-	IsClosed  bool    `json:"x"` // true = candle closed
+	Symbol   string  `json:"s"`
+	Interval string  `json:"i"`
+	OpenTime int64   `json:"t"` // milliseconds
+	Open     flexStr `json:"o"`
+	High     flexStr `json:"h"`
+	Low      flexStr `json:"l"`
+	Close    flexStr `json:"c"`
+	Volume   flexStr `json:"v"`
+	IsClosed bool    `json:"x"` // true = candle closed
 }
 
 func (c *BinanceCollector) handleMessage(raw []byte) error {
@@ -241,9 +243,16 @@ func parseFloat(s string) float64 {
 // fetchHistory pre-loads historical OHLCV bars from the Binance REST klines API.
 // Called once on Start() so the chart and analysis engine have enough data immediately.
 func (c *BinanceCollector) fetchHistory() {
-	client := &http.Client{Timeout: 15 * time.Second}
+	c.fetchHistoryContext(context.Background())
+}
+
+func (c *BinanceCollector) fetchHistoryContext(ctx context.Context) {
+	client := generationClient(&http.Client{Timeout: 15 * time.Second}, ctx)
 	for _, sym := range c.symbols {
 		for _, tf := range c.timeframes {
+			if ctx.Err() != nil {
+				return
+			}
 			interval, ok := BinanceTFMap[tf]
 			if !ok {
 				continue

@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify'
 import { useWorkspace, timeframes } from './Workspace'
 
 interface ScenarioResult {
+  status?: string
   id?: number
   symbol: string
   bull_pct: number
@@ -20,6 +21,7 @@ interface ScenarioResult {
 }
 
 interface HistoryRecord {
+  status?: string
   id: number
   symbol: string
   final: string
@@ -28,6 +30,11 @@ interface HistoryRecord {
   bear_pct: number
   sideways_pct: number
   created_at: string
+}
+
+function analysisFailed(record: Pick<ScenarioResult, 'status' | 'final' | 'bull_pct' | 'bear_pct' | 'sideways_pct'>) {
+  return record.status === 'failed' || record.final === 'ERROR' ||
+    (record.bull_pct === 0 && record.bear_pct === 0 && record.sideways_pct === 0)
 }
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
@@ -185,7 +192,7 @@ export function AnalysisTab() {
   const handlePrint = () => window.print()
 
   const handleTelegram = async () => {
-    if (!result) return
+    if (!result || analysisFailed(result)) return
     setExporting(true)
     setExportMsg(null)
     try {
@@ -276,7 +283,20 @@ export function AnalysisTab() {
           </div>
         )}
 
-        {result && (
+        {result && analysisFailed(result) && (
+          <div role="alert" style={cardStyle}>
+            <h2>{t('analysis_failure_title')}</h2>
+            <p>{t('analysis_failure_help')}</p>
+            {result.aggregator_reason && (
+              <details>
+                <summary>{t('analysis_failure_details')}</summary>
+                <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{result.aggregator_reason}</pre>
+              </details>
+            )}
+          </div>
+        )}
+
+        {result && !analysisFailed(result) && (
           <>
             {/* Probability bars */}
             <div style={cardStyle}>
@@ -364,11 +384,20 @@ export function AnalysisTab() {
           )}
 
           {history.map(rec => {
+            const failed = analysisFailed(rec)
             const finalColor = rec.final === 'BULL' ? 'var(--mint)' : rec.final === 'BEAR' ? 'var(--muted)' : 'var(--green)'
             const date = new Date(rec.created_at).toLocaleString(i18n.language, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
             return (
               <div
                 key={rec.id}
+                role="button"
+                tabIndex={0}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    void loadDetail(rec.id)
+                  }
+                }}
                 onClick={() => loadDetail(rec.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '12px',
@@ -382,12 +411,14 @@ export function AnalysisTab() {
                 <span style={{ fontSize: '0.75rem', color: 'var(--muted)', minWidth: '80px' }}>{date}</span>
                 <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)', minWidth: '48px' }}>{rec.symbol}</span>
                 <span style={{ fontSize: '0.78rem', fontWeight: 700, color: finalColor, minWidth: '72px' }}>
-                  {rec.final === 'BULL' ? '↑ BULL' : rec.final === 'BEAR' ? '↓ BEAR' : '→ SIDEWAYS'}
+                  {failed ? t('analysis_failure_title') : rec.final === 'BULL' ? '↑ BULL' : rec.final === 'BEAR' ? '↓ BEAR' : '→ SIDEWAYS'}
                 </span>
+                {!failed && <>
                 <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
                   {rec.bull_pct.toFixed(0)}% / {rec.bear_pct.toFixed(0)}% / {rec.sideways_pct.toFixed(0)}%
                 </span>
                 <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: 'auto' }}>{rec.confidence}</span>
+                </>}
               </div>
             )
           })}

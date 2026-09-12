@@ -11,19 +11,21 @@ import (
 
 // AnalysisRecord is a row from the analysis_history table.
 type AnalysisRecord struct {
-	ID          int64                  `json:"id"`
-	Symbol      string                 `json:"symbol"`
-	Final       string                 `json:"final"`
-	Confidence  string                 `json:"confidence"`
-	BullPct     float64                `json:"bull_pct"`
-	BearPct     float64                `json:"bear_pct"`
-	SidewaysPct float64                `json:"sideways_pct"`
+	Status      string                  `json:"status"`
+	ID          int64                   `json:"id"`
+	Symbol      string                  `json:"symbol"`
+	Final       string                  `json:"final"`
+	Confidence  string                  `json:"confidence"`
+	BullPct     float64                 `json:"bull_pct"`
+	BearPct     float64                 `json:"bear_pct"`
+	SidewaysPct float64                 `json:"sideways_pct"`
 	Result      *analyst.ScenarioResult `json:"result,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
+	CreatedAt   time.Time               `json:"created_at"`
 }
 
 // SaveAnalysis persists a ScenarioResult to the analysis_history table.
 func (db *DB) SaveAnalysis(result analyst.ScenarioResult) (int64, error) {
+	result.NormalizeStatus()
 	data, err := json.Marshal(result)
 	if err != nil {
 		return 0, fmt.Errorf("분석 결과 직렬화 실패: %w", err)
@@ -75,6 +77,7 @@ func (db *DB) GetAnalysisHistory(symbol string, limit int) ([]AnalysisRecord, er
 			return nil, err
 		}
 		r.CreatedAt = time.Unix(ts, 0).UTC()
+		r.normalizeStatus()
 		records = append(records, r)
 	}
 	return records, rows.Err()
@@ -99,6 +102,18 @@ func (db *DB) GetAnalysisByID(id int64) (*AnalysisRecord, error) {
 	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
 		return nil, fmt.Errorf("JSON 파싱 실패: %w", err)
 	}
+	result.NormalizeStatus()
+	result.ID = r.ID
 	r.Result = &result
+	r.normalizeStatus()
 	return &r, nil
+}
+
+func (r *AnalysisRecord) normalizeStatus() {
+	summary := analyst.ScenarioResult{Final: r.Final, BullPct: r.BullPct, BearPct: r.BearPct, SidewaysPct: r.SidewaysPct}
+	summary.NormalizeStatus()
+	r.Status = summary.Status
+	if summary.Failed() {
+		r.Final, r.Confidence = "ERROR", ""
+	}
 }

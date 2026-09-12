@@ -14,6 +14,14 @@ Format:
 
 ---
 
+## [Unreleased]
+
+### Added
+- Issue #32, phase 1: read-only HTF calibration history inventory in Backtest for
+  1H/4H signals, with ten ATR deciles, counts, distinct UTC dates and two-year
+  history gates. Automatic calibration remains blocked: stored post-filter
+  signals are not unbiased calibration samples. Existing scoring is unchanged.
+
 ## [2.13.0.0] - 2026-09-12
 
 ### Changed

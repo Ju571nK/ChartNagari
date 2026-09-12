@@ -498,6 +498,7 @@ func (s *Server) Handler() http.Handler {
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
 	mux.HandleFunc("GET /api/backtest/readiness", s.getBacktestReadiness)
+	mux.HandleFunc("GET /api/backtest/htf-readiness", s.getHTFReadiness)
 	mux.HandleFunc("GET /api/backtest/rules", s.runPerRuleBacktest)
 	mux.HandleFunc("GET /api/performance/rules", s.getPerformanceRules)
 	mux.HandleFunc("GET /api/export/pinescript", s.exportPineScript)

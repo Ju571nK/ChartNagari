@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useUXCopy } from './uxCopy'
 
 export interface Readiness { symbol: string; timeframe: string; bars: number; minimum_bars: number; from: number | null; to: number | null; ready: boolean }
 export function useBacktestPreparation(symbol: string, timeframe: string, revision: number) {
@@ -22,20 +23,23 @@ export function useBacktestPreparation(symbol: string, timeframe: string, revisi
   return state.key === key ? state : { key }
 }
 
-export function BacktestPreparation({ data, error, symbol, onRetry }: { data?: Readiness; error?: string; symbol: string; onRetry: () => void }) {
+export function BacktestPreparation({ data, error, symbol, onRetry, expert = false }: { data?: Readiness; error?: string; symbol: string; onRetry: () => void; expert?: boolean }) {
   const { t, i18n } = useTranslation()
+  const ux = useUXCopy()
   const format = (time: number) => new Date(time * 1000).toLocaleString(i18n.language, { timeZoneName: 'short' })
   const state = !symbol ? 'select' : error ? 'error' : !data ? 'loading' : data.bars === 0 ? 'empty' : !data.ready ? 'insufficient' : 'ready'
   return <section className="market-data-status" aria-label={t('backtestPrep.title')}>
     <p role={error ? 'alert' : 'status'}>{t(`backtestPrep.${state}`)}</p>
+    <details open={!!error || (!!data && !data.ready)}><summary>{ux.details}</summary>
     {data && <>
       <p>{t('backtestPrep.count', { count: data.bars, minimum: data.minimum_bars })}</p>
       {data.from !== null && data.to !== null && <p>{t('backtestPrep.range')}: {format(data.from)} — {format(data.to)}</p>}
     </>}
     <p>{t('backtestPrep.multipliers')}</p>
     <p>{t('backtestPrep.caution')}</p>
-    {data && <HTFReadinessPanel key={`${data.symbol}:${data.timeframe}`} symbol={data.symbol} timeframe={data.timeframe} />}
-    {symbol && (data || error) && <button onClick={onRetry}>{t('workspace.retry')}</button>}
+    </details>
+    {expert && data && <HTFReadinessPanel key={`${data.symbol}:${data.timeframe}`} symbol={data.symbol} timeframe={data.timeframe} />}
+    {symbol && (data || error) && <button onClick={onRetry}>{data?.ready ? ux.refresh : t('workspace.retry')}</button>}
   </section>
 }
 

@@ -28,6 +28,7 @@ it('saves only edited YAML fields and explicitly clears a masked secret', async 
   // Return a fresh body for each read.
   fetcher.mockImplementation(async () => new Response(JSON.stringify({ DB_PATH: 'data.db', API_TOKEN: '__configured__', SERVER_HOST: '127.0.0.1' }), { status: 200 }))
   render(<SettingsTab uiMode="beginner" onSetUiMode={vi.fn()} />)
+  fireEvent.click(await screen.findByRole('tab', { name: 'Advanced' }))
   const db = await screen.findByLabelText('Database path (restart required)')
   fireEvent.change(db, { target: { value: 'new.db' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))

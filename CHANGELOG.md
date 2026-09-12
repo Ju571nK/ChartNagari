@@ -16,6 +16,20 @@ Format:
 
 ## [Unreleased]
 
+### Changed
+- Reworked desktop/mobile navigation: four everyday destinations in beginner mode,
+  with other tools retained under More and full expert navigation preserved.
+- Compact chart data status, disclosure-based guidance, full localized rule names,
+  and explicit loaded-chart-range badges for historical signals. Out-of-range
+  signal markers no longer attach to unrelated candles.
+- Mobile onboarding uses a single column; primary form controls and timeframe
+  buttons have 44px minimum height, with full-width alert inputs.
+- Backtest inputs/actions precede detailed guidance; ATR controls are expandable
+  and HTF calibration inventory is restricted to expert mode.
+- Alert hub groups signal alerts, price alerts and delivery channels. General
+  settings focus on display/language; server settings move to Advanced, with
+  explicit unsaved/restart-required state and a persistent save action.
+
 ### Added
 - Issue #32, phase 1: read-only HTF calibration history inventory in Backtest for
   1H/4H signals, with ten ATR deciles, counts, distinct UTC dates and two-year

@@ -9,6 +9,7 @@ import { MarketDataStatus, useMarketData } from './MarketDataStatus'
 import { chartPatterns } from './chartPatterns'
 import { ChartGuide, ExperienceMode, loadUIMode, UI_MODE_KEY, type UIMode } from './ExperienceMode'
 import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparation'
+import { useUXCopy, readableRule, signalRange } from './uxCopy'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import { setSessionToken } from './apiAuth'
 
@@ -1056,6 +1057,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
     const bestByKey = new Map<string, SignalBar>()
     for (const s of signals) {
       if (s.timeframe !== tf) continue
+      if (signalRange(s.time, marketData.bars, tf) !== 'inRange') continue
       if (s.direction === 'NEUTRAL') continue
       if (!enabledRules.has(s.rule)) continue
       const key = `${s.time}:${s.direction}`
@@ -1073,7 +1075,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
       shape: s.direction === 'LONG' ? ('arrowUp' as const) : ('arrowDown' as const),
       text: abbreviateRule(s.rule),
     }))
-  }, [signals, enabledCategories, tf])
+  }, [signals, enabledCategories, tf, marketData.bars])
 
   // Single unified marker effect: merges filtered signals + wyckoff events
   useEffect(() => {
@@ -1435,7 +1437,6 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
           ))}
         </div>
       )}
-      <ChartGuide mode={uiMode} />
       <div className="chart-workspace">
         <section className="chart-surface" aria-label={t('chart')} aria-busy={loading}>
           <div className="surface-heading"><strong>{symbol || t('workspace.chooseSymbol')}</strong><span>{tf}</span></div>
@@ -1444,14 +1445,14 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
           <div ref={containerRef} className="chart-area" style={{ visibility: marketData.phase === 'ready' ? 'visible' : 'hidden', height: marketData.phase === 'ready' ? undefined : 0 }} aria-hidden={marketData.phase !== 'ready'} />
         </section>
         <aside className="signal-inspector" aria-label={t('workspace.signals')}>
-          <div className="surface-heading"><strong>{t('workspace.signals')}</strong><span>{signals.filter(s => s.timeframe === tf).length}</span></div>
+          <SignalHistoryHeading />
           {signalLoading && <p className="state-message" role="status">{t('marketData.signalsLoading')}</p>}
           {signalError && <div className="state-message" role="alert"><p>{t('marketData.signalsError')}</p><button onClick={() => setReload(n => n + 1)}>{t('workspace.retry')}</button></div>}
           {!signalLoading && !signalError && marketData.phase === 'ready' && signals.filter(s => s.timeframe === tf).length === 0 && <p className="state-message">{t('workspace.noSignals')}</p>}
           <div className="signal-list">
             {signals.filter(s => s.timeframe === tf).map((s, index) => <button key={s.time + s.rule + s.direction} className={'signal-row' + (index === selectedSignal ? ' selected' : '')} aria-pressed={index === selectedSignal} onClick={() => setSelectedSignal(index)}>
               <span className={s.direction === 'LONG' ? 'dir-long' : s.direction === 'SHORT' ? 'dir-short' : ''}>{s.direction}</span>
-              <span>{abbreviateRule(s.rule)}<small>{new Date(s.time * 1000).toLocaleString(i18n.language)}</small></span>
+              <span>{readableRule(s.rule, i18n.language)}<small>{new Date(s.time * 1000).toLocaleString(i18n.language)}</small><SignalRangeBadge time={s.time} bars={marketData.bars} timeframe={tf} /></span>
               <strong>{s.score.toFixed(1)}</strong>
             </button>)}
           </div>
@@ -1460,7 +1461,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
             if (!signal) return null
             return <div className="signal-detail">
               <h2>{t('workspace.signalDetail')}</h2>
-              <p>{signal.message || signal.rule}</p>
+              <OriginalSignal message={signal.message || signal.rule} />
               {signal.ai_interpretation && <><h3>{t('ai_interpretation')}</h3><p>{signal.ai_interpretation}</p></>}
             </div>
           })()}
@@ -1471,6 +1472,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
           </div>
         </aside>
       </div>
+      <ChartGuide mode={uiMode} />
       {overrideModalOpen && (() => {
         const profileObj = profilesForChart[0] ?? null
         if (!profileObj) return null
@@ -1594,6 +1596,7 @@ function fmtPct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%' }
 
 export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
+  const ux = useUXCopy()
   const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [marketFilter, setMarketFilter] = useState('all')
@@ -1830,7 +1833,6 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   return (
     <>
       <p className="section-title">{t('backtest_settings')}</p>
-      <BacktestPreparation data={preparation.data} error={preparation.error} symbol={symbol} onRetry={() => setPreparationRevision(n => n + 1)} />
       {btMarkets.length > 1 && (
         <div className="tab-group" style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
           {btMarkets.map(m => (
@@ -1876,13 +1878,15 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
         <select
           className="chart-select"
           value={ruleFilter}
+          aria-label={ux.strategy}
           onChange={(e) => setRuleFilter(e.target.value)}
           disabled={loading}
         >
           <option value="">{t('all_rules')}</option>
-          {rules.map((r) => <option key={r} value={r}>{r}</option>)}
+          {rules.map((r) => <option key={r} value={r}>{readableRule(r, i18n.language)}</option>)}
         </select>
 
+        <details className="backtest-advanced" open={uiMode === 'expert'}><summary>{ux.advanced} · {ux.risk}</summary><div className="backtest-risk-fields">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="item-meta">TP×</span>
           <input
@@ -1914,6 +1918,7 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
           />
         </div>
 
+        </div></details>
         <button className="run-btn" onClick={run} disabled={loading || rulesLoading || !canRun}>
           {loading ? t('calculating') : t('run')}
         </button>
@@ -1927,6 +1932,7 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
         </button>
       </div>
 
+      <BacktestPreparation data={preparation.data} error={preparation.error} symbol={symbol} expert={uiMode === 'expert'} onRetry={() => setPreparationRevision(n => n + 1)} />
       {error && <p role="alert" className="error-msg">{t('backtestPrep.runError')}: {error}</p>}
 
       {result && !loading && result.trades === 0 && <p role="status">{t('backtestPrep.noTrades')}</p>}
@@ -3436,6 +3442,44 @@ function PerformanceTab() {
   )
 }
 
+function SignalHistoryHeading() {
+  const ux = useUXCopy()
+  return <><div className="surface-heading"><strong>{ux.signals}</strong></div><details className="signal-help"><summary>{ux.details}</summary><p>{ux.rangeHelp}</p><p>{ux.score}</p></details></>
+}
+
+function SignalRangeBadge({ time, bars, timeframe }: { time: number; bars: { time: number }[]; timeframe: string }) {
+  const ux = useUXCopy()
+  const state = signalRange(time, bars, timeframe)
+  return <small className={`signal-range ${state}`}>{ux[state]}</small>
+}
+
+function OriginalSignal({ message }: { message: string }) {
+  const ux = useUXCopy()
+  return <><small>{ux.original}</small><p>{message}</p></>
+}
+
+function LanguagePreference() {
+  const { i18n } = useTranslation()
+  const ux = useUXCopy()
+  return <label className="language-control">{ux.language}<select value={i18n.language.split('-')[0]} onChange={e => { i18n.changeLanguage(e.target.value); localStorage.setItem('language', e.target.value) }}><option value="en">English</option><option value="ko">한국어</option><option value="ja">日本語</option></select></label>
+}
+
+export function AlertHub({ uiMode, onSetUiMode, price = false }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void; price?: boolean }) {
+  const ux = useUXCopy()
+  const { t } = useTranslation()
+  const { navigate } = useWorkspace()
+  const [section, setSection] = useState<'signal' | 'price' | 'channels'>(price ? 'price' : 'signal')
+  return <section className="alert-hub"><p>{ux.alertHelp}</p>
+    <div className="alert-hub-tabs" role="group" aria-label={ux.alerts}>
+      {(['signal', 'price', 'channels'] as const).map(key => <button key={key} aria-pressed={section === key} onClick={() => setSection(key)}>{key === 'signal' ? ux.signalAlerts : key === 'price' ? ux.priceAlerts : ux.channels}</button>)}
+    </div>
+    <button className="override-link" onClick={() => navigate('symbols')}>{t('symbols')} · {t('override.profile_default')}</button>
+    {section === 'signal' && <AlertTab uiMode={uiMode} />}
+    {section === 'price' && <PriceAlertsTab />}
+    {section === 'channels' && <SettingsTab uiMode={uiMode} onSetUiMode={onSetUiMode} initialSection="alerts" channelsOnly />}
+  </section>
+}
+
 // ── SettingsTab ───────────────────────────────────────────────────────────────
 
 const ENV_SENTINEL = '__configured__'
@@ -3452,7 +3496,7 @@ interface EnvGroup { label: string; tab: SettingsSection; fields: EnvField[] }
 
 const ENV_GROUPS: EnvGroup[] = [
   {
-    tab: 'general',
+    tab: 'advanced',
     label: 'Server',
     fields: [
       { key: 'ENV',           label: 'Environment', type: 'select', options: ['development', 'production'] },
@@ -3460,7 +3504,7 @@ const ENV_GROUPS: EnvGroup[] = [
       { key: 'SERVER_HOST', label: 'Server bind address (restart required)', type: 'text' },
       { key: 'DB_PATH', label: 'Database path (restart required)', type: 'text' },
       { key: 'LOG_LEVEL',     label: 'Log Level',   type: 'select', options: ['debug', 'info', 'warn', 'error'] },
-      { key: 'API_TOKEN',     label: 'API Token (MCP 인증용)', type: 'password' },
+      { key: 'API_TOKEN',     label: 'API Token (server authorization)', type: 'password' },
     ],
   },
   {
@@ -3531,15 +3575,16 @@ const ENV_GROUPS: EnvGroup[] = [
   },
 ]
 
-export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void }) {
+export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', channelsOnly = false }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void; initialSection?: SettingsSection; channelsOnly?: boolean }) {
   const { t } = useTranslation()
+  const ux = useUXCopy()
   const [env, setEnv] = useState<EnvMap>({})
   const [edits, setEdits] = useState<EnvMap>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
-  const [section, setSection] = useState<SettingsSection>('general')
+  const [section, setSection] = useState<SettingsSection>(initialSection)
   const [authToken, setAuthToken] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const authorize = async () => {
@@ -3554,6 +3599,7 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
 
   const loadEnv = useCallback(() => {
     setLoading(true)
+    setError('')
     fetch('/api/settings/config')
       .then(r => { if (!r.ok) throw new Error('Failed to load settings'); return r.json() })
       .then((data: EnvMap) => { setEnv(data); setEdits({}) })
@@ -3637,14 +3683,15 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
   return (
     <div className="section">
       {/* 서브탭 네비 */}
-      <div className="report-field settings-config-row">
+      {error && <div role="alert"><p>{error}</p><button onClick={loadEnv}>{t('workspace.retry')}</button></div>}
+      <details className="settings-auth"><summary>{ux.auth}</summary><div className="report-field settings-config-row">
         <label htmlFor="settings-current-token">Current API token — required only when server authentication is enabled</label>
         <input id="settings-current-token" className="report-input" type="password" autoComplete="off" value={authToken} onChange={e => setAuthToken(e.target.value)} />
         <button type="button" onClick={() => void authorize()}>Authorize changes</button>
         <button type="button" onClick={() => { setSessionToken(''); setAuthToken(''); setAuthMessage('Token forgotten.') }}>Forget token</button>
       </div>
-      {authMessage && <p role="status">{authMessage}</p>}
-      <div role="tablist" aria-label="Settings sections" style={{
+      {authMessage && <p role="status">{authMessage}</p>}</details>
+      {!channelsOnly && <div role="tablist" aria-label="Settings sections" style={{
         display: 'flex', gap: 4, marginBottom: '1.5rem', flexWrap: 'wrap',
         borderBottom: '1px solid rgba(91,146,121,0.2)',
       }}>
@@ -3662,9 +3709,12 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
         ))}
       </div>
 
+      }
       {/* General 탭 전용: UI Mode */}
       {section === 'general' && (
         <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(91,146,121,0.2)' }}>
+          <p>{ux.general}</p>
+          <LanguagePreference />
           <h3 style={{
             fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em',
             color: 'var(--accent)', marginBottom: '0.75rem',
@@ -3692,14 +3742,9 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
           <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
             Changes are written to <code>config/settings.yaml</code>. <strong>Restart the server</strong> to apply.
           </p>
-          {error && (
-            <div className="save-success" style={{ background: 'rgba(255,68,68,0.12)', color: '#ff6b6b', marginBottom: '1rem' }}>
-              {error}
-            </div>
-          )}
           {saved && (
             <div className="save-success" style={{ marginBottom: '1rem' }}>
-              Saved — restart the server to apply changes.
+              {ux.saved}
             </div>
           )}
           {groupsForSection.map(group => (
@@ -3733,9 +3778,6 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
               ))}
             </div>
           ))}
-          <button className="run-btn" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
         </>
       )}
 
@@ -3745,7 +3787,7 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
           <OllamaSettings />
         </div>
       )}
-      {section === 'alerts' && <AlertTab uiMode={uiMode} />}
+      {section === 'alerts' && <p>{ux.alertHelp}</p>}
 
       {/* MCP 탭 */}
       {section === 'mcp' && (
@@ -3760,6 +3802,9 @@ export function SettingsTab({ uiMode, onSetUiMode }: { uiMode: UIMode; onSetUiMo
 
       {/* Advanced 탭 */}
       {section === 'advanced' && <DataManagementSection />}
+      {(showSaveButton || Object.keys(edits).length > 0 || saved) && <div className="settings-save-bar"><span>{Object.keys(edits).length ? ux.pending : saved ? ux.saved : ux.unchanged}</span><button className="run-btn" onClick={handleSave} disabled={saving || !Object.keys(edits).length}>
+        {saving ? 'Saving…' : 'Save'}
+      </button></div>}
     </div>
   )
 }
@@ -4231,7 +4276,7 @@ function WorkspaceApp() {
           </label>
         </div>
       </header>
-      <WorkspaceNav />
+      <WorkspaceNav mode={uiMode} />
       <main id="workspace-main" tabIndex={-1} className={'workspace-main' + (CONFIG_TABS.includes(tab) ? ' workspace-narrow' : '')}>
         <div className="page-heading">
           <div><p className="page-eyebrow">{t('workspace.terminal')}</p><h1>{t(pageKeys[tab])}</h1></div>
@@ -4247,11 +4292,11 @@ function WorkspaceApp() {
         {tab === 'history' && <HistoryTab uiMode={uiMode} />}
         {tab === 'symbols' && <SymbolsTab />}
         {tab === 'rules' && <RulesTab />}
-        {tab === 'alert' && <AlertTab uiMode={uiMode} />}
+        {tab === 'alert' && <AlertHub key={tab} uiMode={uiMode} onSetUiMode={handleSetUiMode} />}
         {tab === 'report' && <ReportTab />}
         {tab === 'status' && <StatusTab />}
         {tab === 'settings' && <SettingsTab uiMode={uiMode} onSetUiMode={handleSetUiMode} />}
-        {tab === 'price-alerts' && <PriceAlertsTab />}
+        {tab === 'price-alerts' && <AlertHub key={tab} uiMode={uiMode} onSetUiMode={handleSetUiMode} price />}
         {tab === 'calendar' && <CalendarTab />}
         {tab === 'execution' && <ExecutionTab />}
         {tab === 'my-trades' && <MyTradesTab />}

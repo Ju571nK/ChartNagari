@@ -75,6 +75,21 @@ table { font-variant-numeric: tabular-nums; }
 .connection-state.connected { color: var(--mint); }
 .connection-state > span { margin-right: 6px; }
 .workspace-nav { padding: 26px 14px; border-right: 1px solid rgba(91,146,121,0.2); }
+.desktop-more { margin-top: 16px; }
+.desktop-more > summary { padding: 12px; cursor: pointer; }
+.signal-help { padding: 8px 16px; font-size: 0.8rem; }
+.signal-help p { margin: 8px 0; }
+.signal-range.archive { color: #d8b78c; }
+.signal-row > span { overflow-wrap: anywhere; }
+.settings-auth { margin-bottom: 16px; }
+.backtest-risk-fields { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
+.backtest-advanced { flex-basis: 100%; order: 2; }
+.settings-save-bar { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--muted); padding: 12px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; z-index: 2; font-size: 0.85rem; }
+.alert-hub > p { line-height: 1.6; margin-bottom: 16px; }
+.alert-hub-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.alert-hub-tabs [aria-pressed="true"] { border-color: var(--mint); color: var(--mint); }
+.override-link { margin-bottom: 16px; }
+summary { cursor: pointer; }
 .mobile-navigation { display: none; }
 .nav-group + .nav-group { margin-top: 24px; }
 .nav-group h2 { color: var(--muted); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 0 12px; margin-bottom: 8px; }
@@ -124,15 +139,32 @@ table { font-variant-numeric: tabular-nums; }
 }
 @media (max-width: 760px) {
   .container.workspace-shell { display: block; }
-  .workspace-header { padding: 16px; flex-wrap: wrap; }
+  .workspace-header { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }
+  .workspace-brand small, .workspace-tools .language-control, .page-eyebrow { display: none; }
+  .workspace-tools { min-width: 0; }
+  .connection-state { font-size: 0.65rem; }
   .workspace-tools { gap: 12px; }
   .workspace-nav { display: none; }
-  .mobile-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid rgba(91,146,121,0.2); }
+  .mobile-navigation { display: block; padding: 6px 12px; font-size: 0.8rem; color: var(--muted); border-bottom: 1px solid rgba(91,146,121,0.2); }
+  .mobile-primary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .mobile-primary button { padding: 6px 2px; font-size: 0.8rem; overflow-wrap: anywhere; }
+  .mobile-primary [aria-current="page"] { border-color: var(--mint); color: var(--mint); }
+  .mobile-navigation details label { display: grid; gap: 8px; }
   .nav-group { min-width: 150px; }
   .nav-group + .nav-group { margin-top: 0; }
-  .workspace-main { padding: 20px 16px; }
-  .page-heading { margin-bottom: 20px; }
+  .workspace-main { padding: 12px 16px; }
+  .page-heading { margin-bottom: 12px; }
+  .page-heading h1 { font-size: 1.25rem; }
   .context-badge { gap: 8px; }
+  .workspace-shell button, .workspace-shell select, .workspace-shell input:not([type="radio"]):not([type="checkbox"]), .ob-modal button, .ob-modal input { min-height: 44px; }
+  .workspace-shell select, .workspace-shell input:not([type="radio"]):not([type="checkbox"]) { font-size: 16px; max-width: 100%; }
+  .workspace-shell summary { min-height: 44px; padding-block: 10px; }
+  .tf-btn { min-width: 44px; }
+  .surface-heading { padding: 8px 12px; }
+  .market-data-status { padding: 8px 12px; }
+  .market-data-status > details > summary { font-size: 0.75rem; }
+  .market-data-actions { margin-top: 4px; }
+  .settings-config-row > input { min-width: 0; }
 }
 @media print {
   .container.workspace-shell { display: block; }
@@ -1104,6 +1136,7 @@ input:checked + .slider::before {
 
 /* Right work panel */
 .ob-panel {
+  min-width: 0;
   flex: 1;
   padding: 24px;
   overflow-y: auto;
@@ -1136,6 +1169,7 @@ input:checked + .slider::before {
 }
 
 .ob-input {
+  min-width: 0;
   flex: 1;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(143, 128, 115, 0.4);
@@ -1321,3 +1355,22 @@ input:checked + .slider::before {
 }
 
 .ob-link:hover { color: var(--mint); }
+
+/* Mobile overrides follow the component rules so rail widths cannot win. */
+@media (max-width: 760px) {
+  .ob-modal { flex-direction: column; width: calc(100% - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .ob-rail { width: 100%; padding: 12px; border-right: 0; border-bottom: 1px solid var(--muted); }
+  .ob-brand { margin-bottom: 8px; }
+  .ob-steps { display: flex; gap: 8px; }
+  .ob-step-item { flex: 1; min-width: 0; }
+  .ob-rail-footer { display: flex; flex-direction: row; flex-wrap: wrap; margin-top: 8px; gap: 16px; }
+  .ob-panel { padding: 16px; overflow: visible; }
+  .ob-input-row { flex-wrap: wrap; }
+  .ob-input { flex-basis: 160px; }
+  .report-field { flex-wrap: wrap; gap: 8px; }
+  .report-field > label { width: 100%; min-width: 0 !important; }
+  .report-field > input, .report-field > select { width: 100% !important; min-width: 0; }
+  .backtest-controls { flex-wrap: wrap; gap: 8px; }
+  .backtest-controls > select { flex: 1 1 140px; min-width: 0; }
+  .backtest-controls > .run-btn { flex: 1 1 140px; }
+}

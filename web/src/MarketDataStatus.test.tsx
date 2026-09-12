@@ -35,7 +35,10 @@ describe('Instrument data status', () => {
   it('reports loaded count and candle time without declaring old data unhealthy', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(bars))
     render(<Panel />)
-    expect(await screen.findByText(/1 candles loaded/)).toHaveTextContent('Last candle start')
+    expect(await screen.findByText(/1 candles loaded/)).toBeInTheDocument()
+    expect(screen.getByText(/Last candle start/).tagName).toBe('SUMMARY')
+    expect(screen.getByText(/1 candles loaded/).closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
     expect(screen.getByText(/Collection time is not recorded/)).toBeInTheDocument()
     expect(screen.getByText(/Checked in this browser/)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()

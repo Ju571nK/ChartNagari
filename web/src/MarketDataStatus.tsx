@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useUXCopy } from './uxCopy'
 
 export interface PriceBar {
   time: number
@@ -53,20 +54,23 @@ export function MarketDataStatus({ data, symbol, timeframe, onRetry, onManage }:
   onManage: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const ux = useUXCopy()
   const formatTime = (value: number) => new Date(value).toLocaleString(i18n.language, { timeZoneName: 'short' })
   const latest = data.bars.length ? Math.max(...data.bars.map(bar => bar.time)) : null
   return <section className="market-data-status" aria-label={t('marketData.title')}>
     <div role={data.phase === 'error' ? 'alert' : 'status'} aria-live="polite">
       <strong>{symbol ? `${symbol} · ${timeframe} — ` : ''}{t(`marketData.${data.phase}`)}</strong>
-      {data.phase === 'ready' && <p>{t('marketData.count', { count: data.bars.length })} · {t('marketData.lastCandle')}: {formatTime(latest! * 1000)}</p>}
       {data.phase === 'empty' && <p>{t('marketData.emptyHelp')}</p>}
       {data.phase === 'error' && <p>{t('marketData.errorHelp')}</p>}
     </div>
-    {data.checkedAt && <p>{t('marketData.checkedAt')}: {formatTime(data.checkedAt)}</p>}
-    {(data.phase === 'ready' || data.phase === 'empty') && <p className="market-data-note">{t('marketData.timeNote')}</p>}
+    <details open={data.phase !== 'ready'}><summary>{ux.details}{latest !== null ? ` · ${t('marketData.lastCandle')}: ${formatTime(latest * 1000)}` : ''}</summary>
+      {data.phase === 'ready' && <p>{t('marketData.count', { count: data.bars.length })}</p>}
+      {data.checkedAt && <p>{t('marketData.checkedAt')}: {formatTime(data.checkedAt)}</p>}
+      {(data.phase === 'ready' || data.phase === 'empty') && <p className="market-data-note">{t('marketData.timeNote')}</p>}
+    </details>
     {data.error && <details><summary>{t('marketData.details')}</summary><p>{data.error}</p></details>}
     <div className="market-data-actions">
-      {symbol && <button onClick={onRetry} disabled={data.phase === 'loading'}>{t('workspace.retry')}</button>}
+      {symbol && <button onClick={onRetry} disabled={data.phase === 'loading'}>{data.phase === 'ready' ? ux.refresh : t('workspace.retry')}</button>}
       {(data.phase === 'empty' || data.phase === 'idle' || data.phase === 'error') && <button onClick={onManage}>{t('workspace.addSymbols')}</button>}
     </div>
   </section>

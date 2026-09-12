@@ -18,6 +18,17 @@ vi.mock('lightweight-charts', () => ({
 const bar = { time: 1700000000, open: 10, high: 12, low: 9, close: 11, volume: 100 }
 const response = (data: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, statusText: 'Error', json: async () => data }) as Response
 
+it('keeps historical signals in the inspector but not on unrelated candles', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const path = String(input)
+    return path.includes('/ohlcv/') ? response([bar]) : path.includes('/signals?') ? response([{time:bar.time-86400, timeframe:'1H',rule:'hammer',direction:'LONG',score:10,message:'Historical fixture'}]) : response([])
+  })
+  render(<WorkspaceProvider><ChartTab uiMode="expert" /></WorkspaceProvider>)
+  expect(await screen.findByText('Outside loaded chart range')).toBeInTheDocument()
+  await waitFor(() => expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]).toHaveLength(0))
+  expect(screen.getByText('Historical fixture')).toBeInTheDocument()
+})
+
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   localStorage.clear()

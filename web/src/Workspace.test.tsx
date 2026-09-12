@@ -33,7 +33,7 @@ describe('workspace navigation', () => {
 
   it('restores browser history and exposes all 16 destinations including price alerts', () => {
     render(<WorkspaceProvider><WorkspaceNav /><Probe /></WorkspaceProvider>)
-    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(16)
+    expect(screen.getByRole('navigation', { name: 'Workspace navigation' }).querySelectorAll('button')).toHaveLength(16)
     fireEvent.click(screen.getByRole('button', { name: 'Price Alerts' }))
     expect(readSelection().page).toBe('price-alerts')
     act(() => {

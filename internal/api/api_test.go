@@ -429,6 +429,9 @@ func TestGetChartSignals_ReturnsData(t *testing.T) {
 	if sigs[0].Direction != "LONG" {
 		t.Errorf("want LONG, got %s", sigs[0].Direction)
 	}
+	if sigs[0].Timeframe != "1H" {
+		t.Fatalf("timeframe missing from signal API: %+v", sigs[0])
+	}
 	if sigs[0].Rule != "smc_bos" {
 		t.Errorf("want smc_bos, got %s", sigs[0].Rule)
 	}

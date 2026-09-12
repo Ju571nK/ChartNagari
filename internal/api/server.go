@@ -84,6 +84,7 @@ type OHLCVBar struct {
 // SignalBar is the chart signal marker response.
 type SignalBar struct {
 	Symbol           string  `json:"symbol"`
+	Timeframe        string  `json:"timeframe"`
 	Time             int64   `json:"time"`
 	Direction        string  `json:"direction"`
 	Rule             string  `json:"rule"`
@@ -930,6 +931,7 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 	for i, sig := range sigs {
 		result[i] = SignalBar{
 			Symbol:           sig.Symbol,
+			Timeframe:        sig.Timeframe,
 			Time:             sig.CreatedAt.Unix(),
 			Direction:        sig.Direction,
 			Rule:             sig.Rule,
@@ -1015,6 +1017,7 @@ func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {
 	for i, sig := range sigs {
 		result[i] = SignalBar{
 			Symbol:           sig.Symbol,
+			Timeframe:        sig.Timeframe,
 			Time:             sig.CreatedAt.Unix(),
 			Direction:        sig.Direction,
 			Rule:             sig.Rule,

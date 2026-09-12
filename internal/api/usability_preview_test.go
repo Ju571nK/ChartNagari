@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	appconfig "github.com/Ju571nK/Chatter/internal/config"
 )
 
 // Explicit opt-in isolated browser fixture: no user DB, secrets, collectors,
@@ -17,6 +19,10 @@ func TestUsabilityPreview(t *testing.T) {
 		t.Skip("manual browser fixture")
 	}
 	s, db := preparationServer(t)
+	s.WithPriceAlertStore(db)
+	s.WithAlertConfigHolder(appconfig.NewAlertConfigHolder(appconfig.AlertConfig{ScoreThreshold: 12, CooldownHours: 4, MTFConsensusMin: 2, CryptoTPMult: 2, CryptoSLMult: 1, StockTPMult: 2, StockSLMult: 1}))
+	execPath := filepath.Join(s.configDir, "execution.yaml")
+	s.WithExecutionHolder(appconfig.NewExecutionHolder(execPath, appconfig.ExecutionConfig{KillSwitch: true, MaxDispatched: 3, Plugins: []appconfig.PluginConfig{}}), execPath)
 	seedPreparationBars(t, db, "BTCUSDT", 202)
 	seedPreparationBars(t, db, "AAPL", 132)
 	webDist, err := filepath.Abs("../../web/dist")

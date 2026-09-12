@@ -4,14 +4,14 @@ import { ChartTab } from './App'
 import { WorkspaceProvider } from './Workspace'
 import i18n from './i18n'
 
-const chartMocks = vi.hoisted(() => ({ setData: vi.fn(), fitContent: vi.fn() }))
+const chartMocks = vi.hoisted(() => ({ setData: vi.fn(), fitContent: vi.fn(), addSeries: vi.fn(), removeSeries: vi.fn(), setMarkers: vi.fn() }))
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: {}, HistogramSeries: {}, LineSeries: {}, CrosshairMode: { Normal: 0 },
-  createSeriesMarkers: () => ({ detach: vi.fn(), setMarkers: vi.fn() }),
+  createSeriesMarkers: (_: unknown, markers: unknown) => { chartMocks.setMarkers(markers); return { detach: vi.fn(), setMarkers: chartMocks.setMarkers } },
   createChart: () => ({
-    addSeries: () => ({ setData: chartMocks.setData, priceScale: () => ({ applyOptions: vi.fn() }), createPriceLine: vi.fn(), removePriceLine: vi.fn() }),
+    addSeries: (...args: unknown[]) => { chartMocks.addSeries(...args); return { setData: chartMocks.setData, priceScale: () => ({ applyOptions: vi.fn() }), createPriceLine: vi.fn(), removePriceLine: vi.fn() } },
     priceScale: () => ({ applyOptions: vi.fn() }), timeScale: () => ({ fitContent: chartMocks.fitContent }),
-    applyOptions: vi.fn(), remove: vi.fn(), removeSeries: vi.fn(),
+    applyOptions: vi.fn(), remove: vi.fn(), removeSeries: chartMocks.removeSeries,
   }),
 }))
 
@@ -22,6 +22,9 @@ beforeEach(async () => {
   await i18n.changeLanguage('en')
   localStorage.clear()
   chartMocks.setData.mockClear()
+  chartMocks.addSeries.mockClear()
+  chartMocks.removeSeries.mockClear()
+  chartMocks.setMarkers.mockClear()
   window.history.replaceState(null, '', '/?view=chart&symbol=SPCX&tf=1H')
 })
 afterEach(() => { vi.restoreAllMocks() })
@@ -61,4 +64,54 @@ it('shows empty guidance instead of an empty chart axis or no-signal advice', as
   expect(await screen.findByText(/No stored candles/)).toBeInTheDocument()
   expect(container.querySelector('.chart-area')).toHaveAttribute('aria-hidden', 'true')
   expect(screen.queryByText(/No signals on this timeframe/)).not.toBeInTheDocument()
+})
+
+it('renders independent candle patterns and removes them when disabled or timeframe changes', async () => {
+  const candles = [
+    { ...bar, time: 1, open: 10, high: 11, low: 9, close: 9.5 },
+    { ...bar, time: 2, open: 9.5, high: 14, low: 9.5, close: 14 },
+    { ...bar, time: 3, open: 14, high: 16, low: 13, close: 15 },
+  ]
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => response(String(input).includes('/ohlcv/SPCX/1H') ? candles : []))
+  render(<WorkspaceProvider><ChartTab uiMode="expert" /></WorkspaceProvider>)
+  await screen.findByText(/3 candles loaded/)
+  fireEvent.click(screen.getByRole('button', { name: 'FVG' }))
+  expect(screen.getByRole('button', { name: 'FVG' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByText(/FVG: 1 active candidate/)).toBeInTheDocument()
+  expect(chartMocks.addSeries.mock.calls.some(([, options]) => options?.title === 'FVG ↑')).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'FVG' }))
+  expect(chartMocks.removeSeries).toHaveBeenCalledTimes(2)
+  fireEvent.click(screen.getByRole('button', { name: 'OB' }))
+  expect(screen.getByText(/OB: 1 active candidate/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '1D' }))
+  await screen.findByText(/No stored candles/)
+  expect(chartMocks.removeSeries).toHaveBeenCalledTimes(4)
+  expect(screen.queryByText(/OB: 1 active candidate/)).not.toBeInTheDocument()
+})
+
+it('loads Zones without W.Phase and reports unavailable VIX data', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    if (String(input).includes('/wyckoff/')) return response({ phase: 'ranging', events: [], phase_zones: [] })
+    return response([])
+  })
+  render(<WorkspaceProvider><ChartTab uiMode="expert" /></WorkspaceProvider>)
+  fireEvent.click(screen.getByRole('button', { name: 'Zones' }))
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/wyckoff/SPCX/1H'))).toBe(true))
+  expect(screen.getByRole('button', { name: 'W.Phase' })).toHaveAttribute('aria-pressed', 'false')
+  await screen.findByText(/Zones: No matching/)
+  fireEvent.click(screen.getByRole('button', { name: 'VIX' }))
+  await screen.findByText(/VIX: No stored data/)
+})
+
+it('filters both markers and the signal list to the selected timeframe', async () => {
+  const signal = { symbol: 'SPCX', time: bar.time, direction: 'LONG', rule: 'smc_bos', score: 0.9, message: 'one-hour signal', timeframe: '1H' }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const path = String(input)
+    return response(path.includes('/ohlcv/') ? [bar] : path.includes('/signals?') ? [signal, { ...signal, time: bar.time + 10, timeframe: '4H', message: 'four-hour signal' }] : [])
+  })
+  render(<WorkspaceProvider><ChartTab uiMode="expert" /></WorkspaceProvider>)
+  await waitFor(() => expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]).toHaveLength(1))
+  expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0][0].time).toBe(bar.time)
+  fireEvent.click(screen.getByRole('button', { name: '4H' }))
+  await waitFor(() => expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]?.[0]?.time).toBe(bar.time + 10))
 })

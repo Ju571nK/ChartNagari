@@ -55,6 +55,6 @@ Your database and settings are stored locally. Enabled market-data, hosted AI an
 
 ## Learn more
 
-[Settings & upgrades](SETTINGS.md) · [Architecture](docs/architecture.md) · [Contributing & development](CONTRIBUTING.md) · [Report an issue](https://github.com/Ju571nK/ChartNagari/issues)
+[Settings & upgrades](SETTINGS.md) · [Architecture](docs/architecture.md) · [Contributing & development](CONTRIBUTING.md) · [Order plugin developer kit](docs/order-plugin-kit.md) · [Report an issue](https://github.com/Ju571nK/ChartNagari/issues)
 
 Built by Justin. Open source under the [MIT License](LICENSE).

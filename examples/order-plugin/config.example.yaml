@@ -1,0 +1,9 @@
+# Copy to config.local.yaml (gitignored), then generate a private secret:
+# openssl rand -hex 32
+plugin_id: example-paper
+plugin_secret: ""
+listen: "127.0.0.1:9200"
+journal: "./order-plugin-journal.db"
+state: "./order-plugin-simulator.db"
+# Registration/startup must not activate orders implicitly.
+orders_enabled: false

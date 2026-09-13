@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	plugin "github.com/Ju571nK/Chatter/pkg/brokerplugin"
+
 	"github.com/rs/zerolog"
 )
 
@@ -14,11 +16,12 @@ import (
 // Run(ctx, cfg, logger) from main(); tests construct the lower-level
 // components directly and drive Server via httptest.
 type Runner struct {
-	cfg    Config
-	server *http.Server
-	svc    *Server
-	store  *IdempotencyStore
-	log    zerolog.Logger
+	cfg             Config
+	server          *http.Server
+	svc             *Server
+	store           *IdempotencyStore
+	protocolJournal *plugin.Journal
+	log             zerolog.Logger
 }
 
 // NewRunner constructs the adapter's runtime graph but does NOT start it.
@@ -38,17 +41,33 @@ func NewRunner(cfg Config, log zerolog.Logger) (*Runner, error) {
 		return nil, err
 	}
 	srv := NewServer(cfg, alpaca, store, fb, log)
+	journalPath := cfg.DBPath + ".v1.db"
+	if cfg.DBPath == ":memory:" {
+		journalPath = ":memory:"
+	}
+	journal, err := plugin.OpenJournal(journalPath)
+	if err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	srv.brokerAPI, err = plugin.NewServer(plugin.ServerConfig{PluginID: cfg.PluginID, Secret: cfg.PluginSecret}, &protocolBroker{id: cfg.PluginID, client: alpaca}, journal)
+	if err != nil {
+		_ = journal.Close()
+		_ = store.Close()
+		return nil, err
+	}
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	return &Runner{cfg: cfg, server: httpServer, svc: srv, store: store, log: log}, nil
+	return &Runner{cfg: cfg, server: httpServer, svc: srv, store: store, protocolJournal: journal, log: log}, nil
 }
 
 // Start blocks on ListenAndServe. Returns nil when ctx is cancelled and the
 // server has shut down gracefully; otherwise returns the listen error.
 func (r *Runner) Start(ctx context.Context) error {
+	defer r.protocolJournal.Close()
 	errCh := make(chan error, 1)
 	go func() {
 		r.log.Info().Str("addr", r.cfg.ListenAddr).Str("alpaca_url", r.cfg.AlpacaAPIURL).

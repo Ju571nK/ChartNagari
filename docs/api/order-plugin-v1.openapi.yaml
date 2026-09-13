@@ -1,0 +1,234 @@
+openapi: 3.1.0
+info:
+  title: ChartNagari Order Plugin API (experimental, paper only)
+  version: '1.0'
+  description: >-
+    Separate-process plugin protocol. All requests use HMAC-SHA256 over
+    plugin_id, Unix timestamp, method, escaped path including query, and
+    SHA256(raw body), joined by newlines. See ../order-plugin-kit.md.
+    HTTP 202 is not proof of acceptance or fill. No automatic write retries.
+security:
+  - PluginID: []
+    Timestamp: []
+    Signature: []
+paths:
+  /v1/manifest:
+    get:
+      operationId: getManifest
+      responses:
+        '200':
+          description: Identity and capabilities; not a trust certification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Manifest'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/accounts:
+    get:
+      operationId: listAccounts
+      responses:
+        '200':
+          description: Connected paper accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Account'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/orders:
+    get:
+      operationId: listOrders
+      parameters:
+        - {$ref: '#/components/parameters/AccountID'}
+      responses:
+        '200':
+          description: Bounded snapshot, not necessarily complete history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [orders, complete]
+                properties:
+                  orders:
+                    type: array
+                    items: {$ref: '#/components/schemas/Order'}
+                  complete: {type: boolean}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: submitOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/WriteResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/orders/{client_order_id}:
+    get:
+      operationId: getOrder
+      parameters:
+        - {$ref: '#/components/parameters/ClientOrderID'}
+        - {$ref: '#/components/parameters/AccountID'}
+      responses:
+        '200':
+          description: Current broker state by client ID, not journal replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/orders/{client_order_id}/cancel:
+    post:
+      operationId: cancelOrder
+      parameters:
+        - {$ref: '#/components/parameters/ClientOrderID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [request_id, account_id]
+              properties:
+                request_id: {$ref: '#/components/schemas/ID'}
+                account_id: {$ref: '#/components/schemas/ID'}
+      responses:
+        '202': {$ref: '#/components/responses/WriteResult'}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    PluginID: {type: apiKey, in: header, name: X-ChartNagari-Plugin-Id}
+    Timestamp: {type: apiKey, in: header, name: X-ChartNagari-Timestamp}
+    Signature: {type: apiKey, in: header, name: X-ChartNagari-Signature-256}
+  parameters:
+    AccountID:
+      name: account_id
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/ID'}
+    ClientOrderID:
+      name: client_order_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/ID'}
+  responses:
+    WriteResult:
+      description: >-
+        Journaled result (possibly rejected or unknown). Duplicate requests
+        replay the original result; query GET for current broker state.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Order'}
+    Error:
+      description: >-
+        400 invalid JSON, 401 auth, 404 not found, 405 method, 409 ID conflict,
+        413 size, 422 unsupported/invalid order, 423 disabled, 501 unsupported
+        capability, 502 broker read failure, 503 journal unavailable.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {type: string}
+  schemas:
+    ID:
+      type: string
+      pattern: '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,47}$'
+    Decimal:
+      type: string
+      pattern: '^(0|[1-9][0-9]{0,17})(\.[0-9]{1,12})?$'
+    Account:
+      type: object
+      required: [id, mode, currency, buying_power]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        mode: {type: string, const: paper}
+        currency: {type: string, minLength: 3, maxLength: 12}
+        buying_power:
+          type: string
+          pattern: '^-?(0|[1-9][0-9]{0,17})(\.[0-9]{1,12})?$'
+    OrderRequest:
+      type: object
+      additionalProperties: false
+      required: [client_order_id, account_id, mode, symbol, asset_class, side, type, time_in_force, quantity]
+      properties:
+        client_order_id: {$ref: '#/components/schemas/ID'}
+        account_id: {$ref: '#/components/schemas/ID'}
+        mode: {type: string, const: paper}
+        symbol: {type: string, minLength: 1, maxLength: 64}
+        asset_class: {type: string, enum: [stock, crypto]}
+        side: {type: string, enum: [buy, sell]}
+        type: {type: string, const: market}
+        time_in_force: {type: string, enum: [day, gtc, ioc, fok]}
+        quantity:
+          allOf:
+            - {$ref: '#/components/schemas/Decimal'}
+          description: Must be positive; fractional quantity requires capability
+    Order:
+      type: object
+      required: [client_order_id, account_id, status]
+      properties:
+        client_order_id: {$ref: '#/components/schemas/ID'}
+        broker_order_id: {type: string}
+        account_id: {$ref: '#/components/schemas/ID'}
+        symbol: {type: string}
+        status:
+          type: string
+          enum: [submitted, partial_fill, filled, rejected, cancelled, expired, pending_cancel, unknown]
+        quantity: {$ref: '#/components/schemas/Decimal'}
+        filled_quantity: {$ref: '#/components/schemas/Decimal'}
+    Capabilities:
+      type: object
+      required: [submit, cancel, replace, events, order_types, time_in_force, asset_classes, fractional_quantity]
+      properties:
+        submit: {type: boolean}
+        cancel: {type: boolean}
+        replace: {type: boolean, const: false}
+        events: {type: boolean, const: false}
+        order_types:
+          type: [array, 'null']
+          uniqueItems: true
+          items: {type: string, const: market}
+        time_in_force:
+          type: [array, 'null']
+          uniqueItems: true
+          items: {type: string, enum: [day, gtc, ioc, fok]}
+        asset_classes:
+          type: [array, 'null']
+          uniqueItems: true
+          items: {type: string, enum: [stock, crypto]}
+        fractional_quantity: {type: boolean}
+    SettingField:
+      type: object
+      required: [key, label, type, required]
+      properties:
+        key: {$ref: '#/components/schemas/ID'}
+        label: {type: string, minLength: 1, maxLength: 120}
+        type: {type: string, enum: [text, secret, select]}
+        required: {type: boolean}
+        options:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 120}
+    Manifest:
+      type: object
+      required: [protocol_version, id, name, version, modes, simulation, capabilities, settings, orders_enabled]
+      properties:
+        protocol_version: {type: string, const: '1.0'}
+        id: {$ref: '#/components/schemas/ID'}
+        name: {type: string, minLength: 1, maxLength: 120}
+        version: {type: string, minLength: 1, maxLength: 40}
+        modes:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: {type: string, const: paper}
+        simulation: {type: boolean}
+        capabilities: {$ref: '#/components/schemas/Capabilities'}
+        settings:
+          type: [array, 'null']
+          maxItems: 32
+          items: {$ref: '#/components/schemas/SettingField'}
+        orders_enabled: {type: boolean}

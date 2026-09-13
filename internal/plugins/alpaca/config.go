@@ -9,7 +9,7 @@
 //     the Alpaca paper endpoint.
 //   - Map TradeSignal.Direction → Alpaca order side:
 //     LONG  → buy (market)
-//     SHORT → sell (market; closes existing long position only in Phase 3)
+//     SHORT → sell (market; broker permissions determine short-sale eligibility)
 //   - Idempotency on signal_id stored in a tiny SQLite file so restarts do not
 //     re-submit an order for a signal that was already processed.
 //   - POST OrderFeedback back to ChartNagari, HMAC-signed with the same shared
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"math"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -168,8 +169,14 @@ func (c Config) Validate() error {
 		return fmt.Errorf("ALPACA_API_URL must be http(s), got %q", u.Scheme)
 	}
 	host := strings.ToLower(u.Hostname())
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return errors.New("ALPACA_API_URL must be an origin without credentials, path, query or fragment")
+	}
+	if !isTestHost(host) && (u.Scheme != "https" || (u.Port() != "" && u.Port() != "443")) {
+		return errors.New("ALPACA_API_URL must use HTTPS on the paper endpoint")
+	}
 	if _, ok := paperHosts[host]; !ok {
-		// Permit localhost / 127.0.0.1 / any host beginning with "127." for tests
+		// Permit localhost and parsed loopback IP addresses for tests
 		// (httptest.Server) — production config must use paper-api.alpaca.markets.
 		if !isTestHost(host) {
 			return fmt.Errorf("refusing to start against non-paper host %q; ALPACA_API_URL must be https://paper-api.alpaca.markets", u.Host)
@@ -200,7 +207,8 @@ func isTestHost(host string) bool {
 	case "localhost", "127.0.0.1", "::1":
 		return true
 	}
-	return strings.HasPrefix(host, "127.")
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func parseFloatEnv(key string, def float64) float64 {

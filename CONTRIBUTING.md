@@ -63,6 +63,11 @@ make test        # run all Go tests
 
 See the [architecture overview](docs/architecture.md) for the system diagram formerly in the README.
 
+Building an external broker/exchange adapter? Start with the experimental
+[Order Plugin Developer Kit](docs/order-plugin-kit.md): public Go SDK,
+language-neutral OpenAPI, standalone simulator template and read-only checker.
+It does not require changes to the core or importing `internal` packages.
+
 | Package | Purpose |
 |---|---|
 | `cmd/server/` | Entry point — wires all components together |

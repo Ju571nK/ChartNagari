@@ -40,6 +40,9 @@ func TestNewRunner_Success(t *testing.T) {
 	if err := r.store.Close(); err != nil {
 		t.Errorf("store close: %v", err)
 	}
+	if err := r.protocolJournal.Close(); err != nil {
+		t.Errorf("protocol journal close: %v", err)
+	}
 }
 
 func TestRunner_StartShutdown(t *testing.T) {

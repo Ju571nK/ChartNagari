@@ -607,6 +607,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("POST /api/execution/feedback", s.postExecutionFeedback)
 		mux.HandleFunc("GET /api/execution/feedback", s.listExecutionFeedback)
 		mux.HandleFunc("GET /api/execution/plugins/stats", s.getExecutionPluginStats)
+		mux.HandleFunc("GET /api/execution/plugins/{id}/manifest", s.getExecutionPluginManifest)
 	}
 
 	// MCP streamable HTTP endpoint

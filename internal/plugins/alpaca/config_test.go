@@ -32,6 +32,12 @@ func TestConfig_Validate(t *testing.T) {
 		{"live url rejected", func(c *Config) { c.AlpacaAPIURL = "https://live-api.alpaca.markets" }, "non-paper host"},
 		{"bad scheme", func(c *Config) { c.AlpacaAPIURL = "ftp://paper-api.alpaca.markets" }, "http(s)"},
 		{"localhost allowed for tests", func(c *Config) { c.AlpacaAPIURL = "http://127.0.0.1:1234" }, ""},
+		{"paper requires tls", func(c *Config) { c.AlpacaAPIURL = "http://paper-api.alpaca.markets" }, "HTTPS"},
+		{"fake loopback domain", func(c *Config) { c.AlpacaAPIURL = "https://127.evil.example" }, "non-paper host"},
+		{"embedded credentials", func(c *Config) { c.AlpacaAPIURL = "https://user:pass@paper-api.alpaca.markets" }, "origin"},
+		{"unexpected query", func(c *Config) { c.AlpacaAPIURL = "https://paper-api.alpaca.markets?x=1" }, "origin"},
+		{"unexpected path", func(c *Config) { c.AlpacaAPIURL = "https://paper-api.alpaca.markets/v2" }, "origin"},
+		{"unexpected port", func(c *Config) { c.AlpacaAPIURL = "https://paper-api.alpaca.markets:8443" }, "HTTPS"},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -110,7 +116,7 @@ func TestIsTestHost(t *testing.T) {
 			t.Errorf("isTestHost(%q) = false, want true", host)
 		}
 	}
-	for _, host := range []string{"paper-api.alpaca.markets", "example.com"} {
+	for _, host := range []string{"paper-api.alpaca.markets", "example.com", "127.attacker.example", "127.0.0.1.attacker.example", "127.999.1.1"} {
 		if isTestHost(host) {
 			t.Errorf("isTestHost(%q) = true, want false", host)
 		}

@@ -32,7 +32,7 @@ func NewAlpacaClient(baseURL, apiKey, apiSecret string) *AlpacaClient {
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		apiKey:    apiKey,
 		apiSecret: apiSecret,
-		http:      &http.Client{Timeout: HTTPTimeout},
+		http:      &http.Client{Timeout: HTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 
@@ -40,10 +40,10 @@ func NewAlpacaClient(baseURL, apiKey, apiSecret string) *AlpacaClient {
 // Reference: https://docs.alpaca.markets/reference/postorder
 type OrderRequest struct {
 	Symbol        string `json:"symbol"`
-	Qty           string `json:"qty"`                      // decimal string
-	Side          string `json:"side"`                     // "buy" | "sell"
-	Type          string `json:"type"`                     // "market"
-	TimeInForce   string `json:"time_in_force"`            // "day"
+	Qty           string `json:"qty"`                       // decimal string
+	Side          string `json:"side"`                      // "buy" | "sell"
+	Type          string `json:"type"`                      // "market"
+	TimeInForce   string `json:"time_in_force"`             // "day"
 	ClientOrderID string `json:"client_order_id,omitempty"` // we set = signal_id for observability
 }
 
@@ -54,6 +54,7 @@ type OrderResponse struct {
 	Status        string `json:"status"` // accepted | pending_new | new | filled | rejected | canceled
 	Symbol        string `json:"symbol"`
 	Qty           string `json:"qty"`
+	FilledQty     string `json:"filled_qty"`
 	Side          string `json:"side"`
 	Type          string `json:"type"`
 }
@@ -131,4 +132,3 @@ func (c *AlpacaClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Orde
 	}
 	return &out, nil
 }
-

@@ -38,6 +38,7 @@ type Server struct {
 	// could exit while a feedback POST was mid-flight, silently dropping the
 	// status update that ChartNagari relies on to close the in-flight window.
 	feedbackWG sync.WaitGroup
+	brokerAPI  http.Handler
 }
 
 // WaitFeedback blocks until all in-flight async feedback POSTs have finished.
@@ -81,6 +82,9 @@ func (s *Server) WithSubmitFn(fn func(context.Context, OrderRequest) (*OrderResp
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook", s.handleWebhook)
+	if s.brokerAPI != nil {
+		mux.Handle("/v1/", s.brokerAPI)
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))

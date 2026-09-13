@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -228,6 +229,8 @@ type Server struct {
 
 	startupSettings     map[string]string
 	calendarDiagnostics func() any
+	remoteAccess        bool
+	wsTickets           map[string]connectionTicket
 }
 
 // ExecutionReleaser is the minimal dispatcher surface the feedback handler
@@ -331,7 +334,7 @@ func (s *Server) WithOllamaTester(t OllamaTester) {
 func (s *Server) WithAllowedOrigins(origins []string) {
 	m := make(map[string]bool, len(origins))
 	for _, o := range origins {
-		m[o] = true
+		m[strings.TrimSpace(o)] = true
 	}
 	s.allowedOrigins = m
 }
@@ -470,10 +473,12 @@ func (s *Server) Handler() http.Handler {
 
 	// WebSocket real-time push
 	if s.wsHub != nil {
-		mux.HandleFunc("GET /ws", s.wsHub.ServeWS)
+		mux.HandleFunc("GET /ws", s.connectionWS)
 	}
 
 	// Status
+	mux.HandleFunc("GET /api/connection", s.connectionInfo)
+	mux.HandleFunc("POST /api/connection/ws-ticket", s.connectionWSTicket)
 	mux.HandleFunc("GET /api/status", s.getStatus)
 
 	// Watchlist symbols
@@ -2080,6 +2085,7 @@ var envSensitiveKeys = map[string]bool{
 
 // envExposedKeys is the ordered list of setting keys exposed via the API.
 var envExposedKeys = []string{
+	"REMOTE_ACCESS", "REMOTE_ALLOWED_ORIGINS",
 	"DB_PATH", "OLLAMA_HOST", "OLLAMA_MODEL", "OLLAMA_TIMEOUT_SEC",
 	"CHARTNAGARI_URL", "CHARTNAGARI_TOKEN", "ALPACA_API_URL", "ALPACA_API_KEY", "ALPACA_API_SECRET",
 	"CHARTNAGARI_FEEDBACK_URL", "CHARTNAGARI_PLUGIN_SECRET", "CHARTNAGARI_PLUGIN_ID", "LISTEN_ADDR", "ALPACA_DB_PATH", "ALPACA_NOTIONAL_PER_TRADE", "ALPACA_TIMESTAMP_SKEW_SEC",
@@ -2163,6 +2169,10 @@ func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	settings.ApplyMap(filtered)
+	if err := appconfig.ValidateRemoteSettings(settings.ToMap()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	settings.Version = 1
 
 	if err := appconfig.SaveSettings(s.settingsFile, settings); err != nil {
@@ -2280,6 +2290,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Expose-Headers", "Content-Disposition")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -2289,14 +2300,14 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// authMiddleware enforces bearer-token authentication on mutating (non-GET, non-OPTIONS)
-// requests when s.apiToken is non-empty. GET and OPTIONS requests are always allowed so
-// that the frontend can read data without auth, preserving backward compatibility.
-// When s.apiToken is empty the middleware is a no-op, keeping full backward compatibility
-// for users who have not configured a token.
+// authMiddleware preserves anonymous local reads except connection verification.
+// Remote mode additionally protects all /api/ reads. Static assets and preflights
+// remain available so the client can render its connection/authentication gate.
+// Browser WebSockets have their own one-time ticket check in connectionWS.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.apiToken == "" || r.Method == http.MethodGet || r.Method == http.MethodOptions {
+		protectedRead := (s.remoteAccess && strings.HasPrefix(r.URL.Path, "/api/")) || (r.URL.Path == "/api/connection" && s.apiToken != "")
+		if (!s.remoteAccess && s.apiToken == "") || (r.Method == http.MethodGet && !protectedRead) || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -2307,7 +2318,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		token := authHeader[len(prefix):]
-		if token != s.apiToken {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(s.apiToken)) != 1 {
 			http.Error(w, "unauthorized: invalid token", http.StatusUnauthorized)
 			return
 		}

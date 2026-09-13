@@ -11,7 +11,8 @@ import { ChartGuide, ExperienceMode, loadUIMode, UI_MODE_KEY, type UIMode } from
 import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparation'
 import { useUXCopy, readableRule, signalRange } from './uxCopy'
 import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
-import { setSessionToken } from './apiAuth'
+import { setSessionToken, createServerSocket } from './apiAuth'
+import { ConnectionPanel } from './Connections'
 import { CalendarCollectionStatus, SettingsRuntimeStatus, SettingsSavedNotice } from './RuntimeStatus'
 
 // Lazy-loaded tab panels: split out of the initial bundle since they only
@@ -3503,6 +3504,8 @@ const ENV_GROUPS: EnvGroup[] = [
       { key: 'ENV',           label: 'Environment', type: 'select', options: ['development', 'production'] },
       { key: 'SERVER_PORT',   label: 'Server Port', type: 'text' },
       { key: 'SERVER_HOST', label: 'Server bind address (restart required)', type: 'text' },
+      { key: 'REMOTE_ACCESS', label: 'Remote access — authenticate all API reads (restart required)', type: 'select', options: ['', 'false', 'true'] },
+      { key: 'REMOTE_ALLOWED_ORIGINS', label: 'Allowed app origins — comma-separated HTTPS origins (restart required)', type: 'text' },
       { key: 'DB_PATH', label: 'Database path (restart required)', type: 'text' },
       { key: 'LOG_LEVEL',     label: 'Log Level',   type: 'select', options: ['debug', 'info', 'warn', 'error'] },
       { key: 'API_TOKEN',     label: 'API Token (server authorization)', type: 'password' },
@@ -4202,7 +4205,9 @@ export function CalendarTab({ uiMode = 'beginner', onSetUiMode = () => {} }: { u
 }
 
 export function App() {
-  return <WorkspaceProvider><WorkspaceApp /></WorkspaceProvider>
+  const [connectionVersion, setConnectionVersion] = useState(0)
+  const [ready, setReady] = useState(() => !sessionStorage.getItem('chartnagari.selected-server'))
+  return <>{!DEMO_STATIC && <ConnectionPanel connected={ready} onDisconnect={() => setReady(false)} onConnect={() => { setReady(true); setConnectionVersion(v => v + 1) }} />}{(ready || DEMO_STATIC) && <WorkspaceProvider key={connectionVersion}><WorkspaceApp /></WorkspaceProvider>}</>
 }
 
 function WorkspaceApp() {
@@ -4227,10 +4232,13 @@ function WorkspaceApp() {
     let signalTimer: ReturnType<typeof setTimeout>
     let disposed = false
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      ws = new WebSocket(`${proto}//${window.location.host}/ws`)
+      try { ws = await createServerSocket() } catch {
+        if (!disposed) reconnectTimer = setTimeout(connect, 3000)
+        return
+      }
+      if (disposed) { ws.close(); return }
       wsRef.current = ws
 
       ws.onopen = () => setWsConnected(true)

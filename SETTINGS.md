@@ -6,6 +6,10 @@ data providers, notification credentials, AI/Ollama, MCP bridge and Alpaca paper
 adapter settings. Alert timing/risk settings remain in `config/alert.yaml` and
 are editable in **Settings → Alerts** or the existing Alerts page.
 
+For local/remote server profiles, remote API authentication and allowed app
+origins, see [Local and remote connections](docs/remote-connections.md). Remote
+access is opt-in and requires an administrator token and HTTPS deployment.
+
 ## Existing installations
 
 On the first start of the updated server, settings without `version: 1` import

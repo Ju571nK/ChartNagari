@@ -62,6 +62,9 @@ func main() {
 	}
 
 	// ── 로거 초기화 ──────────────────────────────────────────────────
+	if err := appconfig.ValidateRemoteSettings(cfg.StartupSettings); err != nil {
+		log.Fatal().Err(err).Msg("invalid remote access settings")
+	}
 	level, _ := zerolog.ParseLevel(cfg.LogLevel)
 	zerolog.SetGlobalLevel(level)
 	if cfg.Env == "production" {
@@ -355,6 +358,10 @@ func main() {
 	apiSrv.WithWatchlistChanged(watchRuntime.Update)
 	apiSrv.WithSettingsFile("config/settings.yaml")
 	apiSrv.WithStartupSettings(cfg.StartupSettings)
+	apiSrv.WithRemoteAccess(cfg.StartupSettings["REMOTE_ACCESS"] == "true")
+	if origins := cfg.StartupSettings["REMOTE_ALLOWED_ORIGINS"]; origins != "" {
+		apiSrv.WithAllowedOrigins(strings.Split(origins, ","))
+	}
 	apiSrv.WithCalendarDiagnostics(func() any { return calFetcher.Status() })
 	apiSrv.WithDBPath(cfg.DBPath)
 	apiSrv.WithChartStore(db)

@@ -1384,3 +1384,9 @@ input:checked + .slider::before {
 .runtime-status dt { flex: 1 1 210px; color: var(--muted); }
 .runtime-status dd { flex: 1 1 180px; margin: 0; }
 .runtime-status button, .runtime-status summary { min-height: 44px; }
+.connection-panel { border-bottom: 1px solid rgba(91,146,121,.35); padding: .75rem 1rem; overflow-wrap: anywhere; }
+.connection-panel summary { cursor: pointer; min-height: 44px; display: list-item; }
+.connection-panel label { display: flex; flex-direction: column; gap: .5rem; margin: .75rem 0; max-width: 640px; }
+.connection-panel input { width: 100%; min-height: 44px; box-sizing: border-box; }
+.connection-panel button { min-height: 44px; margin: .25rem; max-width: 100%; overflow-wrap: anywhere; }
+.connection-panel p { max-width: 800px; font-size: .85rem; color: var(--muted); }

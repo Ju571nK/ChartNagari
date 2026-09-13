@@ -112,7 +112,7 @@ func NewWithOptions(log zerolog.Logger, opts Options) *Hub {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 			CheckOrigin:     OriginCheck(opts.AllowedOrigins),
-			Subprotocols:    []string{"chartnagari.v1"},
+			Subprotocols:    []string{"chartnagari.v1", "chartnagari.browser.v1"},
 		},
 		auth:    opts.ExecutionAuth,
 		skewSec: skew,

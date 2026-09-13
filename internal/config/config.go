@@ -191,11 +191,13 @@ type SettingsYAML struct {
 	Version int               `yaml:"version"`
 	Clients map[string]string `yaml:"clients,omitempty"`
 	Server  struct {
-		Env      string `yaml:"env"`
-		Host     string `yaml:"host"`
-		Port     string `yaml:"port"`
-		LogLevel string `yaml:"log_level"`
-		APIToken string `yaml:"api_token"`
+		Env            string `yaml:"env"`
+		Host           string `yaml:"host"`
+		Port           string `yaml:"port"`
+		LogLevel       string `yaml:"log_level"`
+		APIToken       string `yaml:"api_token"`
+		RemoteAccess   string `yaml:"remote_access,omitempty"`
+		AllowedOrigins string `yaml:"allowed_origins,omitempty"`
 	} `yaml:"server"`
 	Database struct {
 		Path string `yaml:"path"`
@@ -270,35 +272,37 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		return strconv.FormatFloat(f, 'f', -1, 64)
 	}
 	m := map[string]string{
-		"DB_PATH":               s.Database.Path,
-		"ENV":                   s.Server.Env,
-		"SERVER_HOST":           s.Server.Host,
-		"SERVER_PORT":           s.Server.Port,
-		"LOG_LEVEL":             s.Server.LogLevel,
-		"API_TOKEN":             s.Server.APIToken,
-		"BINANCE_API_KEY":       s.Binance.APIKey,
-		"BINANCE_SECRET_KEY":    s.Binance.SecretKey,
-		"TIINGO_API_KEY":        s.Tiingo.APIKey,
-		"TIINGO_POLL_INTERVAL":  itoa(s.Tiingo.PollInterval),
-		"YAHOO_POLL_INTERVAL":   itoa(s.Yahoo.PollInterval),
-		"TELEGRAM_BOT_TOKEN":    s.Telegram.BotToken,
-		"TELEGRAM_CHAT_ID":      s.Telegram.ChatID,
-		"DISCORD_WEBHOOK_URL":   s.Discord.WebhookURL,
-		"ALERT_COOLDOWN_HOURS":  itoa(s.Alert.CooldownHours),
-		"LLM_PROVIDER":          s.LLM.Provider,
-		"LLM_LANGUAGE":          s.LLM.Language,
-		"AI_MIN_SCORE":          ftoa(s.LLM.MinScore),
-		"ANTHROPIC_API_KEY":     s.Anthropic.APIKey,
-		"OPENAI_API_KEY":        s.OpenAI.APIKey,
-		"GROQ_API_KEY":          s.Groq.APIKey,
-		"GEMINI_API_KEY":        s.Gemini.APIKey,
-		"OLLAMA_HOST":           s.Ollama.Host,
-		"OLLAMA_MODEL":          s.Ollama.Model,
-		"OLLAMA_TIMEOUT_SEC":    itoa(s.Ollama.TimeoutSec),
-		"ALPHAVANTAGE_API_KEY":  s.AlphaVantage.APIKey,
-		"FINNHUB_API_KEY":       s.Finnhub.APIKey,
-		"CALENDAR_ALERT_WINDOW": itoa(s.Finnhub.AlertWindowMinutes),
-		"FMP_API_KEY":           s.Fmp.APIKey,
+		"DB_PATH":                s.Database.Path,
+		"ENV":                    s.Server.Env,
+		"SERVER_HOST":            s.Server.Host,
+		"SERVER_PORT":            s.Server.Port,
+		"LOG_LEVEL":              s.Server.LogLevel,
+		"API_TOKEN":              s.Server.APIToken,
+		"REMOTE_ACCESS":          s.Server.RemoteAccess,
+		"REMOTE_ALLOWED_ORIGINS": s.Server.AllowedOrigins,
+		"BINANCE_API_KEY":        s.Binance.APIKey,
+		"BINANCE_SECRET_KEY":     s.Binance.SecretKey,
+		"TIINGO_API_KEY":         s.Tiingo.APIKey,
+		"TIINGO_POLL_INTERVAL":   itoa(s.Tiingo.PollInterval),
+		"YAHOO_POLL_INTERVAL":    itoa(s.Yahoo.PollInterval),
+		"TELEGRAM_BOT_TOKEN":     s.Telegram.BotToken,
+		"TELEGRAM_CHAT_ID":       s.Telegram.ChatID,
+		"DISCORD_WEBHOOK_URL":    s.Discord.WebhookURL,
+		"ALERT_COOLDOWN_HOURS":   itoa(s.Alert.CooldownHours),
+		"LLM_PROVIDER":           s.LLM.Provider,
+		"LLM_LANGUAGE":           s.LLM.Language,
+		"AI_MIN_SCORE":           ftoa(s.LLM.MinScore),
+		"ANTHROPIC_API_KEY":      s.Anthropic.APIKey,
+		"OPENAI_API_KEY":         s.OpenAI.APIKey,
+		"GROQ_API_KEY":           s.Groq.APIKey,
+		"GEMINI_API_KEY":         s.Gemini.APIKey,
+		"OLLAMA_HOST":            s.Ollama.Host,
+		"OLLAMA_MODEL":           s.Ollama.Model,
+		"OLLAMA_TIMEOUT_SEC":     itoa(s.Ollama.TimeoutSec),
+		"ALPHAVANTAGE_API_KEY":   s.AlphaVantage.APIKey,
+		"FINNHUB_API_KEY":        s.Finnhub.APIKey,
+		"CALENDAR_ALERT_WINDOW":  itoa(s.Finnhub.AlertWindowMinutes),
+		"FMP_API_KEY":            s.Fmp.APIKey,
 	}
 	for key, fallback := range ClientDefaults {
 		m[key] = fallback
@@ -353,6 +357,8 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.Server.Port, "SERVER_PORT")
 	set(&s.Server.LogLevel, "LOG_LEVEL")
 	set(&s.Server.APIToken, "API_TOKEN")
+	set(&s.Server.RemoteAccess, "REMOTE_ACCESS")
+	set(&s.Server.AllowedOrigins, "REMOTE_ALLOWED_ORIGINS")
 	set(&s.Binance.APIKey, "BINANCE_API_KEY")
 	set(&s.Binance.SecretKey, "BINANCE_SECRET_KEY")
 	set(&s.Tiingo.APIKey, "TIINGO_API_KEY")

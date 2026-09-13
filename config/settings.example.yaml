@@ -10,6 +10,8 @@ server:
   env: development          # development | production
   host: "127.0.0.1"        # Docker에서는 0.0.0.0으로 변경 (호스트 포트는 루프백만 노출)
   api_token: ""
+  remote_access: "false"    # true이면 조회 API도 인증. 32자 이상 무작위 API 토큰과 HTTPS 필요
+  allowed_origins: ""       # 예: https://charts.example.com (쉼표로 구분, 재시작 필요)
   port: "8080"
   log_level: debug          # debug | info | warn | error
 

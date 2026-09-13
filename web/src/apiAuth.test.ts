@@ -15,5 +15,5 @@ it('attaches tokens only to same-origin API calls and preserves explicit credent
   expect(new Headers(base.mock.calls[2][1].headers).get('Authorization')).toBe('Bearer replacement')
   setSessionToken('')
   await request('/api/settings/config')
-  expect(base.mock.calls[3][1]).toBeUndefined()
+  expect(new Headers(base.mock.calls[3][1].headers).has('Authorization')).toBe(false)
 })

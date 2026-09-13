@@ -17,6 +17,10 @@ Format:
 ## [Unreleased]
 
 ### Changed
+- Added local/remote server connection profiles, authenticated capability checks,
+  explicit workspace switching, and authenticated cross-origin downloads/streams.
+  Opt-in remote mode protects API reads and browser WebSockets; tokens are kept
+  in memory and remote sessions require reauthentication after a page reload.
 - Web-managed settings now show per-field startup comparisons, pending restarts,
   and separately managed process states without exposing credentials. Calendar
   diagnostics distinguish disabled, waiting, collecting, successful-empty and

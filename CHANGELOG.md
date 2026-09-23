@@ -44,6 +44,10 @@ Format:
   explicit unsaved/restart-required state and a persistent save action.
 
 ### Added
+- Issue #32, phase 2a: versioned pre-filter 1H/4H opportunity collection,
+  preserving original weighted scores, raw/effective HTF context and indicator
+  snapshots. Repeated candle observations are deduplicated; automatic penalty
+  calibration remains blocked pending replay and outcome validation.
 - Issue #32, phase 1: read-only HTF calibration history inventory in Backtest for
   1H/4H signals, with ten ATR deciles, counts, distinct UTC dates and two-year
   history gates. Automatic calibration remains blocked: stored post-filter

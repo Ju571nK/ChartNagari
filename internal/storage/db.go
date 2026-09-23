@@ -60,6 +60,26 @@ func (db *DB) Conn() *sql.DB {
 // migrate applies the initial database schema.
 func (db *DB) migrate() error {
 	schema := `
+	-- Versioned, first-observed rule opportunities, before all pipeline filters.
+	CREATE TABLE IF NOT EXISTS htf_opportunities (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		version INTEGER NOT NULL,
+		symbol TEXT NOT NULL,
+		timeframe TEXT NOT NULL CHECK(timeframe IN ('1H','4H')),
+		rule TEXT NOT NULL,
+		direction TEXT NOT NULL CHECK(direction IN ('LONG','SHORT')),
+		bar_open_time INTEGER NOT NULL,
+		observed_at INTEGER NOT NULL,
+		original_score REAL NOT NULL,
+		raw_htf_trend TEXT NOT NULL,
+		effective_htf_trend TEXT NOT NULL,
+		atr_percentile REAL NOT NULL CHECK(atr_percentile >= -1 AND atr_percentile <= 100),
+		snapshot TEXT NOT NULL,
+		UNIQUE(version, symbol, timeframe, rule, direction, bar_open_time)
+	);
+	CREATE INDEX IF NOT EXISTS idx_htf_opportunities_lookup
+		ON htf_opportunities(symbol, timeframe, observed_at);
+
 	CREATE TABLE IF NOT EXISTS ohlcv (
 		id        INTEGER PRIMARY KEY AUTOINCREMENT,
 		symbol    TEXT    NOT NULL,

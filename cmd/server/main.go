@@ -298,6 +298,7 @@ func main() {
 					log.Logger,
 				)
 				pipe.SetSignalSaver(db)
+				pipe.SetHTFOpportunitySaver(db)
 				pipe.SetPaperTrader(paperTrader)
 				priceWatcher := pricealert.New(db, notif, log.Logger)
 				pipe.SetPriceAlertWatcher(priceWatcher)

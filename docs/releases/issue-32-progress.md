@@ -22,6 +22,44 @@ or proof of continuous coverage. Counts are signals, not independent trades.
 `ready` is always false in this phase, regardless of the gate. There is no save,
 activation or order action, and no change to existing gradient/manual penalties.
 
+## Phase 2a: versioned live opportunity collection
+
+The server now writes `htf_opportunities` immediately after the rule engine,
+before profile, score, timeframe, MTF, HTF, cooldown or notification filters.
+Only directional 1H/4H outputs of enabled rules are collected. Original score
+means the engine's weighted score, before pipeline adjustments.
+
+Each row records collection version, symbol, timeframe, rule, direction, the
+source candle's open timestamp, actual observation timestamp (both Unix
+milliseconds), original score, raw and effective HTF trends, and daily ATR
+percentile (`-1` when unavailable). The JSON snapshot contains the computed
+indicators, latest candle per timeframe and Wyckoff phase. The effective context
+uses the same helper as the live HTF filter, including weekly fallback and
+Wyckoff relaxation.
+
+The first observation per version/symbol/timeframe/rule/direction/candle wins.
+Repeated ticks and restarts do not overwrite it; a new direction on the same
+candle is a separate observation. Inserts are atomic per analysis batch and
+storage failures are logged without preventing normal signal processing.
+
+These are **live first-observation samples**, which may contain unfinished
+candles. They must not be relabeled as closed-candle replay samples. Snapshots
+are diagnostic context, not full historical replay inputs or configuration
+provenance. There are no simulated outcomes in this table; missing outcomes
+must never be treated as zero returns. Existing history inventory still reads
+`signals` and remains blocked. No penalty setting is automatically changed.
+Collection starts after deploying this version; existing signals are not
+backfilled into the new table. Storage grows with distinct observed opportunities.
+
+To inspect collection locally:
+
+```sql
+SELECT version, symbol, timeframe, COUNT(*) AS opportunities,
+       COUNT(DISTINCT date(observed_at / 1000, 'unixepoch')) AS days
+FROM htf_opportunities
+GROUP BY version, symbol, timeframe;
+```
+
 ## Why automatic fitting is not yet safe
 
 - The pipeline persists signals **after** HTF suppression and other filters.
@@ -36,8 +74,8 @@ activation or order action, and no change to existing gradient/manual penalties.
 
 ## Remaining work before closing #32
 
-1. Collect versioned **pre-filter** opportunities with effective HTF context,
-   original score, ATR bucket, candle-close timestamp and explicit outcome validity.
+1. Extend the live pre-filter collection with closed-candle replay inputs,
+   configuration provenance, candle-close timestamps and explicitly valid outcomes.
 2. Replay identical closed-candle multi-timeframe rules and entry thresholds for
    candidate penalties; account for transaction costs and overlapping observations.
 3. Split training/validation chronologically, purge overlapping outcome windows,

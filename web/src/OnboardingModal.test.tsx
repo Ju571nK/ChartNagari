@@ -313,3 +313,19 @@ describe('scan loading state', () => {
     })
   })
 })
+
+it('opens AI setup from initial onboarding without completing symbol steps', async () => {
+  g.fetch = vi.fn(async (url: string) => {
+    if (url === '/api/ai/setup') return { ok: true, json: async () => ({ profiles: [], catalog: [], active_profile_id: null }) } as Response
+    if (url === '/api/ai/ollama/status') return { ok: false, status: 503 } as Response
+    return noAlertConfig
+  })
+  const user = userEvent.setup()
+  renderModal()
+  await user.click(screen.getByRole('button', { name: /ai_setup\.title/ }))
+  expect(await screen.findByRole('region', { name: /ai_setup\.title/ })).toBeInTheDocument()
+  expect(screen.getByText('ai_setup.device_explain')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /ai_setup\.back/ }))
+  expect(screen.getByText('onboarding.step1_title')).toBeInTheDocument()
+  expect(localStorage.getItem(ONBOARDING_DONE_KEY)).toBeNull()
+})

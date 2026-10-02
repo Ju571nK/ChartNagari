@@ -40,6 +40,7 @@ vi.mock('react-i18next', () => ({
         'ollama.try_again': 'Try again',
         'ollama.test_ok': 'OK ({{ms}} ms)',
         'ollama.testing': 'Testing\u2026',
+        'ai_setup.ollama_reachable': 'Ollama is running; configure your chosen model in AI setup.',
       };
       let s = map[k] ?? k;
       if (o) for (const [key, val] of Object.entries(o)) s = s.replace(`{{${key}}}`, String(val));
@@ -137,6 +138,18 @@ describe('OllamaSettings', () => {
 
     expect(screen.getByRole('button', { name: /pull model/i })).toBeInTheDocument();
     expect(screen.getByText(/2\.6 GB/)).toBeInTheDocument();
+  });
+
+  it('keeps installation-only status away from legacy model operations', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify(noModelStatus), { status: 200 })
+    );
+
+    render(<OllamaSettings installationOnly />);
+
+    expect(await screen.findByText('Ollama is running; configure your chosen model in AI setup.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /pull model/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('gemma4:4b')).not.toBeInTheDocument();
   });
 
   it('renders INSTALLED_NOT_RUNNING with Start Ollama button', async () => {

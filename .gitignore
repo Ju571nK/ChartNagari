@@ -111,3 +111,7 @@ docs/*.md
 docs/market-research.md
 docs/community-feedback-improvements.md
 docs/community-posts.md
+
+# AI connection profiles contain private endpoint credentials
+/config/ai_profiles.json
+/config/.ai-profiles-*

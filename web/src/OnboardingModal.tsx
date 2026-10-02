@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
+const AISetupWizard = lazy(() => import('./AISetupWizard'))
 
 export const ONBOARDING_DONE_KEY = 'chartnagari_onboarding_done'
 
@@ -22,6 +23,7 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
   const [step1Done, setStep1Done] = useState(false)
   const [step2Done, setStep2Done] = useState(false)
   const [activeStep, setActiveStep] = useState<1 | 2>(1)
+  const [showAISetup, setShowAISetup] = useState(false)
 
   // Alert banner state (non-numbered, shown in right panel)
   const [alertStatus, setAlertStatus] = useState<'loading' | 'ok' | 'missing' | 'unknown'>('loading')
@@ -117,7 +119,7 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [step1Done, step2Done, alertStatus, activeStep])
+  }, [step1Done, step2Done, alertStatus, activeStep, showAISetup])
 
   // Cleanup in-flight requests on unmount
   useEffect(() => {
@@ -402,6 +404,7 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
   }
 
   const renderRightPanel = () => {
+    if (showAISetup) return <Suspense fallback={<p>{t('ai_setup.loading')}</p>}><AISetupWizard /></Suspense>
     if (step2Done) return renderCompletion()
     if (activeStep === 2) return renderStep2Content()
     return renderStep1Content()
@@ -410,7 +413,7 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
   return (
     <div className="ob-overlay">
       <div
-        className="ob-modal"
+        className={`ob-modal${showAISetup ? ' ob-modal-ai' : ''}`}
         ref={modalRef}
         role="dialog"
         aria-modal="true"
@@ -424,9 +427,13 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
           </div>
 
           <nav className="ob-steps" aria-label="Onboarding steps">
+            <button className={`ob-step-item${showAISetup ? ' ob-step-current' : ''}`} onClick={() => setShowAISetup(value => !value)}>
+              <span className={`ob-step-num${showAISetup ? ' ob-num-active' : ''}`}>AI</span>
+              <span className="ob-step-label">{showAISetup ? t('ai_setup.back') : t('ai_setup.title')}</span>
+            </button>
             <button
-              className={`ob-step-item${activeStep === 1 && !step2Done ? ' ob-step-current' : ''}`}
-              onClick={() => { if (!step2Done) setActiveStep(1) }}
+              className={`ob-step-item${activeStep === 1 && !step2Done && !showAISetup ? ' ob-step-current' : ''}`}
+              onClick={() => { if (!step2Done) { setShowAISetup(false); setActiveStep(1) } }}
               disabled={step2Done}
             >
               <span className={`ob-step-num${step1Done ? ' ob-num-done' : activeStep === 1 ? ' ob-num-active' : ''}`}>
@@ -436,8 +443,8 @@ export function OnboardingModal({ onClose, onGoToSettings }: OnboardingModalProp
             </button>
 
             <button
-              className={`ob-step-item${activeStep === 2 && !step2Done ? ' ob-step-current' : ''}`}
-              onClick={() => { if (step1Done && !step2Done) setActiveStep(2) }}
+              className={`ob-step-item${activeStep === 2 && !step2Done && !showAISetup ? ' ob-step-current' : ''}`}
+              onClick={() => { if (step1Done && !step2Done) { setShowAISetup(false); setActiveStep(2) } }}
               disabled={!step1Done || step2Done}
             >
               <span className={`ob-step-num${step2Done ? ' ob-num-done' : activeStep === 2 ? ' ob-num-active' : ''}`}>

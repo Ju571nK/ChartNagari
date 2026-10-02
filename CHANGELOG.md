@@ -44,6 +44,10 @@ Format:
   explicit unsaved/restart-required state and a persistent save action.
 
 ### Added
+- AI setup wizard with model presets, local/remote connection profiles, targeted
+  Ollama model downloads, sample response tests and explicit runtime activation.
+  Profiles persist across restarts; Laya is identified separately as a future
+  typed-decision integration rather than a text-generation provider.
 - Issue #32, phase 2b: versioned five-day opportunity forward outcomes with
   explicit pending/missing/complete states, directional returns and documented
   cost assumptions; bounded background retries and read-only ATR-decile

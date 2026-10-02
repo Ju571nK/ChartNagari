@@ -301,7 +301,7 @@ function StateCard({
   );
 }
 
-export default function OllamaSettings() {
+export default function OllamaSettings({ installationOnly = false }: { installationOnly?: boolean } = {}) {
   const { t } = useTranslation();
   const [result, setResult] = useState<FetchResult | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -616,6 +616,9 @@ export default function OllamaSettings() {
     }
 
     const { data } = result;
+    if (installationOnly && (data.state === 'READY' || data.state === 'READY_NO_MODEL')) {
+      return <div style={cardStyle}><p style={{ color: 'var(--muted)', margin: 0 }}>{t('ai_setup.ollama_reachable')}</p></div>;
+    }
     const deploymentLabel = data.deployment === 'docker'
       ? t('ollama.deployment_docker')
       : t('ollama.deployment_native');
@@ -627,10 +630,10 @@ export default function OllamaSettings() {
             <span style={labelStyle}>{t('ollama.host_label')}:</span>
             <span style={valueStyle}>{data.host}</span>
           </span>
-          <span>
+          {!installationOnly && <span>
             <span style={labelStyle}>{t('ollama.model_label')}:</span>
             <span style={valueStyle}>{data.model}</span>
-          </span>
+          </span>}
           {data.version && (
             <span>
               <span style={labelStyle}>{t('ollama.version_label')}:</span>

@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
+	"github.com/Ju571nK/Chatter/internal/llm"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -44,10 +46,20 @@ type SignalGroup struct {
 // Interpreter enriches SignalGroups via the Claude Messages API.
 // It is safe for concurrent use after initialization.
 type Interpreter struct {
+	mu       sync.RWMutex
+	provider llm.Provider
 	client   anthropic.Client
 	minScore float64 // minimum sum of group scores required to trigger an API call
 	language string
 	enabled  bool
+}
+
+// SetProvider switches signal explanations to the activated setup profile.
+// A nil provider restores the legacy Anthropic behavior.
+func (i *Interpreter) SetProvider(p llm.Provider) {
+	i.mu.Lock()
+	i.provider = p
+	i.mu.Unlock()
 }
 
 // New creates an Interpreter.
@@ -57,7 +69,7 @@ type Interpreter struct {
 //   - clientOpts: optional SDK options (e.g. option.WithBaseURL for tests).
 func New(apiKey string, minScore float64, language string, clientOpts ...option.RequestOption) *Interpreter {
 	if apiKey == "" {
-		return &Interpreter{enabled: false}
+		return &Interpreter{enabled: false, minScore: minScore, language: language}
 	}
 	opts := append([]option.RequestOption{option.WithAPIKey(apiKey)}, clientOpts...)
 	return &Interpreter{
@@ -85,11 +97,26 @@ func (i *Interpreter) enrichGroup(ctx context.Context, g SignalGroup) []models.S
 		total += s.Score
 	}
 
-	if !i.enabled || total < i.minScore {
+	i.mu.RLock()
+	provider := i.provider
+	i.mu.RUnlock()
+	if total < i.minScore || (provider == nil && !i.enabled) {
 		return g.Signals
 	}
 
 	prompt := buildPrompt(g)
+	if provider != nil {
+		interpretation, err := provider.Complete(ctx, interpreterSystemPrompt(i.language), prompt)
+		if err != nil || strings.TrimSpace(interpretation) == "" {
+			return g.Signals
+		}
+		result := make([]models.Signal, len(g.Signals))
+		for idx, signal := range g.Signals {
+			signal.AIInterpretation = interpretation
+			result[idx] = signal
+		}
+		return result
+	}
 
 	params := anthropic.MessageNewParams{
 		Model:     model,

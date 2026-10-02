@@ -463,19 +463,39 @@ func main() {
 				Msg("Multi-analyst AI: using Ollama (local)")
 		}
 	}
-	var director *analyst.Director
-	if llmProvider != nil {
-		director = analyst.NewDirector(llmProvider)
-		apiSrv.WithFullStore(db)
-		apiSrv.WithAnalystDirector(director)
+	aiProfiles, err := appconfig.NewAIProfileStore("config/ai_profiles.json")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load AI profiles")
+	}
+	if active, ok := aiProfiles.Active(); ok {
+		connection, err := llm.NewConnection(active.Kind, active.BaseURL, active.Model, active.APIKey)
+		if err != nil {
+			log.Fatal().Err(err).Msg("invalid active AI profile")
+		}
+		llmProvider = connection
+		selectedProvider = active.Kind
+	}
+	providerSwitch := llm.NewSwitch(llmProvider)
+	if _, ok := aiProfiles.Active(); ok {
+		interp.SetProvider(providerSwitch)
+	}
+	director := analyst.NewDirector(providerSwitch)
+	apiSrv.WithFullStore(db)
+	apiSrv.WithAnalystDirector(director)
+	apiSrv.WithAISetup(aiProfiles, providerSwitch)
+	apiSrv.WithAIActivated(func() { interp.SetProvider(providerSwitch) })
+	if providerSwitch.Available() {
 		log.Info().Str("provider", selectedProvider).Msg("Multi-analyst AI analysis enabled")
 	} else {
-		log.Info().Msg("Multi-analyst AI disabled (no API key — set ANTHROPIC/OPENAI/GROQ/GEMINI_API_KEY or LLM_PROVIDER=ollama)")
+		log.Info().Msg("Multi-analyst AI awaits a configured provider")
 	}
 
 	// ── Telegram 봇 명령어 수신 (/analysis SYMBOL) ────────────────────
-	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" && director != nil {
+	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
 		analysisHandler := func(botCtx context.Context, symbol string) (string, error) {
+			if !providerSwitch.Available() {
+				return "", fmt.Errorf("AI provider is not configured")
+			}
 			bars, err := db.GetOHLCVAll(symbol, "1D")
 			if err != nil || len(bars) == 0 {
 				return "", fmt.Errorf("no data found: %s", symbol)

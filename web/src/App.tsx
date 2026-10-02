@@ -22,7 +22,7 @@ const AnalysisTab = lazy(() => import('./AnalysisTab').then((m) => ({ default: m
 const MyTradesTab = lazy(() => import('./MyTradesTab').then((m) => ({ default: m.MyTradesTab })))
 const ExecutionTab = lazy(() => import('./ExecutionTab'))
 const MCPSettings = lazy(() => import('./MCPSettings'))
-const OllamaSettings = lazy(() => import('./OllamaSettings'))
+const AISetupWizard = lazy(() => import('./AISetupWizard'))
 
 // A hash-named chunk can 404 after a redeploy (old tab open across releases)
 // or be blocked by an ad-blocker; without a boundary, a failed lazy() import
@@ -3579,6 +3579,10 @@ const ENV_GROUPS: EnvGroup[] = [
   },
 ]
 
+function LegacySettingsFrame({ enabled, title, explanation, children }: { enabled: boolean; title: string; explanation: string; children: ReactNode }) {
+  return enabled ? <details className="ai-legacy-settings"><summary>{title}</summary><p>{explanation}</p>{children}</details> : <>{children}</>
+}
+
 export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', channelsOnly = false, fieldKeys }: { uiMode: UIMode; onSetUiMode: (m: UIMode) => void; initialSection?: SettingsSection; channelsOnly?: boolean; fieldKeys?: string[] }) {
   const [statusRevision, setStatusRevision] = useState(0)
   const { t } = useTranslation()
@@ -3744,9 +3748,11 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
         </div>
       )}
 
+      {section === 'ai' && <Suspense fallback={<p>{t('ai_setup.loading')}</p>}><AISetupWizard /></Suspense>}
+
       {/* env 필드 그룹 (general/data/alerts/ai) */}
       {showSaveButton && (
-        <>
+        <LegacySettingsFrame enabled={section === 'ai'} title={t('ai_setup.legacy_settings')} explanation={t('ai_setup.legacy_explain')}>
           <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
             Changes are written to <code>config/settings.yaml</code>. <strong>Restart the server</strong> to apply.
           </p>
@@ -3787,15 +3793,9 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
               ))}
             </div>
           ))}
-        </>
+        </LegacySettingsFrame>
       )}
 
-      {/* AI 탭 — OllamaSettings 추가 */}
-      {section === 'ai' && (
-        <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(91,146,121,0.2)' }}>
-          <OllamaSettings />
-        </div>
-      )}
       {section === 'alerts' && <p>{ux.alertHelp}</p>}
 
       {/* MCP 탭 */}
@@ -3811,7 +3811,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
 
       {/* Advanced 탭 */}
       {section === 'advanced' && <DataManagementSection />}
-      {(showSaveButton || Object.keys(edits).length > 0 || saved) && <div className="settings-save-bar"><span>{Object.keys(edits).length ? ux.pending : saved ? ux.saved : ux.unchanged}</span><button className="run-btn" onClick={handleSave} disabled={saving || !Object.keys(edits).length}>
+      {((section !== 'ai' && showSaveButton) || Object.keys(edits).length > 0 || saved) && <div className="settings-save-bar"><span>{Object.keys(edits).length ? ux.pending : saved ? ux.saved : ux.unchanged}</span><button className="run-btn" onClick={handleSave} disabled={saving || !Object.keys(edits).length}>
         {saving ? 'Saving…' : 'Save'}
       </button></div>}
     </div>

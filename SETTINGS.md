@@ -10,6 +10,45 @@ For local/remote server profiles, remote API authentication and allowed app
 origins, see [Local and remote connections](docs/remote-connections.md). Remote
 access is opt-in and requires an administrator token and HTTPS deployment.
 
+## AI connection setup
+
+The AI setup wizard is available during onboarding and in the AI settings tab.
+Choose the **ChartNagari installation device** or a remote model server, select a
+model preset or enter a compatible model identifier, and save a connection
+profile. The installation device is the machine running the Go server, which
+can differ from the browser device. A remote URL must be reachable from that
+server; a localhost URL refers to the server or its container.
+
+Ollama profiles support listing installed models and downloading a model on the
+selected server. Compatible Hugging Face GGUF identifiers use
+`hf.co/owner/repository[:quantization]`; this is not support for every Hub model
+architecture or format. OpenAI-compatible profiles connect to an existing
+inference server. Use the API base URL including `/v1` when the server requires
+it (for example `http://model-host:8000/v1`). They do not install or provision
+that remote server.
+
+After preparation, run the sample response test and review its output and
+latency, then explicitly activate the profile. Saving a profile alone does not
+switch the active AI. Changing its connection/model requires testing again.
+Activation applies to analysis without restarting and is restored on restart.
+The existing provider configuration remains the fallback until a profile is
+activated. A local inference failure must not silently switch to a paid service.
+
+Presets are convenient starting points, not measured performance guarantees.
+Memory usage depends on the model, quantization and context size. Public model
+weights do not imply free hosted inference or unrestricted licensing; consult
+the linked model card. Laya is shown separately as a typed-decision model and
+is not currently activatable as the text-generation provider. Its dedicated
+classification integration remains future work.
+
+Profile credentials are stored in `config/ai_profiles.json` (mode `0600`) on the
+server and omitted from API responses (only a saved-key indicator is returned).
+An empty key field preserves the saved key; use the explicit clear action to
+remove it. Changing a keyed endpoint requires a new key or clearing the old one.
+Protect the profile file and backups as credentials; never commit them. Model
+installation can require large downloads. Select the target and model before
+starting a download; cancel or retry from the wizard when needed.
+
 ## Existing installations
 
 On the first start of the updated server, settings without `version: 1` import

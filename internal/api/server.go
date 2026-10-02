@@ -31,6 +31,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/execution"
 	"github.com/Ju571nK/Chatter/internal/history"
 	"github.com/Ju571nK/Chatter/internal/indicator"
+	"github.com/Ju571nK/Chatter/internal/llm"
 	"github.com/Ju571nK/Chatter/internal/marks"
 	"github.com/Ju571nK/Chatter/internal/mcp"
 	"github.com/Ju571nK/Chatter/internal/paper"
@@ -224,6 +225,10 @@ type Server struct {
 	ollamaStarter      OllamaStarter                   // optional; set via WithOllamaStarter
 	ollamaRepoRoot     string                          // optional; set via WithOllamaRepoRoot
 	ollamaTester       OllamaTester                    // optional; set via WithOllamaTester
+	aiProfiles         *appconfig.AIProfileStore
+	aiProvider         *llm.Switch
+	aiActivated        func()
+	aiSetupMu          sync.Mutex
 	mu                 sync.RWMutex
 	configUpdateOnce   sync.Once // guards the one-shot "execState nil" startup warning
 
@@ -329,6 +334,14 @@ func (s *Server) WithOllamaRepoRoot(root string) {
 func (s *Server) WithOllamaTester(t OllamaTester) {
 	s.ollamaTester = t
 }
+
+// WithAISetup wires persistent connection profiles and the live provider.
+func (s *Server) WithAISetup(store *appconfig.AIProfileStore, provider *llm.Switch) {
+	s.aiProfiles = store
+	s.aiProvider = provider
+}
+
+func (s *Server) WithAIActivated(fn func()) { s.aiActivated = fn }
 
 // WithAllowedOrigins replaces the CORS allowed-origin set.
 func (s *Server) WithAllowedOrigins(origins []string) {
@@ -615,6 +628,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/mcp", s.handleMCP)
 
 	// Ollama local-LLM status (detection state machine)
+	mux.HandleFunc("GET /api/ai/setup", s.getAISetup)
+	mux.HandleFunc("POST /api/ai/profiles", s.saveAIProfile)
+	mux.HandleFunc("POST /api/ai/profiles/{id}/test", s.testAIProfile)
+	mux.HandleFunc("POST /api/ai/profiles/{id}/activate", s.activateAIProfile)
+	mux.HandleFunc("GET /api/ai/profiles/{id}/models", s.listAIModels)
+	mux.HandleFunc("POST /api/ai/profiles/{id}/pull", s.pullAIModel)
 	mux.HandleFunc("GET /api/ai/ollama/status", s.getOllamaStatus)
 	mux.HandleFunc("POST /api/ai/ollama/pull", s.pullOllamaModel)
 	mux.HandleFunc("POST /api/ai/ollama/start", s.startOllama)
@@ -1882,6 +1901,10 @@ func (s *Server) exportPineScript(w http.ResponseWriter, r *http.Request) {
 func (s *Server) runFullAnalysis(w http.ResponseWriter, r *http.Request) {
 	if s.fullStore == nil || s.analystDirector == nil {
 		http.Error(w, "full analysis not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if s.aiProvider != nil && !s.aiProvider.Available() {
+		http.Error(w, "AI provider is not configured", http.StatusServiceUnavailable)
 		return
 	}
 

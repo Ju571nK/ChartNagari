@@ -7,6 +7,11 @@ let transport: typeof fetch | undefined
 export function connectionFetch(input: RequestInfo | URL, init?: RequestInit) { return (transport ?? fetch)(input, init) }
 let generation = 0
 let connectionAbort = new AbortController()
+const serverListeners = new Set<() => void>()
+export function subscribeServerChange(listener: () => void) {
+  serverListeners.add(listener)
+  return () => { serverListeners.delete(listener) }
+}
 export function getServerOrigin() { return serverOrigin || window.location.origin }
 export function selectServer(origin: string, token: string) {
   sessionStorage.setItem('chartnagari.selected-server', origin)
@@ -15,6 +20,7 @@ export function selectServer(origin: string, token: string) {
   generation++
   serverOrigin = origin
   sessionToken = token
+  serverListeners.forEach(listener => listener())
 }
 export function serverWebSocketURL() {
   const url = new URL('/ws', getServerOrigin())

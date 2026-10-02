@@ -43,3 +43,17 @@ it('saves only edited YAML fields and explicitly clears a masked secret', async 
   const last = fetcher.mock.calls.filter(([, init]) => init?.method === 'PUT')[1]
   expect(JSON.parse(String(last[1]?.body))).toEqual({ API_TOKEN: '' })
 })
+
+it('shows AI setup in the AI section with legacy environment fields separate', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const path = String(input)
+    if (path === '/api/ai/setup') return new Response(JSON.stringify({ profiles: [], catalog: [], active_profile_id: null }), { status: 200 })
+    if (path === '/api/ai/ollama/status') return new Response('', { status: 503 })
+    return new Response('{}', { status: 200 })
+  })
+  render(<SettingsTab uiMode="beginner" onSetUiMode={vi.fn()} />)
+  fireEvent.click(await screen.findByRole('tab', { name: 'AI / LLM' }))
+  expect(await screen.findByRole('region', { name: 'AI setup' })).toBeInTheDocument()
+  expect(screen.getByText(/ChartNagari server, not this browser computer/)).toBeInTheDocument()
+  expect(screen.getByText('Legacy AI environment settings')).toBeInTheDocument()
+})

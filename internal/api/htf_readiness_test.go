@@ -27,3 +27,25 @@ func TestHTFReadinessAPI(t *testing.T) {
 		t.Fatal("missing storage hidden")
 	}
 }
+
+func TestHTFPerformanceAPI(t *testing.T) {
+	s, db := preparationServer(t)
+	for _, query := range []string{"", "?symbol=TEST", "?symbol=ALL&timeframe=1H", "?symbol=TEST&timeframe=1D"} {
+		if rr := do(t, s, "GET", "/api/backtest/htf-performance"+query, nil); rr.Code != 400 {
+			t.Fatalf("%s: %d", query, rr.Code)
+		}
+	}
+	url := "/api/backtest/htf-performance?symbol=TEST&timeframe=4H"
+	rr := do(t, s, "GET", url, nil)
+	var result storage.HTFPerformance
+	if rr.Code != 200 || json.Unmarshal(rr.Body.Bytes(), &result) != nil || len(result.Buckets) != 10 || result.Ready || result.Policy != storage.HTFOutcomePolicy {
+		t.Fatal(rr.Body.String())
+	}
+	db.Close()
+	if rr := do(t, s, "GET", url, nil); rr.Code != 500 {
+		t.Fatal("storage error hidden")
+	}
+	if rr := do(t, setupTest(t), "GET", url, nil); rr.Code != 503 {
+		t.Fatal("missing store hidden")
+	}
+}

@@ -44,6 +44,10 @@ Format:
   explicit unsaved/restart-required state and a persistent save action.
 
 ### Added
+- Issue #32, phase 2b: versioned five-day opportunity forward outcomes with
+  explicit pending/missing/complete states, directional returns and documented
+  cost assumptions; bounded background retries and read-only ATR-decile
+  performance API. Automatic penalty calibration remains disabled.
 - Issue #32, phase 2a: versioned pre-filter 1H/4H opportunity collection,
   preserving original weighted scores, raw/effective HTF context and indicator
   snapshots. Repeated candle observations are deduplicated; automatic penalty

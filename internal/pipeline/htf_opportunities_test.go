@@ -94,3 +94,24 @@ func TestOpportunityWriteFailureDoesNotStopPipeline(t *testing.T) {
 		t.Fatal("observation write failure prevented downstream processing")
 	}
 }
+
+type outcomeUpdatingStore struct {
+	opportunityStore
+	calls       int
+	hasDeadline bool
+}
+
+func (s *outcomeUpdatingStore) UpdateHTFOutcomes(ctx context.Context, now time.Time) error {
+	s.calls++
+	_, s.hasDeadline = ctx.Deadline()
+	return errors.New("test update error")
+}
+func TestOutcomesUpdateWithoutNewSignals(t *testing.T) {
+	p := newTestPipeline(&mockDB{}, nil)
+	s := &outcomeUpdatingStore{}
+	p.SetHTFOpportunitySaver(s)
+	p.RunOnce(context.Background())
+	if s.calls != 1 || !s.hasDeadline {
+		t.Fatal("outcome update missing or unbounded")
+	}
+}

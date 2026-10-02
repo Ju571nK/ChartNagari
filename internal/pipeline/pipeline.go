@@ -260,6 +260,16 @@ func (p *Pipeline) runOnce(ctx context.Context) {
 		p.analyzeSymbol(ctx, sym)
 	}
 
+	if store, ok := p.opportunitySaver.(interface {
+		UpdateHTFOutcomes(context.Context, time.Time) error
+	}); ok {
+		outcomeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := store.UpdateHTFOutcomes(outcomeCtx, time.Now().UTC()); err != nil {
+			p.log.Warn().Err(err).Msg("HTF outcome update failed")
+		}
+		cancel()
+	}
+
 	// Forward return tracking: update historical signals with actual returns.
 	if p.forwardReturnDB != nil && p.forwardReturnOHLCV != nil {
 		UpdateForwardReturns(p.forwardReturnDB, p.forwardReturnOHLCV, p.log)

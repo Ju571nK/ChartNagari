@@ -80,6 +80,24 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_htf_opportunities_lookup
 		ON htf_opportunities(symbol, timeframe, observed_at);
 
+	CREATE TABLE IF NOT EXISTS htf_outcomes (
+		opportunity_id INTEGER NOT NULL,
+		policy TEXT NOT NULL,
+		status TEXT NOT NULL CHECK(status IN ('pending','missing_data','complete')),
+		checked_at INTEGER NOT NULL,
+		entry_time INTEGER,
+		exit_time INTEGER,
+		entry_price REAL,
+		exit_price REAL,
+		gross_return REAL,
+		net_return REAL,
+		PRIMARY KEY(opportunity_id, policy),
+		CHECK((status = 'complete' AND gross_return IS NOT NULL AND net_return IS NOT NULL
+			AND entry_price > 0 AND exit_price > 0 AND exit_time > entry_time)
+			OR (status != 'complete' AND gross_return IS NULL AND net_return IS NULL))
+	);
+	CREATE INDEX IF NOT EXISTS idx_htf_outcomes_retry ON htf_outcomes(policy, status, checked_at);
+
 	CREATE TABLE IF NOT EXISTS ohlcv (
 		id        INTEGER PRIMARY KEY AUTOINCREMENT,
 		symbol    TEXT    NOT NULL,

@@ -33,3 +33,27 @@ func (s *Server) getHTFReadiness(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, result)
 }
+
+// getHTFPerformance is read-only; background processing owns outcome writes.
+func (s *Server) getHTFPerformance(w http.ResponseWriter, r *http.Request) {
+	symbol, tf := strings.TrimSpace(r.URL.Query().Get("symbol")), r.URL.Query().Get("timeframe")
+	if symbol == "" || len(symbol) > 64 || symbol == "ALL" || (tf != "1H" && tf != "4H") {
+		http.Error(w, "symbol and lower timeframe (1H or 4H) required", http.StatusBadRequest)
+		return
+	}
+	store, ok := s.chartStore.(interface {
+		HTFPerformance(context.Context, string, string, time.Time) (*storage.HTFPerformance, error)
+	})
+	if !ok {
+		http.Error(w, "HTF performance unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	result, err := store.HTFPerformance(ctx, symbol, tf, time.Now().UTC())
+	if err != nil {
+		http.Error(w, "failed to read HTF performance", http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, result)
+}

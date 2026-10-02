@@ -45,7 +45,7 @@ storage failures are logged without preventing normal signal processing.
 These are **live first-observation samples**, which may contain unfinished
 candles. They must not be relabeled as closed-candle replay samples. Snapshots
 are diagnostic context, not full historical replay inputs or configuration
-provenance. There are no simulated outcomes in this table; missing outcomes
+provenance. Outcomes are stored separately by Phase 2b; missing outcomes
 must never be treated as zero returns. Existing history inventory still reads
 `signals` and remains blocked. No penalty setting is automatically changed.
 Collection starts after deploying this version; existing signals are not
@@ -60,6 +60,47 @@ FROM htf_opportunities
 GROUP BY version, symbol, timeframe;
 ```
 
+## Phase 2b: forward outcomes and bucket performance
+
+`GET /api/backtest/htf-performance?symbol=TEST&timeframe=1H` is a read-only
+report with ten ATR deciles. It selects version-1 opportunities opposing the
+**effective** HTF context, isolated by symbol and 1H/4H timeframe. Aligned,
+unknown and Wyckoff-relaxed contexts, unknown ATR and future observations are
+excluded. Counts include pending, missing-data and completed outcomes. Empty
+averages are JSON null, while a genuinely flat gross return is numeric zero.
+Dates in this endpoint are Unix milliseconds; distinct dates use UTC.
+
+The immutable policy `first_available_open_5d_cost30bps_v1` uses:
+
+- Entry: first stored same-timeframe candle open strictly after observation,
+  at most seven calendar days later. The observation candle's price is not used.
+- Exit: first stored same-timeframe candle open at least five calendar days
+  after entry, within seven further calendar days. Weekends can extend holding.
+- Both candles must have elapsed their nominal 1H/4H duration at calculation time.
+- Gross return: directional price change relative to entry; SHORT reverses sign.
+- Net return: gross return minus 0.30 percentage points, an illustrative round-trip
+  assumption of 10 bps fee and 5 bps slippage per side. This is not venue-specific.
+- No TP/SL, leverage, funding, borrow fees, sizing or portfolio compounding.
+
+The pipeline processes up to 200 opportunities per tick with a ten-second
+context timeout. Uncomputed records appear pending. Missing-data status applies
+when the price window has elapsed or selected prices are invalid. Pending and
+missing-data records retry no more often than hourly, ordered by oldest check;
+backfilled prices can complete them. Completed results are frozen, so subsequent
+OHLCV corrections require a separately versioned recalculation policy.
+
+`htf_outcomes` stores policy, status, check time and, only on completion, entry/
+exit times and prices plus gross/net returns. API reads never trigger writes.
+Processing errors are logged and do not stop normal signal analysis.
+
+These are descriptive **first-available-price forward returns**, not a trade
+backtest. Missing intermediate market data can shift the selected entry/exit;
+there is no market-calendar completeness guarantee. Opportunity samples may
+overlap and are not independent. `history_sufficient` remains only the two-year /
+30-distinct-observation-day sparsity check; it does not validate completed-outcome
+coverage. `ready` remains false. Full replay, outcome-window purging and
+chronological out-of-sample validation are still required before fitting penalties.
+
 ## Why automatic fitting is not yet safe
 
 - The pipeline persists signals **after** HTF suppression and other filters.
@@ -68,7 +109,8 @@ GROUP BY version, symbol, timeframe;
   a Wyckoff override. An opposing raw trend does not prove that a penalty applied.
 - Stored scores already contain adjustments; they cannot reconstruct original
   scores for replaying alternative penalties.
-- Forward-return zero conflates missing outcomes with genuine zero returns.
+- Legacy signal forward-return zero conflates missing outcomes with genuine zero
+  returns. Phase 2b resolves this for new opportunity outcomes only.
 - The current single-timeframe backtest does not replay the full live multi-timeframe
   filtering pipeline. Varying its scores alone would not validate live behavior.
 

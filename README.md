@@ -18,7 +18,7 @@ A personal workspace for exploring US stocks and crypto — from chart patterns 
 - **Review before acting.** Check available history, run backtests and follow paper trades without treating simulated results as predictions.
 - **Set things up in the browser.** Configure data providers, optional AI and connection settings through the web UI.
 
-English, Korean and Japanese interfaces are available. AI interpretation is optional, including a local Ollama option.
+English, Korean and Japanese interfaces are available. AI interpretation is optional, including a guided local Ollama setup. Ollama must be installed on the selected host (the ChartNagari server or a remote Ollama machine); the browser cannot install it on your computer. See the [AI/Ollama setup guide](docs/OLLAMA_SETUP.md).
 
 ## What's new
 

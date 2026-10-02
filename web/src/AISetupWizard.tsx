@@ -220,6 +220,12 @@ export default function AISetupWizard() {
   return <section className="ai-setup" aria-label={t('ai_setup.title')}>
     <h3>{t('ai_setup.title')}</h3>
     <p className="ai-setup-muted">{t('ai_setup.intro')}</p>
+    <ol className="ai-setup-muted" style={{ paddingLeft: '1.35rem', marginTop: 0 }}>
+      <li>{t('ai_setup.quick_step_install')}</li>
+      <li>{t('ai_setup.quick_step_save')}</li>
+      <li>{t('ai_setup.quick_step_download')}</li>
+      <li>{t('ai_setup.quick_step_test')}</li>
+    </ol>
     {loading && <p role="status">{t('ai_setup.loading')}</p>}
     {error && <div className="ai-setup-error" role="alert">{error} <button type="button" onClick={() => { if (!setup) void load(); else setError('') }}>{t(setup ? 'ai_setup.dismiss' : 'ai_setup.retry')}</button></div>}
     {setup && <>

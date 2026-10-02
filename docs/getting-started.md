@@ -63,6 +63,11 @@ and data directories, not arbitrary host paths.
 2. Choose a timeframe in **Chart**. Start in beginner mode; use expert mode to
    inspect additional overlays.
 3. Connect optional data, AI and notification services in **Settings**.
+   For local AI, Ollama must be installed on the selected host; the browser
+   cannot install software on the computer that opened the page. The AI setup
+   wizard guides you through checking the host, saving a profile, downloading
+   a model such as Qwen3, testing a sample response and activating it. See the
+   [AI/Ollama setup guide](OLLAMA_SETUP.md).
 4. Restart the relevant process after changing general settings. If API-token
    authentication is enabled, use **Authorize changes** in Settings to save edits.
 

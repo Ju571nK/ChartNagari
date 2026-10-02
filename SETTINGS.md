@@ -16,9 +16,15 @@ The AI setup wizard is available during onboarding and in the AI settings tab.
 Choose the **ChartNagari installation device** or a remote model server, select a
 model preset or enter a compatible model identifier, and save a connection
 profile. The installation device is the machine running the Go server, which
-can differ from the browser device. A remote URL must be reachable from that
+can differ from the browser device. A browser page cannot silently install
+Ollama on the computer that opened it. Install Ollama on the selected host using
+its official installer; ChartNagari can then check its status and start the
+local service when available. A remote URL must be reachable from the ChartNagari
 server; a localhost URL refers to the server or its container.
 
+After saving an Ollama profile, explicitly download the selected model (for
+example, a Qwen3 preset) to the selected Ollama host. Model files can be several
+gigabytes. Then test a sample response and explicitly activate the profile.
 Ollama profiles support listing installed models and downloading a model on the
 selected server. Compatible Hugging Face GGUF identifiers use
 `hf.co/owner/repository[:quantization]`; this is not support for every Hub model

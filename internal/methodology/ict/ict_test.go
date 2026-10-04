@@ -42,7 +42,7 @@ func TestOrderBlock_Bullish(t *testing.T) {
 	// bars[2]: close > bars[0].open = 110  → impulse confirmed
 	// bars[3]: current bar — close within [99, 112]
 	bars := []models.OHLCV{
-		makeBar(110, 112, 99, 100), // index 0: bearish OB
+		makeBar(110, 112, 99, 100),  // index 0: bearish OB
 		makeBar(101, 115, 100, 114), // index 1: bullish
 		makeBar(114, 120, 113, 118), // index 2: close(118) > OB.open(110) → impulse
 		makeBar(105, 111, 100, 105), // index 3: current, close=105 inside [99,112]
@@ -84,9 +84,9 @@ func TestOrderBlock_Bearish(t *testing.T) {
 	// bars[2]: close < bars[0].open = 100 → impulse confirmed
 	// bars[3]: current bar — close within [99, 112]
 	bars := []models.OHLCV{
-		makeBar(100, 112, 99, 110), // index 0: bullish OB
-		makeBar(109, 110, 95, 98),  // index 1: bearish
-		makeBar(98, 99, 88, 90),    // index 2: close(90) < OB.open(100) → impulse
+		makeBar(100, 112, 99, 110),  // index 0: bullish OB
+		makeBar(109, 110, 95, 98),   // index 1: bearish
+		makeBar(98, 99, 88, 90),     // index 2: close(90) < OB.open(100) → impulse
 		makeBar(108, 111, 100, 105), // index 3: current, close=105 inside [99,112]
 	}
 	padding := []models.OHLCV{
@@ -165,12 +165,12 @@ func TestOrderBlock_Mitigated(t *testing.T) {
 	// bars[3]: mitigating bar — closes BELOW OB low (mitigated)
 	// bars[4]: current — close within OB range, but OB is mitigated
 	bars := []models.OHLCV{
-		makeBar(90, 95, 88, 92),    // padding
-		makeBar(92, 97, 91, 95),    // padding
-		makeBar(110, 112, 99, 100), // index 2: bearish OB (open=110, close=100), low=99, high=112
+		makeBar(90, 95, 88, 92),     // padding
+		makeBar(92, 97, 91, 95),     // padding
+		makeBar(110, 112, 99, 100),  // index 2: bearish OB (open=110, close=100), low=99, high=112
 		makeBar(101, 115, 100, 114), // index 3: bullish
 		makeBar(114, 120, 113, 118), // index 4: close(118) > OB.open(110) → impulse
-		makeBar(95, 100, 90, 92),   // index 5: mitigating bar — close=92 < obLow=99 → mitigated
+		makeBar(95, 100, 90, 92),    // index 5: mitigating bar — close=92 < obLow=99 → mitigated
 		makeBar(105, 111, 100, 105), // index 6: current, close=105 inside [99,112]
 	}
 	ctx.Timeframes["1H"] = bars
@@ -251,7 +251,7 @@ func TestFVG_Bullish(t *testing.T) {
 	// Pattern: bars[0].high=100, bars[2].low=105 → gap [100,105]
 	// current close = 102 → inside gap → LONG
 	bars := []models.OHLCV{
-		makeBar(95, 100, 93, 99),   // index 0: high=100
+		makeBar(95, 100, 93, 99),    // index 0: high=100
 		makeBar(101, 104, 100, 103), // index 1: middle candle
 		makeBar(104, 108, 105, 107), // index 2: low=105 > high_0(100) → bullish FVG
 		makeBar(103, 106, 101, 102), // index 3: current, close=102 in [100,105]
@@ -283,7 +283,7 @@ func TestFVG_Bearish(t *testing.T) {
 	bars := []models.OHLCV{
 		makeBar(110, 112, 105, 106), // index 0: low=105
 		makeBar(104, 105, 101, 102), // index 1: middle
-		makeBar(99, 100, 97, 98),   // index 2: high=100 < low_0(105) → bearish FVG
+		makeBar(99, 100, 97, 98),    // index 2: high=100 < low_0(105) → bearish FVG
 		makeBar(103, 104, 101, 102), // index 3: current, close=102 in [100,105]
 	}
 	ctx.Timeframes["1H"] = bars
@@ -326,10 +326,10 @@ func TestFVG_NoGap(t *testing.T) {
 // TestFVGRelevance_Unit: direct unit test of fvgRelevance function
 func TestFVGRelevance_Unit(t *testing.T) {
 	tests := []struct {
-		name                                              string
+		name                                         string
 		gapSize, atr, impulseBody, impulseVol, volMA float64
-		unfilledBars                                      int
-		minScore, maxScore                                float64
+		unfilledBars                                 int
+		minScore, maxScore                           float64
 	}{
 		{"no indicators → neutral", 5.0, 0, 3.0, 0, 0, 5, 0.3, 0.6},
 		{"large gap + strong impulse + long unfilled", 10.0, 5.0, 12.0, 3000, 1000, 15, 0.7, 1.0},
@@ -357,7 +357,7 @@ func TestFVG_HighRelevance(t *testing.T) {
 	// Build bars with a bullish FVG that has large gap, strong impulse, and many unfilled bars
 	// ATR=5, gap=8 (1.6x ATR), middle candle has huge body and volume
 	bars := []models.OHLCV{
-		makeBarWithVolume(95, 100, 93, 99, 100),    // index 0: high=100
+		makeBarWithVolume(95, 100, 93, 99, 100),     // index 0: high=100
 		makeBarWithVolume(101, 112, 100, 111, 5000), // index 1: big impulse candle (body=10)
 		makeBarWithVolume(110, 115, 108, 113, 200),  // index 2: low=108 > b0.high=100 → gap [100,108]
 		// Several unfilled bars (close stays above gap)
@@ -399,9 +399,9 @@ func TestFVG_LowRelevance(t *testing.T) {
 
 	// Tiny gap relative to ATR, weak impulse, just formed (0 unfilled bars)
 	bars := []models.OHLCV{
-		makeBarWithVolume(100, 100.5, 99, 100.3, 100), // index 0: high=100.5
-		makeBarWithVolume(100.6, 101, 100.4, 100.8, 300), // index 1: weak impulse (body=0.2)
-		makeBarWithVolume(100.8, 101.2, 100.7, 101, 100), // index 2: low=100.7 > b0.high=100.5 → gap [100.5, 100.7] = 0.2
+		makeBarWithVolume(100, 100.5, 99, 100.3, 100),      // index 0: high=100.5
+		makeBarWithVolume(100.6, 101, 100.4, 100.8, 300),   // index 1: weak impulse (body=0.2)
+		makeBarWithVolume(100.8, 101.2, 100.7, 101, 100),   // index 2: low=100.7 > b0.high=100.5 → gap [100.5, 100.7] = 0.2
 		makeBarWithVolume(100.6, 100.8, 100.4, 100.6, 100), // current: close=100.6 in [100.5, 100.7]
 	}
 	ctx.Timeframes["1H"] = bars
@@ -614,7 +614,7 @@ func TestSweepQuality_Unit(t *testing.T) {
 	tests := []struct {
 		name                                       string
 		volRatio, wickBeyond, reversalDist, cRange float64
-		minScore, maxScore                          float64
+		minScore, maxScore                         float64
 	}{
 		{"zero range", 2.0, 1.0, 1.0, 0, 0.1, 0.1},
 		{"no volume data", 0, 3.0, 4.0, 10.0, 0.3, 0.8},
@@ -673,7 +673,7 @@ func TestSweepBreakout_ConfirmedSweep(t *testing.T) {
 	// SWING_LOW = 100. bars[0] sweeps below 100 (low=97, close=102).
 	// Subsequent bars close ABOVE 100 → confirmed sweep (not breakout).
 	bars := []models.OHLCV{
-		makeBar(102, 105, 97, 102), // index 0: sweep candidate (low=97 < 100, close=102)
+		makeBar(102, 105, 97, 102),  // index 0: sweep candidate (low=97 < 100, close=102)
 		makeBar(103, 108, 101, 107), // index 1: close=107 > 100 → reversed
 		makeBar(107, 112, 106, 110), // index 2: close=110 > 100 → reversed
 		makeBar(110, 115, 109, 113), // index 3: close=113 > 100 → reversed
@@ -790,10 +790,10 @@ func TestBreakerBlock_Bearish(t *testing.T) {
 
 // ── Kill Zone ─────────────────────────────────────────────────────────────────
 
-// TestKillZone_London: 09:30 UTC → NEUTRAL signal (London session)
+// TestKillZone_London: 07:30 UTC in January → 02:30 New York.
 func TestKillZone_London(t *testing.T) {
 	rule := &ICTKillZoneRule{now: func() time.Time {
-		return time.Date(2026, 1, 1, 9, 30, 0, 0, time.UTC)
+		return time.Date(2026, 1, 1, 7, 30, 0, 0, time.UTC)
 	}}
 	ctx := makeCtx("AAPL")
 
@@ -818,10 +818,10 @@ func TestKillZone_London(t *testing.T) {
 	}
 }
 
-// TestKillZone_NewYork: 14:00 UTC → NEUTRAL signal (New York session)
+// TestKillZone_NewYork: 12:00 UTC in January → 07:00 New York.
 func TestKillZone_NewYork(t *testing.T) {
 	rule := &ICTKillZoneRule{now: func() time.Time {
-		return time.Date(2026, 1, 1, 14, 0, 0, 0, time.UTC)
+		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	}}
 	ctx := makeCtx("AAPL")
 
@@ -978,15 +978,13 @@ func TestAMD_BullishManipulation(t *testing.T) {
 	rule := &ICTAMDSessionRule{}
 	ctx := makeCtx("BTCUSDT")
 
-	// Asia (00:00-07:00): range [100, 110]
-	// London (08:00-11:00): bar dips below 100 (low=97) then closes back at 101
-	// NY (13:00+): current bar
+	// EDT Asia 00:00-04:00 UTC, London 06:00-09:00, NY AM 11:00-14:00.
 	bars := []models.OHLCV{
-		makeBarAtTime(1, 105, 110, 102, 107), // Asia bar 1
-		makeBarAtTime(3, 107, 109, 100, 104), // Asia bar 2: low=100
-		makeBarAtTime(5, 104, 108, 101, 106), // Asia bar 3
-		makeBarAtTime(9, 103, 107, 97, 101),  // London: low=97 < asiaLow=100, close=101 >= 100 → breach
-		makeBarAtTime(14, 102, 112, 101, 110), // NY: current bar
+		makeBarAtTime(1, 105, 110, 102, 107),  // Asia bar 1
+		makeBarAtTime(3, 107, 109, 100, 104),  // Asia bar 2: low=100
+		makeBarAtTime(2, 104, 108, 101, 106),  // Asia bar 3
+		makeBarAtTime(7, 103, 107, 97, 101),   // London breach
+		makeBarAtTime(12, 102, 112, 101, 110), // NY current bar
 	}
 	ctx.Timeframes["1H"] = bars
 
@@ -1016,9 +1014,9 @@ func TestAMD_BearishManipulation(t *testing.T) {
 	bars := []models.OHLCV{
 		makeBarAtTime(1, 105, 110, 102, 107), // Asia bar 1: high=110
 		makeBarAtTime(3, 107, 109, 100, 104), // Asia bar 2
-		makeBarAtTime(5, 104, 108, 101, 106), // Asia bar 3
-		makeBarAtTime(9, 108, 114, 106, 109), // London: high=114 > asiaHigh=110, close=109 <= 110 → breach
-		makeBarAtTime(14, 108, 109, 98, 100), // NY: current bar
+		makeBarAtTime(2, 104, 108, 101, 106), // Asia bar 3
+		makeBarAtTime(7, 108, 114, 106, 109), // London breach
+		makeBarAtTime(12, 108, 109, 98, 100), // NY current bar
 	}
 	ctx.Timeframes["1H"] = bars
 
@@ -1043,10 +1041,10 @@ func TestAMD_NoManipulation(t *testing.T) {
 	// London: stays within range
 	// NY: current bar
 	bars := []models.OHLCV{
-		makeBarAtTime(1, 105, 110, 102, 107), // Asia bar 1
-		makeBarAtTime(3, 107, 109, 100, 104), // Asia bar 2
-		makeBarAtTime(9, 104, 108, 101, 106), // London: no breach (stays within [100,110])
-		makeBarAtTime(14, 106, 112, 104, 110), // NY: current bar
+		makeBarAtTime(1, 105, 110, 102, 107),  // Asia bar 1
+		makeBarAtTime(3, 107, 109, 100, 104),  // Asia bar 2
+		makeBarAtTime(7, 104, 108, 101, 106),  // London: no breach
+		makeBarAtTime(12, 106, 112, 104, 110), // NY current bar
 	}
 	ctx.Timeframes["1H"] = bars
 

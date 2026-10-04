@@ -89,6 +89,130 @@ func TestFetchFinnhub_FiltersNonUS(t *testing.T) {
 	}
 }
 
+func TestFetchFinnhub_FXCountries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(finnhubResponse{EconomicCalendar: []finnhubEvent{
+			{Time: "2026-03-21 12:30:00", Country: "US", Event: "CPI", Impact: "high"},
+			{Time: "2026-03-21 13:00:00", Country: "EU", Event: "ECB", Impact: "high"},
+			{Time: "2026-03-21 14:00:00", Country: "DE", Event: "German CPI", Impact: "high"},
+			{Time: "2026-03-21 15:00:00", Country: "JP", Event: "BOJ", Impact: "high"},
+		}})
+	}))
+	defer srv.Close()
+	store := &mockStore{}
+	f := newFinnhubFetcher(srv, store)
+	f.SetForexSymbols([]string{"EURUSD"})
+	if err := f.fetchFinnhub(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.upserted) != 3 {
+		t.Fatalf("expected US/EU/DE, got %+v", store.upserted)
+	}
+	if store.upserted[1].Country != "EU" || store.upserted[2].Country != "DE" {
+		t.Fatalf("wrong events: %+v", store.upserted)
+	}
+	f.SetForexSymbols(nil)
+	if f.acceptsCountry("EU") {
+		t.Fatal("stocks-only calendar should be US-only")
+	}
+}
+
+func TestCountriesForSymbols(t *testing.T) {
+	for _, tc := range []struct {
+		symbols  []string
+		wanted   []string
+		excluded string
+	}{
+		{nil, []string{"US"}, "EU"},
+		{[]string{"EURUSD"}, []string{"US", "EU", "DE", "FR", "IT"}, "JP"},
+		{[]string{"GBPJPY", "AUDCAD"}, []string{"US", "GB", "JP", "AU", "CA"}, "EU"},
+	} {
+		got := CountriesForSymbols(tc.symbols)
+		for _, country := range tc.wanted {
+			if !got[country] {
+				t.Errorf("missing %s for %v", country, tc.symbols)
+			}
+		}
+		if got[tc.excluded] {
+			t.Errorf("unexpected %s for %v", tc.excluded, tc.symbols)
+		}
+	}
+}
+
+func TestWatchlistCountryChangeQueuesRefreshWithoutNetwork(t *testing.T) {
+	f := New("", "", &mockStore{}, zerolog.Nop())
+	f.SetForexSymbols(nil)
+	select {
+	case <-f.refresh:
+	case <-time.After(time.Second):
+		t.Fatal("initial country set did not queue refresh")
+	}
+	f.SetForexSymbols(nil)
+	select {
+	case <-f.refresh:
+		t.Fatal("unchanged countries queued a redundant refresh")
+	default:
+	}
+	f.SetForexSymbols([]string{"EURUSD"})
+	select {
+	case <-f.refresh:
+	case <-time.After(time.Second):
+		t.Fatal("new EUR countries did not queue timely refresh")
+	}
+	if !f.acceptsCountry("EU") {
+		t.Fatal("new country unavailable to fetch filter")
+	}
+}
+
+func TestWatchlistCountryChangeTriggersRunningFetcher(t *testing.T) {
+	requests := make(chan struct{}, 3)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(finnhubResponse{EconomicCalendar: []finnhubEvent{}})
+		requests <- struct{}{}
+	}))
+	defer srv.Close()
+	f := newFinnhubFetcher(srv, &mockStore{})
+	f.refresh = make(chan struct{}, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { f.Run(ctx); close(done) }()
+	select {
+	case <-requests:
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("initial calendar fetch did not run")
+	}
+	f.SetForexSymbols([]string{"EURUSD"})
+	select {
+	case <-requests:
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("country change did not trigger prompt refresh")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("calendar fetcher did not stop")
+	}
+}
+
+func TestFetchFMPNormalizesFXCountries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[{"date":"2026-03-21 12:30:00","country":"Euro Area","event":"ECB","impact":"High"},{"date":"2026-03-21 13:00:00","country":"Japan","event":"BOJ","impact":"High"}]`))
+	}))
+	defer srv.Close()
+	store := &mockStore{}
+	f := newFMPFetcher(srv, store)
+	f.SetForexSymbols([]string{"EURUSD"})
+	if err := f.fetchFMP(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.upserted) != 1 || store.upserted[0].Country != "EU" {
+		t.Fatalf("wrong FX events: %+v", store.upserted)
+	}
+}
+
 func TestFetchFinnhub_DateOnlyFormat(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(finnhubResponse{

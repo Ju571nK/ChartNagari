@@ -3,6 +3,8 @@
 // scored signals sorted by strength.
 package engine
 
+import "github.com/Ju571nK/Chatter/pkg/models"
+
 // RuleConfig is loaded from rules.yaml (engine-specific subset).
 // The map key is the rule name that must match AnalysisRule.Name().
 type RuleConfig struct {
@@ -11,9 +13,10 @@ type RuleConfig struct {
 
 // RuleEntry holds per-rule activation and scoring metadata.
 type RuleEntry struct {
-	Enabled   bool    `yaml:"enabled"`
-	Timeframe string  `yaml:"timeframe"` // "1H" | "4H" | "1D" | "1W" | "ALL"
-	Weight    float64 `yaml:"weight"`    // rule strength weight used in scoring
+	Enabled      bool                `yaml:"enabled"`
+	Timeframe    string              `yaml:"timeframe"`     // "1H" | "4H" | "1D" | "1W" | "ALL"
+	Weight       float64             `yaml:"weight"`        // rule strength weight used in scoring
+	AssetClasses []models.AssetClass `yaml:"asset_classes"` // empty allows every class
 }
 
 // TFWeight returns the PRD-defined timeframe weight multiplier.

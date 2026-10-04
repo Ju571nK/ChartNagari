@@ -271,7 +271,7 @@ func TestSpring_NoVolumeConfirmation(t *testing.T) {
 		makeBar(105, 108, 103, 106, 1000),
 		makeBar(104, 107, 102, 105, 1000),
 		makeBar(103, 106, 101, 104, 1000),
-		makeBar(102, 105, 98, 103, 1000), // dip below 100
+		makeBar(102, 105, 98, 103, 1000),  // dip below 100
 		makeBar(103, 106, 101, 104, 1200), // volume=1200 < 1.5*1000=1500
 	}
 	ctx.Timeframes["1H"] = bars

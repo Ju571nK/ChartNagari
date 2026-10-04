@@ -278,6 +278,11 @@ func (db *DB) migrate() error {
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err
 	}
+	for _, col := range []string{"asset_class TEXT NOT NULL DEFAULT ''", "pip_size REAL NOT NULL DEFAULT 0", "spread_pips REAL NOT NULL DEFAULT 0", "pnl_pips REAL NOT NULL DEFAULT 0", "data_provider TEXT NOT NULL DEFAULT ''", "provider_symbol TEXT NOT NULL DEFAULT ''", "source_identity TEXT NOT NULL DEFAULT ''", "data_proxy INTEGER NOT NULL DEFAULT 0", "suspended INTEGER NOT NULL DEFAULT 0", "suspension_reason TEXT NOT NULL DEFAULT ''"} {
+		if _, err := db.conn.Exec(`ALTER TABLE paper_positions ADD COLUMN ` + col); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("paper_positions forex migration: %w", err)
+		}
+	}
 
 	// Migrate existing DB: add ai_interpretation column
 	if _, err := db.conn.Exec(
@@ -335,6 +340,11 @@ func (db *DB) migrate() error {
 		if !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("signals atr_percentile migration failed: %w", err)
 		}
+	}
+
+	// Migrate existing DB: add symbol column to feedback_idempotency.
+	if _, err := db.conn.Exec(`ALTER TABLE signals ADD COLUMN fx_meta TEXT NOT NULL DEFAULT '{}'`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("signals fx_meta migration: %w", err)
 	}
 
 	// Migrate existing DB: add symbol column to feedback_idempotency.
@@ -509,8 +519,8 @@ func (db *DB) MarkEventAlerted(id int64) error {
 	return err
 }
 
-// GetImminentHighImpact returns high-impact events occurring within the next
-// window from now, soonest first, regardless of alerted status. Unlike
+// GetImminentHighImpact returns high-impact events within the symmetric
+// window around now, chronological order, regardless of alerted status. Unlike
 // GetUpcomingAlerts (which is stateful and drives the pre-event watcher), this
 // is a read-only, non-consuming query used to annotate outgoing signal alerts.
 func (db *DB) GetImminentHighImpact(window time.Duration) ([]EconomicEvent, error) {
@@ -522,7 +532,7 @@ func (db *DB) GetImminentHighImpact(window time.Duration) ([]EconomicEvent, erro
 		  AND event_time >= ?
 		  AND event_time <= ?
 		ORDER BY event_time ASC`,
-		now.Unix(), now.Add(window).Unix(),
+		now.Add(-window).Unix(), now.Add(window).Unix(),
 	)
 	if err != nil {
 		return nil, err

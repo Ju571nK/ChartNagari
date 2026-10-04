@@ -5,13 +5,16 @@ import (
 	"math"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // ICTLiquiditySweepRule detects liquidity sweeps — wicks through swing points with quick reversal.
 //
 // Bullish sweep (bear trap): bar's Low < SWING_LOW AND Close > SWING_LOW -> LONG
-//   (price dipped below swing low to grab liquidity, then reversed)
+//
+//	(price dipped below swing low to grab liquidity, then reversed)
+//
 // Bearish sweep (bull trap): bar's High > SWING_HIGH AND Close < SWING_HIGH -> SHORT
 //
 // The rule scans the last 6 bars for sweep candidates and applies a breakout filter:
@@ -20,9 +23,9 @@ import (
 // and suppressed (returns nil).
 //
 // Quality Score (0.1–1.0) is computed from three factors:
-//   1. Volume ratio: sweep candle volume / VOLUME_MA_20 (higher = institutional activity)
-//   2. Wick ratio:   wick beyond level / total candle range (longer wick = stronger rejection)
-//   3. Reversal strength: close distance from level / total range (farther = stronger reversal)
+//  1. Volume ratio: sweep candle volume / VOLUME_MA_20 (higher = institutional activity)
+//  2. Wick ratio:   wick beyond level / total candle range (longer wick = stronger rejection)
+//  3. Reversal strength: close distance from level / total range (farther = stronger reversal)
 //
 // Requires SWING_HIGH and SWING_LOW in indicators, and >= 1 bar.
 type ICTLiquiditySweepRule struct{}
@@ -72,6 +75,15 @@ func sweepQuality(volRatio, wickBeyond, reversalDist, candleRange float64) float
 		return 1.0
 	}
 	return math.Round(raw*100) / 100
+}
+
+func sweepQualityNoVolume(wickBeyond, reversalDist, candleRange float64) float64 {
+	if candleRange <= 0 {
+		return 0.1
+	}
+	wick := math.Min(1, wickBeyond/candleRange*2)
+	reversal := math.Min(1, reversalDist/candleRange*2)
+	return math.Round(math.Max(0.1, math.Min(1, (wick+reversal)/2))*100) / 100
 }
 
 // isBreakout checks if a sweep at sweepIdx is actually a breakout by examining
@@ -197,17 +209,21 @@ func (r *ICTLiquiditySweepRule) Analyze(ctx models.AnalysisContext) (*models.Sig
 			}
 
 			rawScore := sweepQuality(volRatio, wickBeyond, reversalDist, candleRange)
+			if !rule.HasVolume(ctx) {
+				rawScore = sweepQualityNoVolume(wickBeyond, reversalDist, candleRange)
+			}
 			weighted := rawScore * tfW[tf]
 			if weighted > bestWeighted {
 				bestWeighted = weighted
 				bestSig = &models.Signal{
-					Symbol:    ctx.Symbol,
-					Timeframe: tf,
-					Rule:      r.Name(),
-					Direction: dir,
-					Score:     rawScore,
-					Message:   fmt.Sprintf("[%s] ICT 유동성 스윕 → %s (레벨: %.4f, 품질: %.0f%%)", tf, dir, level, rawScore*100),
-					CreatedAt: time.Now(),
+					Symbol:            ctx.Symbol,
+					Timeframe:         tf,
+					Rule:              r.Name(),
+					Direction:         dir,
+					Score:             rawScore,
+					Message:           fmt.Sprintf("[%s] ICT 유동성 스윕 → %s (레벨: %.4f, 품질: %.0f%%)", tf, dir, level, rawScore*100),
+					VolumeUnconfirmed: !rule.HasVolume(ctx),
+					CreatedAt:         time.Now(),
 				}
 			}
 

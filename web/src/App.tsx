@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, Component } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, Component, Fragment } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
@@ -14,6 +14,8 @@ import { OnboardingModal, ONBOARDING_DONE_KEY } from './OnboardingModal'
 import { setSessionToken, createServerSocket } from './apiAuth'
 import { ConnectionPanel } from './Connections'
 import { CalendarCollectionStatus, SettingsRuntimeStatus, SettingsSavedNotice } from './RuntimeStatus'
+import { FX_PRESETS, formatPrice, formatPips, instrument, isForexSymbol, pipDistance, visibleSession } from './forex'
+import { DxyPanel, MetalSourceNote, SessionOverlay, SourceNote, StrengthMeter } from './ForexPanels'
 
 // Lazy-loaded tab panels: split out of the initial bundle since they only
 // render when their tab/section is opened. AnalysisTab in particular pulls in
@@ -77,9 +79,21 @@ interface SignalBar {
   rule: string
   score: number
   message: string
+  message_key?: string
+  message_params?: Record<string, string>
   ai_interpretation: string
   zone_low?: number
   zone_high?: number
+  entry_price?: number
+  tp?: number
+  sl?: number
+  tp_pips?: number
+  sl_pips?: number
+  data_proxy?: boolean
+  data_provider?: string
+  provider_symbol?: string
+  source_identity?: string
+  volume_unconfirmed?: boolean
   forward_return_5d?: number
   forward_return_10d?: number
   forward_return_20d?: number
@@ -88,7 +102,7 @@ interface SignalBar {
 
 interface SymbolItem {
   symbol: string
-  type: 'crypto' | 'stock'
+  type: 'crypto' | 'stock' | 'forex' | 'index'
   exchange: string
   enabled: boolean
 }
@@ -338,7 +352,7 @@ export function SymbolsTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [newSymbol, setNewSymbol] = useState('')
-  const [newType, setNewType] = useState<'crypto' | 'stock'>('stock')
+  const [newType, setNewType] = useState<'crypto' | 'stock' | 'forex'>('stock')
   const [newExchange, setNewExchange] = useState('')
   const [adding, setAdding] = useState(false)
   const [marketFilter, setMarketFilter] = useState('all')
@@ -348,11 +362,12 @@ export function SymbolsTab() {
   const [symbolProfiles, setSymbolProfiles] = useState<Record<string, string>>({})
   const [profileUpdating, setProfileUpdating] = useState<string | null>(null)
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
+  const [presetBusy, setPresetBusy] = useState(false)
 
   const markets = useMemo(() => {
     const seen = new Set<string>()
     symbols.forEach(s => {
-      if (s.type === 'crypto') seen.add('crypto')
+      if (s.type === 'crypto' || s.type === 'forex') seen.add(s.type)
       else if (s.exchange) seen.add(s.exchange.toUpperCase())
     })
     return ['all', ...Array.from(seen).sort()]
@@ -361,7 +376,7 @@ export function SymbolsTab() {
   const marketCounts = useMemo(() => {
     const counts: Record<string, number> = { all: symbols.length }
     symbols.forEach(s => {
-      if (s.type === 'crypto') counts['crypto'] = (counts['crypto'] ?? 0) + 1
+      if (s.type === 'crypto' || s.type === 'forex') counts[s.type] = (counts[s.type] ?? 0) + 1
       else if (s.exchange) {
         const key = s.exchange.toUpperCase()
         counts[key] = (counts[key] ?? 0) + 1
@@ -373,6 +388,7 @@ export function SymbolsTab() {
   const filteredSymbols = useMemo(() => {
     if (marketFilter === 'all') return symbols
     if (marketFilter === 'crypto') return symbols.filter(s => s.type === 'crypto')
+    if (marketFilter === 'forex') return symbols.filter(s => s.type === 'forex')
     return symbols.filter(s => s.type === 'stock' && s.exchange.toUpperCase() === marketFilter)
   }, [symbols, marketFilter])
 
@@ -428,6 +444,12 @@ export function SymbolsTab() {
       setValidatedName('')
       return
     }
+    if (newType === 'forex') {
+      setNewExchange('FX')
+      setValidatedName(isForexSymbol(sym) ? `${sym.slice(0, 3)}/${sym.slice(3)}` : '')
+      setValidateStatus(isForexSymbol(sym) ? 'found' : 'not_found')
+      return
+    }
     setValidateStatus('loading')
     setNewExchange('')
     const controller = new AbortController()
@@ -453,7 +475,22 @@ export function SymbolsTab() {
       }
     }, 600)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [newSymbol])
+  }, [newSymbol, newType])
+
+  const addPreset = useCallback(async (preset: keyof typeof FX_PRESETS) => {
+    setPresetBusy(true)
+    setError('')
+    try {
+      for (const symbol of FX_PRESETS[preset]) {
+        const existing = symbols.find(item => item.symbol === symbol)
+        if (existing?.enabled) continue
+        if (existing) { await putJSON(`/symbols/${encodeURIComponent(symbol)}`, { enabled: true }); continue }
+        await apiFetch<null>('/symbols', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol, type: 'forex', exchange: 'FX' }) })
+      }
+      reload()
+    } catch (e) { setError(e instanceof Error ? e.message : t('unknown_error')); reload() }
+    finally { setPresetBusy(false) }
+  }, [symbols, reload, t])
 
   const toggle = useCallback(async (sym: SymbolItem, enabled: boolean) => {
     try {
@@ -533,6 +570,7 @@ export function SymbolsTab() {
                 {sym.symbol}
               </div>
               <div className="item-meta">{sym.exchange}</div>
+              <MetalSourceNote symbol={sym.symbol} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {profiles.length > 0 && (
@@ -576,16 +614,27 @@ export function SymbolsTab() {
       ))}
       {filteredSymbols.length === 0 && <p className="loading">{t('no_symbols')}</p>}
 
+      <section className="forex-presets" aria-label={t('forex.presets')}>
+        <p className="section-title">{t('forex.presets')}</p>
+        <div className="tab-group">
+          <button className="tab-btn" disabled={presetBusy} onClick={() => addPreset('majors')}>{t('forex.majors')}</button>
+          <button className="tab-btn" disabled={presetBusy} onClick={() => addPreset('majorsGold')}>{t('forex.majorsGold')}</button>
+          <button className="tab-btn" disabled={presetBusy} onClick={() => addPreset('all28')}>{t('forex.all28')}</button>
+        </div>
+        <p className="item-meta">{t('forex.all28Hint')}</p>
+      </section>
+
       <p className="section-title" style={{ marginTop: 24 }}>{t('add_symbol')}</p>
       <div className="add-symbol-form">
         <select
           className="chart-select"
           value={newType}
           disabled={adding || validateStatus === 'found'}
-          onChange={(e) => setNewType(e.target.value as 'crypto' | 'stock')}
+          onChange={(e) => setNewType(e.target.value as 'crypto' | 'stock' | 'forex')}
         >
           <option value="stock">{t('stock')}</option>
           <option value="crypto">{t('crypto')}</option>
+          <option value="forex">{t('forex.type')}</option>
         </select>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
           <input
@@ -607,10 +656,10 @@ export function SymbolsTab() {
           )}
           {validateStatus === 'error' && <span role="alert">{t('symbolFlow.validationError')}</span>}
         </div>
-        {newType === 'crypto' ? (
+        {newType === 'crypto' || newType === 'forex' ? (
           <input
             className="symbol-input"
-            value="binance"
+            value={newType === 'forex' ? 'FX' : 'binance'}
             readOnly
             style={{ opacity: 0.5, cursor: 'default' }}
           />
@@ -849,6 +898,9 @@ function StatusTab() {
 const TFS = ['1H', '4H', '1D', '1W'] as const
 type TF = (typeof TFS)[number]
 
+const isSessionContextSignal = (signal: SignalBar) =>
+  signal.timeframe === 'ALL' && signal.direction === 'NEUTRAL' && signal.rule === 'ict_kill_zone'
+
 const PHASE_COLORS: Record<string, string> = {
   accumulation: '#5B9279',
   markup:       '#8FCB9B',
@@ -870,6 +922,8 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf, navigate } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [marketFilter, setMarketFilter] = useState('all')
+  const [sessionsEnabled, setSessionsEnabled] = useState(() => localStorage.getItem('chartnagari_fx_sessions') !== 'false')
+  const [chartReady, setChartReady] = useState(0)
   const [error, setError] = useState('')
   const [signalLoading, setSignalLoading] = useState(false)
   const [signalError, setSignalError] = useState('')
@@ -889,6 +943,10 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const [selectedSignal, setSelectedSignal] = useState(0)
   const [reload, setReload] = useState(0)
   const marketData = useMarketData(symbol, tf, reload)
+  const chartSignals = useMemo(
+    () => signals.filter(s => s.timeframe === tf || isSessionContextSignal(s)),
+    [signals, tf],
+  )
   const patterns = useMemo(() => chartPatterns(marketData.bars), [marketData.bars])
   const zonesEnabled = enabledOverlays.has('zones')
   const loading = marketData.phase === 'loading'
@@ -924,7 +982,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const markets = useMemo(() => {
     const seen = new Set<string>()
     symbols.forEach(s => {
-      if (s.type === 'crypto') seen.add('crypto')
+      if (s.type === 'crypto' || s.type === 'forex') seen.add(s.type)
       else if (s.exchange) seen.add(s.exchange.toUpperCase())
     })
     return ['all', ...Array.from(seen).sort()]
@@ -933,7 +991,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const marketCounts = useMemo(() => {
     const counts: Record<string, number> = { all: symbols.length }
     symbols.forEach(s => {
-      if (s.type === 'crypto') counts['crypto'] = (counts['crypto'] ?? 0) + 1
+      if (s.type === 'crypto' || s.type === 'forex') counts[s.type] = (counts[s.type] ?? 0) + 1
       else if (s.exchange) {
         const key = s.exchange.toUpperCase()
         counts[key] = (counts[key] ?? 0) + 1
@@ -945,6 +1003,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const filteredSymbols = useMemo(() => {
     if (marketFilter === 'all') return symbols
     if (marketFilter === 'crypto') return symbols.filter(s => s.type === 'crypto')
+    if (marketFilter === 'forex') return symbols.filter(s => s.type === 'forex')
     return symbols.filter(s => s.type === 'stock' && s.exchange.toUpperCase() === marketFilter)
   }, [symbols, marketFilter])
 
@@ -987,6 +1046,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
     })
 
     chartRef.current = chart
+    setChartReady(v => v + 1)
     seriesRef.current = series
     volRef.current = vol
 
@@ -1043,10 +1103,14 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
 
   useEffect(() => {
     const bars = marketData.bars
+    seriesRef.current?.applyOptions({ priceFormat: isForexSymbol(symbol) ? { type: 'price', precision: instrument(symbol).precision, minMove: 10 ** -instrument(symbol).precision } : { type: 'price', precision: 2, minMove: 0.01 } })
     seriesRef.current?.setData(bars.map(b => ({ time: b.time as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close })))
     volRef.current?.setData(bars.map(b => ({ time: b.time as UTCTimestamp, value: b.volume, color: b.close >= b.open ? 'rgba(143,203,155,0.35)' : 'rgba(143,128,115,0.35)' })))
-    if (bars.length) chartRef.current?.timeScale().fitContent()
-  }, [marketData.bars])
+    if (bars.length) {
+      chartRef.current?.timeScale().fitContent()
+      if (isForexSymbol(symbol) && visibleSession(tf) && bars.length > 80) chartRef.current?.timeScale().setVisibleLogicalRange({ from: bars.length - 80, to: bars.length - 1 })
+    }
+  }, [marketData.bars, symbol, tf])
 
   // Build filtered signal markers (shared between signal and wyckoff effects)
   const buildFilteredMarkers = useCallback(() => {
@@ -1322,6 +1386,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
             </button>
           ))}
         </div>
+        <button className={`tf-btn${sessionsEnabled ? ' active' : ''}`} aria-pressed={sessionsEnabled} onClick={() => setSessionsEnabled(v => { localStorage.setItem('chartnagari_fx_sessions', String(!v)); return !v })}>{t('forex.sessions')}</button>
         {uiMode === 'expert' && (
           <div className="chart-overlays">
             <button
@@ -1441,29 +1506,47 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
       )}
       <div className="chart-workspace">
         <section className="chart-surface" aria-label={t('chart')} aria-busy={loading}>
-          <div className="surface-heading"><strong>{symbol || t('workspace.chooseSymbol')}</strong><span>{tf}</span></div>
+          <div className="surface-heading"><strong>{symbol || t('workspace.chooseSymbol')}{DEMO_STATIC && isForexSymbol(symbol) && <small className="demo-sample"> · {t('forex.demoSample')}</small>}</strong><span>{tf}</span></div>
           <MarketDataStatus data={marketData} symbol={symbol} timeframe={tf} onRetry={() => setReload(n => n + 1)} onManage={() => navigate('symbols')} />
           {error && <div className="state-message" role="alert"><p>{t('no_data_error', { error })}</p><button onClick={() => setReload(n => n + 1)}>{t('workspace.retry')}</button></div>}
-          <div ref={containerRef} className="chart-area" style={{ visibility: marketData.phase === 'ready' ? 'visible' : 'hidden', height: marketData.phase === 'ready' ? undefined : 0 }} aria-hidden={marketData.phase !== 'ready'} />
+          <div className="chart-overlay-container" style={{ visibility: marketData.phase === 'ready' ? 'visible' : 'hidden', height: marketData.phase === 'ready' ? undefined : 0 }}>
+            <div ref={containerRef} className="chart-area" aria-hidden={marketData.phase !== 'ready'} />
+            {chartReady > 0 && marketData.phase === 'ready' && <SessionOverlay symbol={symbol} timeframe={tf} bars={marketData.bars} chart={chartRef.current} series={seriesRef.current} enabled={sessionsEnabled} revision={reload} />}
+          </div>
         </section>
         <aside className="signal-inspector" aria-label={t('workspace.signals')}>
+          {isForexSymbol(symbol) && <StrengthMeter compact revision={reload} />}
+          <DxyPanel symbol={symbol} revision={reload} />
           <SignalHistoryHeading />
           {signalLoading && <p className="state-message" role="status">{t('marketData.signalsLoading')}</p>}
           {signalError && <div className="state-message" role="alert"><p>{t('marketData.signalsError')}</p><button onClick={() => setReload(n => n + 1)}>{t('workspace.retry')}</button></div>}
-          {!signalLoading && !signalError && marketData.phase === 'ready' && signals.filter(s => s.timeframe === tf).length === 0 && <p className="state-message">{t('workspace.noSignals')}</p>}
+          {!signalLoading && !signalError && marketData.phase === 'ready' && chartSignals.length === 0 && <p className="state-message">{t('workspace.noSignals')}</p>}
           <div className="signal-list">
-            {signals.filter(s => s.timeframe === tf).map((s, index) => <button key={s.time + s.rule + s.direction} className={'signal-row' + (index === selectedSignal ? ' selected' : '')} aria-pressed={index === selectedSignal} onClick={() => setSelectedSignal(index)}>
-              <span className={s.direction === 'LONG' ? 'dir-long' : s.direction === 'SHORT' ? 'dir-short' : ''}>{s.direction}</span>
-              <span>{readableRule(s.rule, i18n.language)}<small>{new Date(s.time * 1000).toLocaleString(i18n.language)}</small><SignalRangeBadge time={s.time} bars={marketData.bars} timeframe={tf} /></span>
+            {chartSignals.map((s, index) => <button key={s.time + s.rule + s.direction} className={'signal-row' + (index === selectedSignal ? ' selected' : '')} aria-pressed={index === selectedSignal} onClick={() => setSelectedSignal(index)}>
+              <span className={s.direction === 'LONG' ? 'dir-long' : s.direction === 'SHORT' ? 'dir-short' : ''}>{isSessionContextSignal(s) ? t('workspace.sessionContext') : s.direction}</span>
+              <span>{readableRule(s.rule, i18n.language)}<small>{new Date(s.time * 1000).toLocaleString(i18n.language)}</small>{isSessionContextSignal(s) ? <small>{t('workspace.allTimeframes')}</small> : <SignalRangeBadge time={s.time} bars={marketData.bars} timeframe={tf} />}</span>
               <strong>{s.score.toFixed(1)}</strong>
             </button>)}
           </div>
           {(() => {
-            const signal = signals.filter(s => s.timeframe === tf)[selectedSignal]
+            const signal = chartSignals[selectedSignal]
             if (!signal) return null
             return <div className="signal-detail">
               <h2>{t('workspace.signalDetail')}</h2>
-              <OriginalSignal message={signal.message || signal.rule} />
+              {isSessionContextSignal(signal) && <p>{t('workspace.sessionContext')} · {t('workspace.allTimeframes')}</p>}
+              <OriginalSignal message={signal.message_key && i18n.exists(signal.message_key) ? t(signal.message_key, {
+                ...signal.message_params,
+                session: signal.message_params?.session
+                  ? t(`signal.ict.sessions.${signal.message_params.session}`, { defaultValue: signal.message_params.session })
+                  : undefined,
+              }) : signal.message || signal.rule} />
+              {isForexSymbol(signal.symbol) && signal.entry_price != null && signal.entry_price > 0 && <div className="forex-signal-levels">
+                <p>{t('entry_price')}: {formatPrice(signal.symbol, signal.entry_price)}</p>
+                {signal.tp != null && signal.tp > 0 && <p>{t('tp')}: {formatPrice(signal.symbol, signal.tp)} ({formatPips(signal.tp_pips ?? Math.abs(pipDistance(signal.symbol, signal.entry_price, signal.tp)))} {t('forex.pips')})</p>}
+                {signal.sl != null && signal.sl > 0 && <p>{t('sl')}: {formatPrice(signal.symbol, signal.sl)} ({formatPips(-(signal.sl_pips ?? Math.abs(pipDistance(signal.symbol, signal.entry_price, signal.sl))))} {t('forex.pips')})</p>}
+              </div>}
+              {isForexSymbol(signal.symbol) && <p><SourceNote source={signal} /></p>}
+              {signal.volume_unconfirmed && <p className="forex-proxy">{t('forex.volumeUnconfirmed')}</p>}
               {signal.ai_interpretation && <><h3>{t('ai_interpretation')}</h3><p>{signal.ai_interpretation}</p></>}
             </div>
           })()}
@@ -1535,6 +1618,8 @@ interface BacktestStats {
   sharpe: number
   total_return_pct: number
   max_consec_losses: number
+  net_pips?: number
+  avg_pips?: number
 }
 
 interface TradeOutcome {
@@ -1549,6 +1634,8 @@ interface TradeOutcome {
   exit_bars: number
   win: boolean
   pnl_pct: number
+  pips?: number
+  pnl_pips?: number
 }
 
 interface RegimeStats {
@@ -1740,6 +1827,7 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
     const series = chart.addSeries(CandlestickSeries, {
       upColor: '#8FCB9B',
       downColor: 'rgba(143,128,115,0.6)',
+      priceFormat: isForexSymbol(result.symbol) ? { type: 'price', precision: instrument(result.symbol).precision, minMove: 10 ** -instrument(result.symbol).precision } : { type: 'price', precision: 2, minMove: 0.01 },
       borderUpColor: '#8FCB9B',
       borderDownColor: 'rgba(143,128,115,0.6)',
       wickUpColor: '#8FCB9B',
@@ -1943,8 +2031,11 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
           <p className="section-title">
             {t('backtest_result_summary', { symbol: result.symbol, timeframe: result.timeframe, bars: result.bars, trades: result.trades, tp: tpMult, sl: slMult })}
           </p>
+          <MetalSourceNote symbol={result.symbol} />
 
           <div className="backtest-stats">
+            {isForexSymbol(result.symbol) && <div className="stat-card"><div className="stat-value">{result.stats.net_pips == null ? '—' : formatPips(result.stats.net_pips)}</div><div className="stat-label">{t('forex.netPips')}</div></div>}
+            {isForexSymbol(result.symbol) && <div className="stat-card"><div className="stat-value">{result.stats.avg_pips == null ? '—' : formatPips(result.stats.avg_pips)}</div><div className="stat-label">{t('forex.avgPips')}</div></div>}
             <div className="stat-card">
               <div className="stat-value" style={{ fontSize: '1.4rem' }}>
                 {(result.stats.win_rate * 100).toFixed(1)}%
@@ -2035,11 +2126,11 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
                         <td style={{ color: 'var(--muted)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {o.rule}
                         </td>
-                        <td>{o.entry_price.toFixed(2)}</td>
-                        <td>{o.exit_price.toFixed(2)}</td>
+                        <td>{formatPrice(result.symbol, o.entry_price)}</td>
+                        <td>{formatPrice(result.symbol, o.exit_price)}</td>
                         <td>{o.exit_bars}</td>
                         <td className={o.win ? 'pnl-win' : 'pnl-loss'}>
-                          {fmtPct(o.pnl_pct)}
+                          {fmtPct(o.pnl_pct)}{isForexSymbol(result.symbol) && (o.pnl_pips ?? o.pips) != null && <small> · {formatPips(o.pnl_pips ?? o.pips!)} {t('forex.pips')}</small>}
                         </td>
                       </tr>
                     ))}
@@ -2288,6 +2379,16 @@ interface PaperPosition {
   exit_time: string | null
   status: string
   pnl_pct: number
+  pnl_pips?: number
+  data_provider?: string
+  provider_symbol?: string
+  source_identity?: string
+  data_proxy?: boolean
+  suspended?: boolean
+  suspension_reason?: string
+  price_basis?: string
+  entry_execution_price?: number
+  exit_execution_price?: number
 }
 
 interface PaperSummary {
@@ -2299,6 +2400,8 @@ interface PaperSummary {
   total_pnl_pct: number
   avg_win_pct: number
   avg_loss_pct: number
+  net_pips?: number
+  avg_pips?: number
 }
 
 function PaperTab() {
@@ -2337,6 +2440,8 @@ function PaperTab() {
 
       {summary && (
         <div className="backtest-stats">
+          {summary.net_pips != null && <div className="stat-card"><div className="stat-value">{formatPips(summary.net_pips)}</div><div className="stat-label">{t('forex.netPips')}</div></div>}
+          {summary.avg_pips != null && <div className="stat-card"><div className="stat-value">{formatPips(summary.avg_pips)}</div><div className="stat-label">{t('forex.avgPips')}</div></div>}
           <div className="stat-card">
             <div className="stat-value" style={{ fontSize: '1.4rem' }}>{summary.open_positions}</div>
             <div className="stat-label">{t('open_positions')}</div>
@@ -2379,17 +2484,18 @@ function PaperTab() {
           <div className="backtest-table-wrap">
             <table className="backtest-table">
               <thead>
-                <tr><th>{t('symbol')}</th><th>{t('direction')}</th><th>{t('rule')}</th><th>{t('entry_price')}</th><th>{t('tp')}</th><th>{t('sl')}</th><th>{t('entry_time')}</th></tr>
+                <tr><th>{t('symbol')}</th><th>{t('forex.source')}</th><th>{t('direction')}</th><th>{t('rule')}</th><th>{t('entry_price')}</th><th>{t('tp')}</th><th>{t('sl')}</th><th>{t('entry_time')}</th></tr>
               </thead>
               <tbody>
                 {positions.map((p) => (
                   <tr key={p.id}>
                     <td>{p.symbol}</td>
+                    <td>{isForexSymbol(p.symbol) ? <SourceNote source={p} /> : '—'}</td>
                     <td className={p.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{p.direction}</td>
                     <td style={{ color: 'var(--muted)' }}>{p.rule}</td>
-                    <td>{p.entry_price.toFixed(2)}</td>
-                    <td className="pnl-win">{p.tp.toFixed(2)}</td>
-                    <td className="pnl-loss">{p.sl.toFixed(2)}</td>
+                    <td>{formatPrice(p.symbol, p.entry_price)}{p.price_basis === 'mid' && <small> · {t('forex.midQuote')}</small>}{p.entry_execution_price != null && <small> · {t('forex.execution')}: {formatPrice(p.symbol, p.entry_execution_price)}</small>}</td>
+                    <td className="pnl-win">{formatPrice(p.symbol, p.tp)}{isForexSymbol(p.symbol) && <small> ({formatPips(Math.abs(pipDistance(p.symbol, p.entry_price, p.tp)))} {t('forex.pips')})</small>}</td>
+                    <td className="pnl-loss">{formatPrice(p.symbol, p.sl)}{isForexSymbol(p.symbol) && <small> ({formatPips(-Math.abs(pipDistance(p.symbol, p.entry_price, p.sl)))} {t('forex.pips')})</small>}</td>
                     <td style={{ color: 'var(--muted)', fontSize: '0.72rem' }}>
                       {new Date(p.entry_time).toLocaleString()}
                     </td>
@@ -2411,20 +2517,21 @@ function PaperTab() {
           <div className="backtest-table-wrap">
             <table className="backtest-table">
               <thead>
-                <tr><th>{t('symbol')}</th><th>{t('direction')}</th><th>{t('entry_price')}</th><th>{t('exit_price')}</th><th>{t('result')}</th><th>{t('pnl')}</th></tr>
+                <tr><th>{t('symbol')}</th><th>{t('forex.source')}</th><th>{t('direction')}</th><th>{t('entry_price')}</th><th>{t('exit_price')}</th><th>{t('result')}</th><th>{t('pnl')}</th></tr>
               </thead>
               <tbody>
                 {history.map((p) => (
                   <tr key={p.id} className={p.pnl_pct > 0 ? 'outcome-win' : 'outcome-loss'}>
                     <td>{p.symbol}</td>
+                    <td>{isForexSymbol(p.symbol) ? <SourceNote source={p} /> : '—'}</td>
                     <td className={p.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{p.direction}</td>
-                    <td>{p.entry_price.toFixed(2)}</td>
-                    <td>{p.exit_price.toFixed(2)}</td>
+                    <td>{formatPrice(p.symbol, p.entry_price)}{p.price_basis === 'mid' && <small> · {t('forex.midQuote')}</small>}{p.entry_execution_price != null && <small> · {t('forex.execution')}: {formatPrice(p.symbol, p.entry_execution_price)}</small>}</td>
+                    <td>{formatPrice(p.symbol, p.exit_price)}{p.price_basis === 'mid' && <small> · {t('forex.midQuote')}</small>}{p.exit_execution_price != null && <small> · {t('forex.execution')}: {formatPrice(p.symbol, p.exit_execution_price)}</small>}</td>
                     <td style={{ fontSize: '0.72rem', color: p.status === 'CLOSED_TP' ? 'var(--mint)' : 'var(--muted)' }}>
                       {p.status === 'CLOSED_TP' ? 'TP ✓' : 'SL ✗'}
                     </td>
                     <td className={p.pnl_pct > 0 ? 'pnl-win' : 'pnl-loss'}>
-                      {p.pnl_pct >= 0 ? '+' : ''}{p.pnl_pct.toFixed(2)}%
+                      {p.pnl_pct >= 0 ? '+' : ''}{p.pnl_pct.toFixed(2)}%{isForexSymbol(p.symbol) && p.pnl_pips != null && <small> · {formatPips(p.pnl_pips)} {t('forex.pips')}</small>}
                     </td>
                   </tr>
                 ))}
@@ -3149,6 +3256,7 @@ function HistoryTab({ uiMode }: { uiMode: UIMode }) {
               <tr>
                 <th>{t('time_col')}</th>
                 <th>{t('symbol_col')}</th>
+                <th>{t('forex.source')}</th>
                 {uiMode === 'expert' && <th>TF</th>}
                 <th>{t('direction')}</th>
                 {uiMode === 'expert' && <th>{t('rule')}</th>}
@@ -3163,6 +3271,7 @@ function HistoryTab({ uiMode }: { uiMode: UIMode }) {
                     {new Date(s.time * 1000).toLocaleString()}
                   </td>
                   <td style={{ fontWeight: 600 }}>{s.symbol}</td>
+                  <td>{isForexSymbol(s.symbol) ? <SourceNote source={s} /> : '—'}</td>
                   {uiMode === 'expert' && <td style={{ color: 'var(--muted)' }}>{s.timeframe}</td>}
                   <td className={s.direction === 'LONG' ? 'dir-long' : 'dir-short'}>
                     {uiMode === 'beginner'
@@ -3498,6 +3607,13 @@ interface EnvGroup { label: string; tab: SettingsSection; fields: EnvField[] }
 
 const ENV_GROUPS: EnvGroup[] = [
   {
+    tab: 'data', label: 'Forex', fields: [
+      { key: 'FOREX_PROVIDER', label: 'FX data provider', type: 'select', options: ['auto', 'yahoo', 'oanda'] },
+      { key: 'OANDA_TOKEN', label: 'OANDA token', type: 'password' },
+      { key: 'OANDA_ENVIRONMENT', label: 'OANDA environment', type: 'select', options: ['practice', 'live'] },
+    ],
+  },
+  {
     tab: 'advanced',
     label: 'Server',
     fields: [
@@ -3588,7 +3704,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
   const { t } = useTranslation()
   const ux = useUXCopy()
   const setup = useSetupCopy()
-  const fieldLabel = (field: EnvField) => field.key === 'FMP_API_KEY' ? setup.fmp : field.key === 'FINNHUB_API_KEY' ? setup.finnhub : field.key === 'CALENDAR_ALERT_WINDOW' ? setup.window : field.label
+  const fieldLabel = (field: EnvField) => field.key === 'FMP_API_KEY' ? setup.fmp : field.key === 'FINNHUB_API_KEY' ? setup.finnhub : field.key === 'CALENDAR_ALERT_WINDOW' ? setup.window : field.key === 'FOREX_PROVIDER' ? t('forex.provider') : field.key === 'OANDA_TOKEN' ? t('forex.oandaToken') : field.key === 'OANDA_ENVIRONMENT' ? t('forex.environment') : field.label
   const [env, setEnv] = useState<EnvMap>({})
   const [edits, setEdits] = useState<EnvMap>({})
   const [loading, setLoading] = useState(true)
@@ -3598,6 +3714,17 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
   const [section, setSection] = useState<SettingsSection>(initialSection)
   const [authToken, setAuthToken] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+  const [connectionTest, setConnectionTest] = useState<{ loading: boolean; result?: string; error?: string }>({ loading: false })
+  const testForexConnection = async () => {
+    setConnectionTest({ loading: true })
+    try {
+      const response = await fetch('/api/forex/test-connection', { method: 'POST' })
+      if (!response.ok) throw new Error(await response.text())
+      const result = await response.json() as { ok: boolean; message?: string }
+      if (!result.ok) throw new Error(result.message || t('forex.connectionFailed'))
+      setConnectionTest({ loading: false, result: result.message || t('forex.connectionOk') })
+    } catch (e) { setConnectionTest({ loading: false, error: e instanceof Error ? e.message : t('forex.connectionFailed') }) }
+  }
   const authorize = async () => {
     try {
       const response = await fetch('/api/auth/check', { method: 'POST', headers: { Authorization: `Bearer ${authToken}` } })
@@ -3628,7 +3755,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
 
   const getPlaceholder = (key: string, type: string) =>
     type === 'password' && env[key] === ENV_SENTINEL
-      ? 'configured — enter replacement or use Clear'
+      ? t('forex.configuredTokenPlaceholder')
       : ''
 
   const handleChange = (key: string, value: string) => {
@@ -3679,6 +3806,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
 
   const groupsForSection = ENV_GROUPS.filter(g => g.tab === section).map(g => ({ ...g, fields: g.fields.filter(f => !fieldKeys || fieldKeys.includes(f.key)) })).filter(g => g.fields.length > 0)
   const showSaveButton = groupsForSection.length > 0
+  const forexProvider = getValue('FOREX_PROVIDER') || 'auto'
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
     padding: '8px 14px',
@@ -3754,7 +3882,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
       {showSaveButton && (
         <LegacySettingsFrame enabled={section === 'ai'} title={t('ai_setup.legacy_settings')} explanation={t('ai_setup.legacy_explain')}>
           <p style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
-            Changes are written to <code>config/settings.yaml</code>. <strong>Restart the server</strong> to apply.
+            {section === 'data' ? t('forex.settingsRestart') : <>Changes are written to <code>config/settings.yaml</code>. <strong>Restart the server</strong> to apply.</>}
           </p>
           {saved && (
             <div className="save-success" style={{ marginBottom: '1rem' }}>
@@ -3769,8 +3897,10 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
                 color: 'var(--accent)', marginBottom: '0.75rem',
                 borderBottom: '1px solid rgba(91,146,121,0.2)', paddingBottom: '0.4rem',
               }}>{group.fields.some(f => f.key === 'FMP_API_KEY') ? setup.calendar : group.label}</h3>
+              {group.label === 'Forex' && <p className="item-meta">{t('forex.providerIntro')}</p>}
               {group.fields.map(field => (
-                <div key={field.key} className="report-field settings-config-row">
+                <Fragment key={field.key}>
+                <div className="report-field settings-config-row">
                   <label htmlFor={`setting-${field.key}`} style={{ fontSize: '0.82rem', color: 'var(--muted)', minWidth: '220px' }}>
                     {fieldLabel(field)}
                   </label>
@@ -3778,7 +3908,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
                     <select disabled={saving} id={`setting-${field.key}`} className="report-input" value={getValue(field.key)}
                       onChange={e => handleChange(field.key, e.target.value)}>
                       {(field.options ?? []).map(o => (
-                        <option key={o} value={o}>{o || '— auto —'}</option>
+                        <option key={o} value={o}>{field.key === 'FOREX_PROVIDER' ? t(`forex.provider_${o}`) : field.key === 'OANDA_ENVIRONMENT' ? t(`forex.environment_${o}`) : o || '— auto —'}</option>
                       ))}
                     </select>
                   ) : (
@@ -3787,10 +3917,23 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
                       onChange={e => handleChange(field.key, e.target.value)} autoComplete="off" />
                   )}
                   {field.type === 'password' && env[field.key] === ENV_SENTINEL && (
-                    <button disabled={saving} type="button" onClick={() => handleChange(field.key, '')}>Clear {fieldLabel(field)}</button>
+                    <button disabled={saving} type="button" onClick={() => handleChange(field.key, '')}>{t('forex.clearField', { fieldLabel: fieldLabel(field) })}</button>
                   )}
                 </div>
+                {field.key === 'FOREX_PROVIDER' && <p className="item-meta forex-provider-note">{t(`forex.providerHelp_${forexProvider}`)}</p>}
+                {field.key === 'OANDA_TOKEN' && <div className="forex-provider-note">
+                  <p className="item-meta">{t('forex.oandaEligibility')}</p>
+                  <p className="item-meta">{t('forex.japanEligibility')} <a href="https://help.oanda.jp/oanda/faq/show/808" target="_blank" rel="noopener noreferrer">{t('forex.japanEligibilityLink')}</a></p>
+                </div>}
+                </Fragment>
               ))}
+              {group.label === 'Forex' && <div className="forex-connection-test">
+                <p className="item-meta">{t('forex.saveEffect')}</p>
+                <p className="item-meta">{t('forex.saveBeforeTest')}</p>
+                <button type="button" disabled={connectionTest.loading || saving || ['FOREX_PROVIDER', 'OANDA_TOKEN', 'OANDA_ENVIRONMENT'].some(key => key in edits)} onClick={testForexConnection}>{t('forex.testConnection')}</button>
+                {connectionTest.result && <p role="status">{connectionTest.result}</p>}
+                {connectionTest.error && <p role="alert">{connectionTest.error}</p>}
+              </div>}
             </div>
           ))}
         </LegacySettingsFrame>
@@ -4274,6 +4417,7 @@ function WorkspaceApp() {
 
   // Show onboarding modal on first run (no localStorage key set)
   useEffect(() => {
+    if (DEMO_STATIC) return
     const done = localStorage.getItem(ONBOARDING_DONE_KEY)
     if (!done) setShowOnboarding(true)
   }, [])
@@ -4287,8 +4431,8 @@ function WorkspaceApp() {
         <div className="workspace-brand"><span>Chart</span> Nagari<small>{t('workspace.terminal')}</small></div>
         <div className="workspace-tools">
           <ExperienceMode mode={uiMode} onChange={handleSetUiMode} />
-          <span className={'connection-state' + (wsConnected ? ' connected' : '')} role="status">
-            <span aria-hidden="true">●</span> {t(wsConnected ? 'workspace.connected' : 'workspace.disconnected')}
+          <span className={'connection-state' + (wsConnected || DEMO_STATIC ? ' connected' : '')} role="status">
+            <span aria-hidden="true">●</span> {DEMO_STATIC ? t('forex.demoSample') : t(wsConnected ? 'workspace.connected' : 'workspace.disconnected')}
           </span>
           <label className="language-control"><span className="sr-only">{t('language')}</span>
             <select value={i18n.language.split('-')[0]} onChange={e => { i18n.changeLanguage(e.target.value); localStorage.setItem('language', e.target.value) }}>

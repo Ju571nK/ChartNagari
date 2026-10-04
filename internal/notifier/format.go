@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -30,6 +31,31 @@ func fmtPrice(p float64) string {
 		prec = 8
 	}
 	return strconv.FormatFloat(p, 'f', prec, 64)
+}
+
+func formatLevel(sig models.Signal, price float64) string {
+	if sig.AssetClass != models.AssetForex {
+		return fmtPrice(price)
+	}
+	spec := market.Instrument(sig.Symbol)
+	formatted := strconv.FormatFloat(price, 'f', spec.Precision, 64)
+	if spec.PipSize <= 0 {
+		return formatted
+	}
+	pips := 0.0
+	if sig.Direction == "LONG" {
+		pips = (price - sig.EntryPrice) / spec.PipSize
+	} else if sig.Direction == "SHORT" {
+		pips = (sig.EntryPrice - price) / spec.PipSize
+	}
+	return fmt.Sprintf("%s (%+.1f pips)", formatted, pips)
+}
+
+func formatEntry(sig models.Signal) string {
+	if sig.AssetClass == models.AssetForex {
+		return strconv.FormatFloat(sig.EntryPrice, 'f', market.Instrument(sig.Symbol).Precision, 64)
+	}
+	return fmtPrice(sig.EntryPrice)
 }
 
 // directionIcon returns an emoji representing the signal direction.
@@ -61,8 +87,14 @@ func formatTelegram(sig models.Signal) string {
 	if sig.EntryPrice > 0 {
 		text += fmt.Sprintf(
 			"\n💰 Entry: <b>%s</b>  |  TP: <b>%s</b>  |  SL: <b>%s</b>",
-			fmtPrice(sig.EntryPrice), fmtPrice(sig.TP), fmtPrice(sig.SL),
+			formatEntry(sig), formatLevel(sig, sig.TP), formatLevel(sig, sig.SL),
 		)
+	}
+	if sig.DataProxy {
+		text += "\n⚠️ Futures proxy data"
+	}
+	if sig.VolumeUnconfirmed {
+		text += "\nVolume unconfirmed"
 	}
 	text += "\n⏰ " + sig.CreatedAt.UTC().Format("2006-01-02 15:04:05") + " UTC"
 	if sig.MacroNote != "" {

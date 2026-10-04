@@ -2,8 +2,39 @@
 package market
 
 import (
+	"github.com/Ju571nK/Chatter/pkg/models"
 	"time"
 )
+
+// IsOpen checks the trading schedule for an asset class at an instant.
+func IsOpen(class models.AssetClass, t time.Time) bool {
+	switch class {
+	case models.AssetCrypto:
+		return true
+	case models.AssetForex:
+		return IsForexOpen(t)
+	default:
+		return IsUSMarketOpen(t)
+	}
+}
+
+func IsForexOpen(t time.Time) bool {
+	ny := t.In(nyLoc)
+	if ny.Month() == time.December && ny.Day() == 25 || ny.Month() == time.January && ny.Day() == 1 {
+		return false
+	}
+	minutes := ny.Hour()*60 + ny.Minute()
+	switch ny.Weekday() {
+	case time.Saturday:
+		return false
+	case time.Sunday:
+		return minutes >= 17*60
+	case time.Friday:
+		return minutes < 17*60
+	default:
+		return true
+	}
+}
 
 // nyseHolidays lists NYSE observed holidays by yyyy-mm-dd.
 var nyseHolidays = map[string]bool{

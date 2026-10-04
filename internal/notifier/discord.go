@@ -81,11 +81,18 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 	// Add trade level fields when ATR data is available.
 	if sig.EntryPrice > 0 {
 		embed["fields"] = []map[string]interface{}{
-			{"name": "💰 진입가", "value": fmtPrice(sig.EntryPrice), "inline": true},
-			{"name": "🎯 TP", "value": fmtPrice(sig.TP), "inline": true},
-			{"name": "🛡 SL", "value": fmtPrice(sig.SL), "inline": true},
+			{"name": "💰 진입가", "value": formatEntry(sig), "inline": true},
+			{"name": "🎯 TP", "value": formatLevel(sig, sig.TP), "inline": true},
+			{"name": "🛡 SL", "value": formatLevel(sig, sig.SL), "inline": true},
 		}
 	}
+	if sig.DataProxy {
+		desc += "\n⚠️ Futures proxy data"
+	}
+	if sig.VolumeUnconfirmed {
+		desc += "\nVolume unconfirmed"
+	}
+	embed["description"] = desc
 
 	payload := map[string]interface{}{
 		"embeds": []map[string]interface{}{embed},

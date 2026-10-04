@@ -1,6 +1,6 @@
 # Getting started / 설치 안내
 
-These instructions target **v2.13.0.0**. Older releases can have
+These instructions target **v2.14.0.0**. Older releases can have
 different configuration behavior. Existing users should read [migration notes](../SETTINGS.md)
 first and must not replace their settings with the example.
 
@@ -58,7 +58,9 @@ and data directories, not arbitrary host paths.
 
 ## First use
 
-1. Add a stock ticker or crypto pair in **Symbols**. Registration does not mean
+1. Add a Forex pair, stock ticker or crypto pair in **Symbols**. Forex starts
+   with Yahoo candles and needs no API key; see the [Forex guide](FOREX.md) for
+   provider, pip, volume and backtest details. Registration does not mean
    historical data is already available; check the chart's data status.
 2. Choose a timeframe in **Chart**. Start in beginner mode; use expert mode to
    inspect additional overlays.
@@ -69,4 +71,4 @@ and data directories, not arbitrary host paths.
 Do not expose an unauthenticated server publicly. Review execution configuration
 separately; nothing in these instructions enables an execution adapter.
 
-[Detailed settings](../SETTINGS.md) · [Development setup](../CONTRIBUTING.md)
+[Forex quick start](FOREX.md) · [Detailed settings](../SETTINGS.md) · [Development setup](../CONTRIBUTING.md)

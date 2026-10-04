@@ -17,6 +17,7 @@ symbols:
         - symbol: "^VIX"
           exchange: cboe
           enabled: true
+    forex: []
 timeframes:
     - 1W
     - 1D

@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -45,7 +46,7 @@ func (r *WyckoffAccumulationRule) Analyze(ctx models.AnalysisContext) (*models.S
 
 		ema50, hasEMA := ctx.Indicators[ema50Key]
 		volMA, hasVolMA := ctx.Indicators[volMAKey]
-		if !hasEMA || !hasVolMA {
+		if !hasEMA || (rule.HasVolume(ctx) && !hasVolMA) {
 			continue
 		}
 
@@ -75,7 +76,7 @@ func (r *WyckoffAccumulationRule) Analyze(ctx models.AnalysisContext) (*models.S
 		if curr.Close >= ema50 {
 			continue
 		}
-		if curr.Volume >= volMA {
+		if rule.HasVolume(ctx) && curr.Volume >= volMA {
 			continue
 		}
 
@@ -144,12 +145,13 @@ func (r *WyckoffAccumulationRule) Analyze(ctx models.AnalysisContext) (*models.S
 	}
 
 	return &models.Signal{
-		Symbol:    ctx.Symbol,
-		Timeframe: bestTF,
-		Rule:      r.Name(),
-		Direction: "LONG",
-		Score:     rawScore,
-		Message:   fmt.Sprintf("[%s] Wyckoff 누적 국면 감지 → LONG (레인지 %.1f%%)", bestTF, rangeWidth*100),
-		CreatedAt: time.Now(),
+		Symbol:            ctx.Symbol,
+		Timeframe:         bestTF,
+		Rule:              r.Name(),
+		Direction:         "LONG",
+		Score:             rawScore,
+		Message:           fmt.Sprintf("[%s] Wyckoff 누적 국면 감지 → LONG (레인지 %.1f%%)", bestTF, rangeWidth*100),
+		VolumeUnconfirmed: !rule.HasVolume(ctx),
+		CreatedAt:         time.Now(),
 	}, nil
 }

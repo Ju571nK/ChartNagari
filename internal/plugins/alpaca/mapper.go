@@ -38,6 +38,9 @@ func MapTradeSignalToOrder(sig models.TradeSignal, notional float64) (OrderReque
 	if strings.EqualFold(sig.AssetClass, "crypto") {
 		return OrderRequest{}, fmt.Errorf("mapper: crypto asset_class not supported in Phase 3 (symbol=%s)", sig.Symbol)
 	}
+	if strings.EqualFold(sig.AssetClass, "forex") {
+		return OrderRequest{}, fmt.Errorf("mapper: forex asset_class not supported (symbol=%s)", sig.Symbol)
+	}
 	if sig.EntryPrice <= 0 {
 		return OrderRequest{}, fmt.Errorf("mapper: invalid entry_price %.6f", sig.EntryPrice)
 	}

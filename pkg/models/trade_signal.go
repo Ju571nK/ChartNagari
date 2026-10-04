@@ -39,7 +39,7 @@ type OrderFeedback struct {
 	PluginName  string    `json:"plugin_name"`
 	Status      string    `json:"status"`
 	OrderID     string    `json:"order_id,omitempty"`
-	Symbol      string    `json:"symbol,omitempty"`    // echoed by plugin for UI enrichment
+	Symbol      string    `json:"symbol,omitempty"` // echoed by plugin for UI enrichment
 	FilledQty   float64   `json:"filled_qty,omitempty"`
 	FilledPrice float64   `json:"filled_price,omitempty"`
 	Message     string    `json:"message,omitempty"`
@@ -62,6 +62,12 @@ const (
 // injected here — the Signal struct itself does not carry these.
 func ToTradeSignal(s Signal) TradeSignal {
 	ac, ex := InferAssetClassAndExchange(s.Symbol)
+	if s.AssetClass != "" {
+		ac = string(s.AssetClass)
+		if s.AssetClass == AssetForex {
+			ex = "forex"
+		}
+	}
 	return TradeSignal{
 		ID:               uuid.NewString(),
 		Version:          TradeSignalVersion,

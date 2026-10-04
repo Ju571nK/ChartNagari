@@ -4,6 +4,8 @@ import i18n from './i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useWorkspace, timeframes } from './Workspace'
+import { MetalSourceNote, StrengthMeter } from './ForexPanels'
+import { isForexSymbol } from './forex'
 
 interface ScenarioResult {
   status?: string
@@ -237,6 +239,8 @@ export function AnalysisTab() {
 
       <section className="print-area">
         <div style={labelStyle}>{t('multi_analyst_ai')}</div>
+        <MetalSourceNote symbol={symbol} />
+        {isForexSymbol(symbol) && <StrengthMeter />}
 
         {/* Input row */}
         <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>

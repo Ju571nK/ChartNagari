@@ -3,8 +3,9 @@
 **Date:** 2026-10-04
 **Target version:** v2.14.0.0 ("ICT for Forex")
 **Branch:** `feat/forex-support`
-**Status:** Draft — awaiting user review
-**Scope decisions (confirmed by user):** Scope **B** (analysis + alerts + backtest + FX-specific visuals). Data source **A** (Yahoo keyless default, OANDA optional upgrade).
+**Status:** Implemented in the working tree; pending final review and release
+validation. This remains unreleased.
+**Scope decisions (confirmed by user):** Scope **B** (analysis + alerts + backtest + FX-specific visuals). Data source **A** (Yahoo keyless default, OANDA optional candle provider, subject to account eligibility).
 
 ---
 
@@ -19,7 +20,7 @@ The codebase treats the asset class as a binary `crypto | stock`, and several ru
 - session boxes, a currency strength meter and a DXY panel on the chart,
 - backtests that report results in pips and include spread cost.
 
-Users who add a free OANDA practice token get higher-quality data (real-time candles, tick volume, NY-close-aligned bars, longer history).
+Users with an OANDA account eligible for v20 API access may configure a personal access token for OANDA candles (tick volume and NY-close-aligned bars). Eligibility and available history vary by region/account; a demo/practice account alone does not guarantee API access. Yahoo remains the keyless default. See the shipped [Forex guide](../../FOREX.md) for provider selection and current eligibility notes.
 
 **Growth goal:** Reposition the project as *"the self-hosted ICT toolkit for Forex, Crypto and Stocks"* and ship a launch package (demo, GIF, guide, posts). See §9.
 
@@ -140,7 +141,7 @@ Requirement IDs are referenced by the implementation plan and tests. Each requir
 - One-click presets in the Symbols tab:
   - **Majors (7):** EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD, USDCAD, NZDUSD
   - **Majors + Gold (8)**
-  - **All 28 crosses** (with an "OANDA recommended" hint because of Yahoo polling volume)
+  - **All 28 crosses** (with an OANDA suitability hint because of Yahoo polling volume; provider access varies by account)
 - AC1: Unit tests on synthetic series give the expected ranking and coverage flags.
 - AC2: With only EURUSD enabled, the meter shows the low-coverage state, not misleading numbers.
 
@@ -239,7 +240,7 @@ Each phase is a separate, shippable PR to `main`.
 | Phase | Contents | Requirements | Shippable outcome |
 |-------|----------|--------------|-------------------|
 | P1 Foundation | Asset class, watchlist/API/UI type, FX hours, instruments, Yahoo FX, volume gating, FX TP/SL | R1–R7, R9, R17 (partial) | EURUSD works end-to-end keyless |
-| P2 OANDA | OANDA collector, provider settings card, purge/backfill | R8, R17 (provider card) | Quality data upgrade |
+| P2 OANDA | OANDA collector, provider settings card, purge/backfill | R8, R17 (provider card) | Optional provider available to eligible accounts |
 | P3 FX methodology | DST kill zones, sessions model, multi-currency calendar, pips/spread in backtest/paper | R10–R13 | Credible for FX traders |
 | P4 Visuals | Session boxes, strength meter + presets, DXY panel | R14–R16 | Screenshot-worthy features |
 | P5 Launch | Demo data, FOREX.md, READMEs, GIF, release notes | R18–R19, §9 | v2.14.0.0 release |

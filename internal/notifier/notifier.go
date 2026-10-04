@@ -3,6 +3,8 @@ package notifier
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -90,16 +92,18 @@ type Notifier struct {
 	overrideStore appconfig.OverrideGetter        // optional; set via WithOverrideStore
 	markStore     MarkStoreSet                    // optional; nil disables message_id capture
 	macroStore    MacroEventLookup                // optional; nil disables macro annotations
-	macroWindow   time.Duration                   // lookahead for macro annotations
+	macroWindow   time.Duration                   // stock/crypto event proximity
+	fxMacroWindow time.Duration                   // forex event proximity
 }
 
 // New creates a Notifier from the given config and logger.
 func New(cfg Config, log zerolog.Logger) *Notifier {
 	return &Notifier{
-		cfg:        cfg,
-		cooldown:   NewCooldown(cfg.CooldownDur),
-		dailyLimit: NewDailyLimit(),
-		log:        log,
+		cfg:           cfg,
+		cooldown:      NewCooldown(cfg.CooldownDur),
+		dailyLimit:    NewDailyLimit(),
+		log:           log,
+		fxMacroWindow: time.Hour,
 	}
 }
 
@@ -145,26 +149,94 @@ func (n *Notifier) WithMacroStore(store MacroEventLookup, window time.Duration) 
 	return n
 }
 
+// WithForexMacroWindow sets the FX proximity window. The default is one hour;
+// WithMacroStore's window continues to apply to stocks and crypto.
+func (n *Notifier) WithForexMacroWindow(window time.Duration) *Notifier {
+	n.fxMacroWindow = window
+	return n
+}
+
 // macroAnnotation returns a warning line when a high-impact macro event is
 // imminent, or "" otherwise. Fail-open: a nil store or any lookup error yields "".
-func (n *Notifier) macroAnnotation() string {
+func (n *Notifier) macroAnnotation(sig models.Signal) string {
 	if n.macroStore == nil || n.macroWindow <= 0 {
 		return ""
 	}
-	events, err := n.macroStore.ImminentHighImpact(n.macroWindow)
+	window := n.macroWindow
+	if sig.AssetClass == models.AssetForex {
+		window = n.fxMacroWindow
+	}
+	if window <= 0 {
+		return ""
+	}
+	queryWindow := n.macroWindow
+	if n.fxMacroWindow > queryWindow {
+		queryWindow = n.fxMacroWindow
+	}
+	events, err := n.macroStore.ImminentHighImpact(queryWindow)
 	if err != nil {
 		n.log.Warn().Err(err).Msg("macro annotation lookup failed — sending alert without it")
 		return ""
 	}
-	if len(events) == 0 {
+	var best *MacroEvent
+	bestDistance := window + time.Second
+	for i := range events {
+		e := &events[i]
+		if !eventRelevant(sig, e.Country) {
+			continue
+		}
+		distance := time.Until(e.EventTime)
+		if distance < 0 {
+			distance = -distance
+		}
+		if distance > window || distance >= bestDistance {
+			continue
+		}
+		best, bestDistance = e, distance
+	}
+	if best == nil {
 		return ""
 	}
-	e := events[0] // soonest
-	mins := int(time.Until(e.EventTime).Minutes())
-	if mins < 0 {
-		mins = 0
+	mins := int(math.Round(time.Until(best.EventTime).Minutes()))
+	if sig.AssetClass == models.AssetForex {
+		currency := eventCurrency(sig.Symbol, best.Country)
+		if mins >= 0 {
+			return fmt.Sprintf("⚠️ %s %s in %dm", currency, best.Event, mins)
+		}
+		return fmt.Sprintf("⚠️ %s %s %dm ago", currency, best.Event, -mins)
 	}
-	return fmt.Sprintf("⚠️ High-impact macro event in %dm: %s (%s)", mins, e.Event, e.Country)
+	if mins >= 0 {
+		return fmt.Sprintf("⚠️ High-impact macro event in %dm: %s (%s)", mins, best.Event, best.Country)
+	}
+	return fmt.Sprintf("⚠️ High-impact macro event %dm ago: %s (%s)", -mins, best.Event, best.Country)
+}
+
+var eventCountries = map[string][]string{
+	"USD": {"US"}, "EUR": {"EU", "DE", "FR", "IT"},
+	"GBP": {"GB"}, "JPY": {"JP"}, "CHF": {"CH"},
+	"CAD": {"CA"}, "AUD": {"AU"}, "NZD": {"NZ"}, "CNY": {"CN"},
+}
+
+func eventCurrency(symbol, country string) string {
+	if len(symbol) != 6 {
+		return ""
+	}
+	country = strings.ToUpper(country)
+	for _, currency := range []string{symbol[:3], symbol[3:]} {
+		for _, c := range eventCountries[currency] {
+			if c == country {
+				return currency
+			}
+		}
+	}
+	return ""
+}
+
+func eventRelevant(sig models.Signal, country string) bool {
+	if sig.AssetClass != models.AssetForex {
+		return strings.EqualFold(country, "US")
+	}
+	return eventCurrency(sig.Symbol, country) != ""
 }
 
 // Announce sends a raw HTML text message to all senders that implement TextSender.
@@ -230,7 +302,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 
 		// Annotate with an imminent high-impact macro event, if any (fail-open).
 		// sig is a loop-local copy, so this mutation never escapes the dispatch.
-		if note := n.macroAnnotation(); note != "" {
+		if note := n.macroAnnotation(sig); note != "" {
 			sig.MacroNote = note
 		}
 

@@ -5,28 +5,36 @@ import (
 	"math"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // ICTFairValueGapRule detects Fair Value Gaps (3-candle imbalance pattern).
 //
 // Bullish FVG: bars[i].high < bars[i+2].low (gap between candle i high and candle i+2 low)
-//   -> Price entering the gap -> LONG
+//
+//	-> Price entering the gap -> LONG
+//
 // Bearish FVG: bars[i].low > bars[i+2].high (gap between candle i low and candle i+2 high)
-//   -> Price entering the gap -> SHORT
+//
+//	-> Price entering the gap -> SHORT
 //
 // Scan last 15 bars for FVG patterns. Check if current bar's close is within any gap.
 //
 // Quality Score (0.1–1.0) is computed from three factors:
-//   1. Gap size vs ATR_14 (weight 0.35): larger gap relative to ATR = more significant
-//   2. Impulse strength (weight 0.35): volume and body size of the middle candle
-//   3. Unfilled duration (weight 0.30): how many bars the gap remained unfilled
+//  1. Gap size vs ATR_14 (weight 0.35): larger gap relative to ATR = more significant
+//  2. Impulse strength (weight 0.35): volume and body size of the middle candle
+//  3. Unfilled duration (weight 0.30): how many bars the gap remained unfilled
 //
 // Requires >= 4 bars.
 type ICTFairValueGapRule struct{}
 
-func (r *ICTFairValueGapRule) Name() string                 { return "ict_fair_value_gap" }
-func (r *ICTFairValueGapRule) RequiredIndicators() []string { return []string{"ATR_14", "VOLUME_MA_20"} }
+func (r *ICTFairValueGapRule) Name() string { return "ict_fair_value_gap" }
+func (r *ICTFairValueGapRule) RequiredIndicators() []string {
+	// Analyze has price-only fallbacks for both values. In particular, FX feeds
+	// without volume must still be able to report an unconfirmed FVG.
+	return nil
+}
 
 // fvgRelevance computes a 0.1–1.0 relevance score for a Fair Value Gap.
 //
@@ -77,6 +85,19 @@ func fvgRelevance(gapSize, atr, impulseBody, impulseVol, volMA float64, unfilled
 		return 1.0
 	}
 	return math.Round(raw*100) / 100
+}
+
+func fvgRelevanceNoVolume(gapSize, atr, impulseBody float64, unfilledBars int) float64 {
+	gapScore := 0.5
+	if atr > 0 {
+		gapScore = math.Min(1, gapSize/atr)
+	}
+	bodyScore := 0.0
+	if gapSize > 0 {
+		bodyScore = math.Min(1, impulseBody/gapSize)
+	}
+	score := gapScore*0.35 + bodyScore*0.35 + math.Min(1, float64(unfilledBars)/10)*0.30
+	return math.Round(math.Max(0.1, math.Min(1, score))*100) / 100
 }
 
 func (r *ICTFairValueGapRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
@@ -165,19 +186,23 @@ func (r *ICTFairValueGapRule) Analyze(ctx models.AnalysisContext) (*models.Signa
 		volMA, _ := ctx.Indicators[tf+":VOLUME_MA_20"]
 
 		rawScore := fvgRelevance(gapSize, atr, impulseBody, impulseVol, volMA, unfilledBars)
+		if !rule.HasVolume(ctx) {
+			rawScore = fvgRelevanceNoVolume(gapSize, atr, impulseBody, unfilledBars)
+		}
 		weighted := rawScore * tfW[tf]
 		if weighted > bestWeighted {
 			bestWeighted = weighted
 			bestSig = &models.Signal{
-				Symbol:    ctx.Symbol,
-				Timeframe: tf,
-				Rule:      r.Name(),
-				Direction: dir,
-				Score:     rawScore,
-				Message:   fmt.Sprintf("[%s] ICT FVG 진입 → %s (Gap: %.4f-%.4f, 품질: %.0f%%)", tf, dir, gapLow, gapHigh, rawScore*100),
-				ZoneLow:   gapLow,
-				ZoneHigh:  gapHigh,
-				CreatedAt: time.Now(),
+				Symbol:            ctx.Symbol,
+				Timeframe:         tf,
+				Rule:              r.Name(),
+				Direction:         dir,
+				Score:             rawScore,
+				Message:           fmt.Sprintf("[%s] ICT FVG 진입 → %s (Gap: %.4f-%.4f, 품질: %.0f%%)", tf, dir, gapLow, gapHigh, rawScore*100),
+				ZoneLow:           gapLow,
+				ZoneHigh:          gapHigh,
+				VolumeUnconfirmed: !rule.HasVolume(ctx),
+				CreatedAt:         time.Now(),
 			}
 		}
 	}

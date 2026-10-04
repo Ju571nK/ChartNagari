@@ -56,6 +56,9 @@ func (t *ListWatchlistTool) Call(_ context.Context, _ json.RawMessage) (ToolResu
 	for _, s := range cfg.Symbols.Indices {
 		rows = append(rows, row{s.Symbol, s.Exchange, "index", s.Enabled})
 	}
+	for _, s := range cfg.Symbols.Forex {
+		rows = append(rows, row{s.Symbol, s.Exchange, "forex", s.Enabled})
+	}
 
 	enabledCount := 0
 	tableRows := make([][]string, 0, len(rows))
@@ -174,6 +177,11 @@ func (t *GetAnalysisTool) Call(_ context.Context, raw json.RawMessage) (ToolResu
 }
 
 func watchlistHas(cfg appconfig.WatchlistConfig, symbol string) bool {
+	for _, s := range cfg.Symbols.Forex {
+		if s.Symbol == symbol {
+			return true
+		}
+	}
 	for _, s := range cfg.Symbols.Crypto {
 		if s.Symbol == symbol {
 			return true

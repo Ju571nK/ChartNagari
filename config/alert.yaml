@@ -5,3 +5,5 @@ crypto_tp_mult: 1.5
 crypto_sl_mult: 0.75
 stock_tp_mult: 2
 stock_sl_mult: 1
+forex_tp_mult: 1.5
+forex_sl_mult: 1

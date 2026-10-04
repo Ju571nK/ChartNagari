@@ -67,7 +67,7 @@ func (db *DB) SaveOHLCVBatch(bars []models.OHLCV, source string) error {
 // GetOHLCV retrieves the N most recent closed bars for a symbol+timeframe.
 func (db *DB) GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, error) {
 	rows, err := db.conn.Query(`
-		SELECT symbol, timeframe, open_time, open, high, low, close, volume
+		SELECT symbol, timeframe, open_time, open, high, low, close, volume, source
 		FROM ohlcv
 		WHERE symbol = ? AND timeframe = ?
 		ORDER BY open_time DESC
@@ -85,7 +85,7 @@ func (db *DB) GetOHLCV(symbol, timeframe string, limit int) ([]models.OHLCV, err
 // GetOHLCVSince retrieves bars after (and including) the given time.
 func (db *DB) GetOHLCVSince(symbol, timeframe string, since time.Time) ([]models.OHLCV, error) {
 	rows, err := db.conn.Query(`
-		SELECT symbol, timeframe, open_time, open, high, low, close, volume
+		SELECT symbol, timeframe, open_time, open, high, low, close, volume, source
 		FROM ohlcv
 		WHERE symbol = ? AND timeframe = ? AND open_time >= ?
 		ORDER BY open_time ASC`,
@@ -103,7 +103,7 @@ func (db *DB) GetOHLCVSince(symbol, timeframe string, since time.Time) ([]models
 // Used by the backtest engine to replay the full price history.
 func (db *DB) GetOHLCVAll(symbol, timeframe string) ([]models.OHLCV, error) {
 	rows, err := db.conn.Query(`
-		SELECT symbol, timeframe, open_time, open, high, low, close, volume
+		SELECT symbol, timeframe, open_time, open, high, low, close, volume, source
 		FROM ohlcv
 		WHERE symbol = ? AND timeframe = ?
 		ORDER BY open_time ASC`,
@@ -134,11 +134,19 @@ func scanOHLCVRows(rows *sql.Rows) ([]models.OHLCV, error) {
 		var openTimeMs int64
 		if err := rows.Scan(
 			&b.Symbol, &b.Timeframe, &openTimeMs,
-			&b.Open, &b.High, &b.Low, &b.Close, &b.Volume,
+			&b.Open, &b.High, &b.Low, &b.Close, &b.Volume, &b.Source,
 		); err != nil {
 			return nil, err
 		}
 		b.OpenTime = time.UnixMilli(openTimeMs).UTC()
+		switch b.Source {
+		case "yahoo_fx":
+			b.VolumeQuality = models.VolumeNone
+		case "oanda":
+			b.VolumeQuality = models.VolumeTick
+		default:
+			b.VolumeQuality = models.VolumeReal
+		}
 		bars = append(bars, b)
 	}
 	return bars, rows.Err()

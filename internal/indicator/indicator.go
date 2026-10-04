@@ -5,6 +5,7 @@ package indicator
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
@@ -22,6 +23,12 @@ func Compute(bars map[string][]models.OHLCV) map[string]float64 {
 		if len(candles) == 0 {
 			continue
 		}
+		// Storage supplies newest-first bars, while indicator algorithms consume
+		// oldest-first bars. Sort a copy so callers retain their original order.
+		candles = append([]models.OHLCV(nil), candles...)
+		sort.SliceStable(candles, func(i, j int) bool {
+			return candles[i].OpenTime.Before(candles[j].OpenTime)
+		})
 
 		// Extract price/volume slices.
 		closes := make([]float64, len(candles))

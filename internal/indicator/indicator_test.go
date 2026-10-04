@@ -3,11 +3,44 @@ package indicator
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
+
+func TestComputeChronologicalCopyMatchesLiveAndBacktest(t *testing.T) {
+	asc := make([]models.OHLCV, 40)
+	start := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
+	for i := range asc {
+		price := 100 + float64(i)
+		asc[i] = models.OHLCV{OpenTime: start.Add(time.Duration(i) * time.Hour), Open: price - 0.2,
+			High: price + 1.5 + float64(i%3)*0.1, Low: price - 1, Close: price, Volume: 1000 + float64(i)}
+	}
+	desc := append([]models.OHLCV(nil), asc...)
+	for i, j := 0, len(desc)-1; i < j; i, j = i+1, j-1 {
+		desc[i], desc[j] = desc[j], desc[i]
+	}
+	beforeAsc := append([]models.OHLCV(nil), asc...)
+	beforeDesc := append([]models.OHLCV(nil), desc...)
+	backtest := Compute(map[string][]models.OHLCV{"1H": asc, "4H": asc})
+	live := Compute(map[string][]models.OHLCV{"1H": desc, "4H": desc})
+	for _, tf := range []string{"1H", "4H"} {
+		for _, key := range []string{"RSI_14", "EMA_9", "EMA_20", "ATR_14"} {
+			fullKey := tf + ":" + key
+			if !almostEqual(live[fullKey], backtest[fullKey], floatTol) {
+				t.Errorf("%s live=%v backtest=%v", fullKey, live[fullKey], backtest[fullKey])
+			}
+		}
+		if live[tf+":RSI_14"] != 100 || live[tf+":EMA_9"] <= 130 || live[tf+":ATR_14"] <= 0 {
+			t.Errorf("%s stale indicators: RSI=%v EMA=%v ATR=%v", tf, live[tf+":RSI_14"], live[tf+":EMA_9"], live[tf+":ATR_14"])
+		}
+	}
+	if !reflect.DeepEqual(asc, beforeAsc) || !reflect.DeepEqual(desc, beforeDesc) {
+		t.Fatal("Compute changed caller-owned candles")
+	}
+}
 
 const floatTol = 1e-6
 

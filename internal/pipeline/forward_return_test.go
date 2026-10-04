@@ -1,6 +1,9 @@
 package pipeline
 
 import (
+	"context"
+	"math"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,6 +18,198 @@ import (
 type mockFRDB struct {
 	signals []storage.SignalForForwardReturn
 	updated map[int64][4]float64
+}
+
+func TestForwardReturns_ForexSourceTransitionAndReload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "forward-returns.db")
+	db, err := storage.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := time.Now().UTC().Truncate(time.Second).Add(-12 * 24 * time.Hour)
+	yahoo := models.Signal{AssetClass: models.AssetForex, DataProvider: "yahoo", ProviderSymbol: "GC=F", SourceIdentity: "yahoo:public:GC=F", DataProxy: true}
+	oanda := models.Signal{AssetClass: models.AssetForex, DataProvider: "oanda", ProviderSymbol: "XAU_USD", SourceIdentity: "oanda:practice:XAU_USD"}
+	if _, err := db.EnsureForexSources("yahoo", map[string]string{"XAUUSD": yahoo.SourceIdentity}); err != nil {
+		t.Fatal(err)
+	}
+	old := yahoo
+	old.Symbol, old.Timeframe, old.Rule, old.CreatedAt, old.EntryPrice = "XAUUSD", "1H", "old", created, 2500
+	oldID, err := db.SaveSignal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateForwardReturns(oldID, 3, 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SaveOHLCV(models.OHLCV{Symbol: "XAUUSD", Timeframe: "1D", OpenTime: created, Close: 2490}, "yahoo_fx"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.EnsureForexSources("oanda", map[string]string{"XAUUSD": oanda.SourceIdentity}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bar := range []models.OHLCV{
+		{Symbol: "XAUUSD", Timeframe: "1D", OpenTime: created, Close: 3000},
+		{Symbol: "XAUUSD", Timeframe: "1D", OpenTime: created.Add(10 * 24 * time.Hour), Close: 3300},
+	} {
+		if err := db.SaveOHLCV(bar, "oanda"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = storage.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	needs, err := db.GetSignalsNeedingForwardReturn(5)
+	if err != nil || len(needs) != 1 || needs[0].EntryPrice != 2500 || needs[0].SourceIdentity != yahoo.SourceIdentity || needs[0].FR5d != 3 {
+		t.Fatalf("reload lost original source, entry, or existing return: %+v, %v", needs, err)
+	}
+	p := New(DefaultConfig(), db, nil, nil, nil, nil, nil, zerolog.Nop())
+	p.SetForwardReturnStore(db, db)
+	p.SetForexSymbols([]string{"XAUUSD"}, models.VolumeTick, false)
+	p.SetForexSources(map[string]models.Signal{"XAUUSD": oanda})
+	p.SetForexSymbolReady(func(string) bool { return true })
+	p.RunOnce(context.Background())
+	assertReturns := func(id int64, want5, want10 float64) {
+		t.Helper()
+		rows, err := db.GetSignalsNeedingForwardReturn(5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if row.ID == id {
+				if math.Abs(row.FR5d-want5) > 1e-9 || math.Abs(row.FR10d-want10) > 1e-9 {
+					t.Fatalf("signal %d returns: got %.3f/%.3f, want %.3f/%.3f", id, row.FR5d, row.FR10d, want5, want10)
+				}
+				return
+			}
+		}
+		t.Fatalf("signal %d missing", id)
+	}
+	assertReturns(oldID, 3, 0) // OANDA prices must not value a Yahoo proxy signal.
+
+	current := oanda
+	current.Symbol, current.Timeframe, current.Rule, current.CreatedAt, current.EntryPrice = "XAUUSD", "1H", "current", created, 3000
+	currentID, err := db.SaveSignal(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := models.Signal{Symbol: "XAUUSD", Timeframe: "1H", Rule: "legacy", CreatedAt: created, EntryPrice: 2500}
+	legacyID, err := db.SaveSignal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.SetForexSymbolReady(nil) // Unknown health cannot verify current bars.
+	p.RunOnce(context.Background())
+	assertReturns(currentID, 0, 0)
+	p.SetForexSymbolReady(func(string) bool { return false })
+	p.RunOnce(context.Background())
+	assertReturns(currentID, 0, 0)
+	// A healthy provider cannot use a mislabeled bar in the current series.
+	if err := db.SaveOHLCV(models.OHLCV{Symbol: "XAUUSD", Timeframe: "1D", OpenTime: created.Add(10 * 24 * time.Hour), Close: 9900}, "yahoo_fx"); err != nil {
+		t.Fatal(err)
+	}
+	p.SetForexSymbolReady(func(string) bool { return true })
+	p.RunOnce(context.Background())
+	assertReturns(currentID, 0, 0)
+	if err := db.SaveOHLCV(models.OHLCV{Symbol: "XAUUSD", Timeframe: "1D", OpenTime: created.Add(10 * 24 * time.Hour), Close: 3300}, "oanda"); err != nil {
+		t.Fatal(err)
+	}
+	p.RunOnce(context.Background())
+	assertReturns(currentID, 0, 10)
+	assertReturns(legacyID, 0, 0)
+	assertReturns(oldID, 3, 0)
+
+	if _, err := db.EnsureForexSources("yahoo", map[string]string{"XAUUSD": yahoo.SourceIdentity}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SaveOHLCV(models.OHLCV{Symbol: "XAUUSD", Timeframe: "1D", OpenTime: created.Add(10 * 24 * time.Hour), Close: 2750}, "yahoo_fx"); err != nil {
+		t.Fatal(err)
+	}
+	p.SetForexSources(map[string]models.Signal{"XAUUSD": yahoo})
+	p.RunOnce(context.Background())
+	assertReturns(oldID, 3, 10)
+	assertReturns(currentID, 0, 10) // Historical values survive later switches.
+}
+
+func TestForwardReturns_LegacyStockStillUsesHistoricalClose(t *testing.T) {
+	db, err := storage.New(filepath.Join(t.TempDir(), "stock.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	created := time.Now().UTC().Truncate(time.Second).Add(-12 * 24 * time.Hour)
+	id, err := db.SaveSignal(models.Signal{Symbol: "AAPL", Timeframe: "1H", Rule: "old", CreatedAt: created, EntryPrice: 777})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bar := range []models.OHLCV{
+		{Symbol: "AAPL", Timeframe: "1D", OpenTime: created, Close: 100},
+		{Symbol: "AAPL", Timeframe: "1D", OpenTime: created.Add(10 * 24 * time.Hour), Close: 110},
+	} {
+		if err := db.SaveOHLCV(bar, "yahoo"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	needs, err := db.GetSignalsNeedingForwardReturn(5)
+	if err != nil || len(needs) != 1 || needs[0].EntryPrice != 100 {
+		t.Fatalf("legacy stock entry: %+v, %v", needs, err)
+	}
+	UpdateForwardReturns(db, db, zerolog.Nop())
+	rows, err := db.GetSignalsNeedingForwardReturn(5)
+	if err != nil || len(rows) != 1 || rows[0].ID != id || math.Abs(rows[0].FR10d-10) > 1e-9 {
+		t.Fatalf("legacy stock return: %+v, %v", rows, err)
+	}
+}
+
+func TestForwardReturns_UnverifiableFXDoesNotStarveStocks(t *testing.T) {
+	db, err := storage.New(filepath.Join(t.TempDir(), "queue.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	created := time.Now().UTC().Truncate(time.Second).Add(-13 * 24 * time.Hour)
+	for i := 0; i < 205; i++ {
+		if _, err := db.SaveSignal(models.Signal{Symbol: "XAUUSD", Timeframe: "1H", Rule: "legacy", CreatedAt: created, AssetClass: models.AssetForex, EntryPrice: 2500}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stockTime := created.Add(24 * time.Hour)
+	stockID, err := db.SaveSignal(models.Signal{Symbol: "AAPL", Timeframe: "1H", Rule: "stock", CreatedAt: stockTime})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bar := range []models.OHLCV{
+		{Symbol: "AAPL", Timeframe: "1D", OpenTime: stockTime, Close: 100},
+		{Symbol: "AAPL", Timeframe: "1D", OpenTime: stockTime.Add(10 * 24 * time.Hour), Close: 110},
+	} {
+		if err := db.SaveOHLCV(bar, "yahoo"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := New(DefaultConfig(), db, nil, nil, nil, nil, nil, zerolog.Nop())
+	p.SetForwardReturnStore(db, db)
+	p.SetForexSymbols([]string{"XAUUSD"}, models.VolumeTick, false)
+	p.SetForexSources(map[string]models.Signal{"XAUUSD": {DataProvider: "oanda", ProviderSymbol: "XAU_USD", SourceIdentity: "oanda:practice:XAU_USD"}})
+	p.SetForexSymbolReady(func(string) bool { return true })
+	p.RunOnce(context.Background())
+	rows, err := db.GetSignalsNeedingForwardReturn(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.ID == stockID {
+			if math.Abs(row.FR10d-10) > 1e-9 {
+				t.Fatalf("stock delayed by unverifiable FX: %+v", row)
+			}
+			return
+		}
+	}
+	t.Fatal("stock signal not found")
 }
 
 func (m *mockFRDB) GetSignalsNeedingForwardReturn(minAgeDays int) ([]storage.SignalForForwardReturn, error) {

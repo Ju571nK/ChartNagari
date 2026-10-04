@@ -10,6 +10,40 @@ For local/remote server profiles, remote API authentication and allowed app
 origins, see [Local and remote connections](docs/remote-connections.md). Remote
 access is opt-in and requires an administrator token and HTTPS deployment.
 
+## Forex data
+
+Forex candles are configured under `forex` in `config/settings.yaml` or in
+**Settings → Forex**:
+
+```yaml
+forex:
+  provider: auto            # auto | yahoo | oanda
+  oanda:
+    token: ""
+    environment: practice   # practice | live
+```
+
+`auto` selects Yahoo when no OANDA token is saved and OANDA when one is present.
+Choose `yahoo` to keep Yahoo selected with a token saved, or `oanda` to request
+OANDA explicitly. Yahoo FX candles require no key and contain no meaningful
+volume. OANDA requires an eligible v20 personal access token and provides tick
+volume. Access varies by region and account; a demo/practice account alone may
+not qualify. The [Forex guide](docs/FOREX.md) links general v20 documentation
+and separate Japan eligibility details. Its practice/live selector chooses the
+OANDA candle API environment; it does not place or enable orders.
+Tokens are credentials: use the masked settings field and protect the YAML file
+and backups. A rejected OANDA token stops FX collection; there is no automatic
+Yahoo fallback. Changing the effective provider purges existing FX candles and
+starts a new backfill because candle alignment differs.
+
+Read the [Forex guide](docs/FOREX.md) for supported pairs, metal proxy symbols,
+pip conventions, sessions and backtest limitations.
+
+Economic-calendar signal annotations use `CALENDAR_FX_ALERT_WINDOW` for FX
+pairs (default 60 minutes). The existing `CALENDAR_ALERT_WINDOW` remains
+independent and defaults to 30 minutes for its legacy behavior. Each is clamped
+to 5–1440 minutes.
+
 ## AI connection setup
 
 The AI setup wizard is available during onboarding and in the AI settings tab.

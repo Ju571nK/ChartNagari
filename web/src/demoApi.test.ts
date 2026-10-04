@@ -74,14 +74,15 @@ afterEach(() => {
 })
 
 describe('route: core endpoints', () => {
-  // ── 1. /symbols → single enabled DEMO_BTC ────────────────────────────────
-  it('serves a single enabled DEMO_BTC from /api/symbols', async () => {
+  // ── 1. /symbols → EURUSD leads the ready-to-use FX demo ───────────────────
+  it('serves FX samples and keeps the BTC fixture available', async () => {
     await install({ '1D': scan('1D', flatBars, []) })
     const res = await window.fetch('/api/symbols')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual([
-      { symbol: 'DEMO_BTC', enabled: true, type: 'crypto', exchange: 'binance' },
-    ])
+    const symbols = await res.json()
+    expect(symbols[0]).toEqual({ symbol: 'EURUSD', enabled: true, type: 'forex', exchange: 'FX' })
+    expect(symbols.some((s: { symbol: string }) => s.symbol === 'XAUUSD')).toBe(true)
+    expect(symbols.some((s: { symbol: string }) => s.symbol === 'DEMO_BTC')).toBe(true)
   })
 
   // ── 2. /demo/scan honors the timeframe query param ───────────────────────
@@ -234,7 +235,7 @@ describe('route: object endpoints and fallbacks', () => {
   // ── 13. object-shaped endpoints touched on load ──────────────────────────
   it('serves object-shaped endpoints and 204 for /vix/current', async () => {
     await install({ '1D': scan('1D', flatBars, []) })
-    expect(await (await window.fetch('/api/settings/config')).json()).toEqual({})
+    expect(await (await window.fetch('/api/settings/config')).json()).toEqual({ FOREX_PROVIDER: 'auto', OANDA_TOKEN: '', OANDA_ENVIRONMENT: 'practice' })
     expect(await (await window.fetch('/api/env/config')).json()).toEqual({})
     expect(await (await window.fetch('/api/status')).json()).toEqual({ phase: 'demo', running: false })
     expect(await (await window.fetch('/api/wyckoff/DEMO_BTC/1D')).json()).toEqual({ events: [] })
@@ -267,12 +268,12 @@ describe('route: object endpoints and fallbacks', () => {
     expect((await res.json()).passthrough).toBe(true)
   })
 
-  // ── 14. anything else → empty array ──────────────────────────────────────
-  it('serves an empty array for unknown GET endpoints', async () => {
+  // ── 14. unknown endpoints fail visibly ───────────────────────────────────
+  it('returns an error for unknown GET endpoints', async () => {
     await install({ '1D': scan('1D', flatBars, []) })
     const res = await window.fetch('/api/some/unknown/endpoint')
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual([])
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'Demo endpoint unavailable' })
   })
 })
 
@@ -299,7 +300,7 @@ describe('installDemoApi: interception behavior', () => {
   // ── 17. urlOf handles string / URL / Request inputs ──────────────────────
   it('routes string, URL, and Request inputs identically', async () => {
     await install({ '1D': scan('1D', flatBars, []) })
-    const expected = [{ symbol: 'DEMO_BTC', enabled: true, type: 'crypto', exchange: 'binance' }]
+    const expected = await (await window.fetch('/api/symbols')).json()
     expect(await (await window.fetch('/api/symbols')).json()).toEqual(expected)
     expect(await (await window.fetch(new URL('/api/symbols', ORIGIN))).json()).toEqual(expected)
     expect(await (await window.fetch(new Request(ORIGIN + '/api/symbols'))).json()).toEqual(expected)
@@ -325,6 +326,26 @@ describe('installDemoApi: interception behavior', () => {
 })
 
 describe('shipped demo fixtures', () => {
+  it('serves FX candles, DST sessions, strength and DXY without setup', async () => {
+    await install({ '1D': scan('1D', flatBars, []) })
+    const bars = await (await window.fetch('/api/ohlcv/EURUSD/1H')).json()
+    expect(bars.length).toBeGreaterThan(100)
+    expect(bars[0].volume).toBe(0)
+    const gold = await (await window.fetch('/api/ohlcv/XAUUSD/1H')).json()
+    expect(gold[0].close).toBeGreaterThan(1000)
+    const sessions = await (await window.fetch(`/api/forex/sessions?symbol=EURUSD&tf=1H&from=${bars[0].time}&to=${bars.at(-1).time}`)).json()
+    expect(sessions.sessions.some((s: { name: string }) => s.name === 'asia')).toBe(true)
+    const strength = await (await window.fetch('/api/forex/strength?tf=4H&lookback=20')).json()
+    expect(strength.currencies.find((item: { currency: string }) => item.currency === 'USD')).toMatchObject({ pairs: 8, coverage: 'ok' })
+    expect(strength.currencies.find((item: { currency: string }) => item.currency === 'EUR')).toMatchObject({ pairs: 1, coverage: 'low', value: null })
+    await window.fetch('/api/ohlcv/USDJPY/1H')
+    const jpySignal = (await (await window.fetch('/api/signals?symbol=USDJPY')).json())[0]
+    expect((jpySignal.tp - jpySignal.entry_price) / 0.01).toBeCloseTo(30)
+    expect((jpySignal.entry_price - jpySignal.sl) / 0.01).toBeCloseTo(15)
+    const dxy = await (await window.fetch('/api/forex/dxy?symbol=EURUSD')).json()
+    expect(dxy.bars.length).toBeGreaterThan(60)
+    expect(dxy.correlation_20).toBeLessThan(0)
+  })
   // ── 20. real public/demo/*.json match the DemoScan contract ──────────────
   it('every scan-{TF}.json fixture has DEMO_BTC bars and well-formed signals', () => {
     const shipped: Record<string, Scan> = {

@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -44,7 +45,7 @@ func (r *WyckoffDistributionRule) Analyze(ctx models.AnalysisContext) (*models.S
 
 		ema50, hasEMA := ctx.Indicators[ema50Key]
 		volMA, hasVolMA := ctx.Indicators[volMAKey]
-		if !hasEMA || !hasVolMA {
+		if !hasEMA || (rule.HasVolume(ctx) && !hasVolMA) {
 			continue
 		}
 
@@ -74,7 +75,7 @@ func (r *WyckoffDistributionRule) Analyze(ctx models.AnalysisContext) (*models.S
 		if curr.Close <= ema50 {
 			continue
 		}
-		if curr.Volume >= volMA {
+		if rule.HasVolume(ctx) && curr.Volume >= volMA {
 			continue
 		}
 
@@ -108,12 +109,13 @@ func (r *WyckoffDistributionRule) Analyze(ctx models.AnalysisContext) (*models.S
 	rawScore := math.Max(0.1, math.Min(1.0, 1.0-rangeWidth/rangePct))
 
 	return &models.Signal{
-		Symbol:    ctx.Symbol,
-		Timeframe: bestTF,
-		Rule:      r.Name(),
-		Direction: "SHORT",
-		Score:     rawScore,
-		Message:   fmt.Sprintf("[%s] Wyckoff 분산 국면 감지 → SHORT (레인지 %.1f%%)", bestTF, rangeWidth*100),
-		CreatedAt: time.Now(),
+		Symbol:            ctx.Symbol,
+		Timeframe:         bestTF,
+		Rule:              r.Name(),
+		Direction:         "SHORT",
+		Score:             rawScore,
+		Message:           fmt.Sprintf("[%s] Wyckoff 분산 국면 감지 → SHORT (레인지 %.1f%%)", bestTF, rangeWidth*100),
+		VolumeUnconfirmed: !rule.HasVolume(ctx),
+		CreatedAt:         time.Now(),
 	}, nil
 }

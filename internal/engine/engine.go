@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
@@ -38,8 +39,8 @@ func (e *RuleEngine) Register(r rule.AnalysisRule) {
 
 // Run executes all registered active rules against ctx.
 // For each rule:
-//  1. RequiredIndicators() keys are checked against ctx.Indicators; if any key
-//     is missing the rule is skipped silently.
+//  1. RequiredIndicators() keys are checked against ctx.Indicators. Bare keys
+//     must all exist on the same available timeframe, or the rule is skipped.
 //  2. Analyze() is called; a nil return is treated as "no signal".
 //  3. The signal's Score is multiplied by TFWeight(entry.Timeframe) × entry.Weight.
 //
@@ -48,16 +49,23 @@ func (e *RuleEngine) Run(ctx models.AnalysisContext) []models.Signal {
 	var signals []models.Signal
 
 	for _, rec := range e.records {
-		// Check required indicators are present.
-		required := rec.impl.RequiredIndicators()
-		missing := false
-		for _, key := range required {
-			if _, exists := ctx.Indicators[key]; !exists {
-				missing = true
-				break
+		if len(rec.entry.AssetClasses) > 0 {
+			assetClass := ctx.AssetClass
+			if assetClass == "" {
+				assetClass = models.AssetStock
+			}
+			allowed := false
+			for _, class := range rec.entry.AssetClasses {
+				if class == assetClass {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				continue
 			}
 		}
-		if missing {
+		if !hasRequiredIndicators(ctx, rec.impl.RequiredIndicators()) {
 			continue
 		}
 
@@ -78,4 +86,47 @@ func (e *RuleEngine) Run(ctx models.AnalysisContext) []models.Signal {
 	})
 
 	return signals
+}
+
+// Bare requirements must coexist on one available timeframe. Rules that scan
+// multiple timeframes still select their own qualifying series in Analyze.
+func hasRequiredIndicators(ctx models.AnalysisContext, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	var bare []string
+	for _, key := range required {
+		if strings.Contains(key, ":") {
+			if _, ok := ctx.Indicators[key]; !ok {
+				return false
+			}
+		} else {
+			bare = append(bare, key)
+		}
+	}
+	if len(bare) == 0 {
+		return true
+	}
+	for tf, bars := range ctx.Timeframes {
+		if len(bars) == 0 {
+			continue
+		}
+		all := true
+		for _, key := range bare {
+			if _, ok := ctx.Indicators[tf+":"+key]; !ok {
+				all = false
+				break
+			}
+		}
+		if all {
+			return true
+		}
+	}
+	// Preserve callers that explicitly supply unprefixed, single-series maps.
+	for _, key := range bare {
+		if _, ok := ctx.Indicators[key]; !ok {
+			return false
+		}
+	}
+	return true
 }

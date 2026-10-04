@@ -9,6 +9,7 @@ import (
 
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/indicator"
+	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
@@ -39,16 +40,21 @@ type TradeOutcome struct {
 	ExitBars   int       `json:"exit_bars"`
 	Win        bool      `json:"win"`
 	PnLPct     float64   `json:"pnl_pct"` // 수익률 %
+	PnLPips    float64   `json:"pnl_pips,omitempty"`
+	Pips       float64   `json:"pips,omitempty"`
+	SpreadPips float64   `json:"spread_pips,omitempty"`
 }
 
 // RegimeStats holds aggregated performance metrics for a single volatility regime.
 type RegimeStats struct {
-	Regime       string  `json:"regime"`          // "LOW_VOL", "NORMAL", "HIGH_VOL"
+	Regime       string  `json:"regime"` // "LOW_VOL", "NORMAL", "HIGH_VOL"
 	Trades       int     `json:"trades"`
 	WinRate      float64 `json:"win_rate"`
 	AvgRR        float64 `json:"avg_rr"`
 	ProfitFactor float64 `json:"profit_factor"`
 	TotalReturn  float64 `json:"total_return_pct"`
+	NetPips      float64 `json:"net_pips,omitempty"`
+	AvgPips      float64 `json:"avg_pips,omitempty"`
 }
 
 // BacktestResult holds the full output of a backtest run.
@@ -66,10 +72,14 @@ type BacktestResult struct {
 
 // Config controls the simulation parameters.
 type Config struct {
-	WarmupBars      int     // bars before the first signal (default 200)
-	MaxExitBars     int     // max bars to wait for TP/SL (default 20)
-	TPATRMultiplier float64 // TP = entry ± ATR × this (default 2.0)
-	SLATRMultiplier float64 // SL = entry ∓ ATR × this (default 1.0)
+	WarmupBars         int                  // bars before the first signal (default 200)
+	MaxExitBars        int                  // max bars to wait for TP/SL (default 20)
+	TPATRMultiplier    float64              // TP = entry ± ATR × this (default 2.0)
+	SLATRMultiplier    float64              // SL = entry ∓ ATR × this (default 1.0)
+	AssetClass         models.AssetClass    // explicit class; unset preserves stock behaviour
+	VolumeQuality      models.VolumeQuality // explicit provider quality; unset FX is conservatively none
+	SpreadPips         float64              // optional FX round-trip spread; <=0 uses instrument default
+	SpreadPipsOverride *float64             // optional explicit override, including zero spread
 }
 
 // DefaultConfig returns sensible backtest defaults.
@@ -138,6 +148,21 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 	if e.cfg.WarmupBars >= len(bars)-1 {
 		return result
 	}
+	assetClass := e.cfg.AssetClass
+	if assetClass == "" {
+		assetClass = models.AssetStock
+	}
+	var pipSize, spread float64
+	if assetClass == models.AssetForex {
+		spec := market.Instrument(symbol)
+		pipSize, spread = spec.PipSize, spec.DefaultSpreadPips
+		if e.cfg.SpreadPips > 0 {
+			spread = e.cfg.SpreadPips
+		}
+		if e.cfg.SpreadPipsOverride != nil {
+			spread = *e.cfg.SpreadPipsOverride
+		}
+	}
 
 	// Build the live engine once; reuse across bar iterations.
 	eng := engine.New(e.engCfg)
@@ -147,6 +172,24 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 
 	for i := e.cfg.WarmupBars; i < len(bars)-1; i++ {
 		ctx := buildContext(symbol, timeframe, bars[:i+1])
+		volumeQuality := bars[i].VolumeQuality
+		if volumeQuality == "" {
+			volumeQuality = e.cfg.VolumeQuality
+		}
+		if volumeQuality == "" {
+			volumeQuality = models.VolumeReal
+			if assetClass == models.AssetForex {
+				volumeQuality = models.VolumeNone
+			}
+		}
+		ctx.AssetClass, ctx.VolumeQuality = assetClass, volumeQuality
+		// Calendar windows are available for every replay timeframe. Exact
+		// Asian highs/lows require hourly history; a 4H-only replay leaves the
+		// range invalid instead of synthesizing it from coarse candles.
+		ctx.Session = market.SessionsAt(bars[i].OpenTime)
+		if timeframe == "1H" {
+			ctx.Session = market.AsianRange(bars[:i+1], bars[i].OpenTime)
+		}
 		signals := eng.Run(ctx)
 
 		for _, sig := range signals {
@@ -180,6 +223,7 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 				Score:      sig.Score,
 				TP:         tp,
 				SL:         sl,
+				SpreadPips: spread,
 			}
 
 			limit := i + 1 + e.cfg.MaxExitBars
@@ -228,6 +272,20 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 			}
 
 			if outcome.ExitBars > 0 {
+				if pipSize > 0 {
+					midEntry, midExit := entry, outcome.ExitPrice
+					halfSpread := spread * pipSize / 2
+					if sig.Direction == "LONG" {
+						outcome.EntryPrice, outcome.ExitPrice = midEntry+halfSpread, midExit-halfSpread
+						outcome.PnLPips = (midExit-midEntry)/pipSize - spread
+					} else {
+						outcome.EntryPrice, outcome.ExitPrice = midEntry-halfSpread, midExit+halfSpread
+						outcome.PnLPips = (midEntry-midExit)/pipSize - spread
+					}
+					outcome.PnLPct = outcome.PnLPips * pipSize / outcome.EntryPrice * 100
+					outcome.Pips = outcome.PnLPips
+					outcome.Win = outcome.PnLPips > 0
+				}
 				result.Outcomes = append(result.Outcomes, outcome)
 			}
 		}
@@ -452,6 +510,8 @@ func computeRegimeStats(outcomes []TradeOutcome, bars []models.OHLCV) []RegimeSt
 			AvgRR:        s.AvgRR,
 			ProfitFactor: s.ProfitFactor,
 			TotalReturn:  s.TotalReturnPct,
+			NetPips:      s.NetPips,
+			AvgPips:      s.AvgPips,
 		})
 	}
 	return result

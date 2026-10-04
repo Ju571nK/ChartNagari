@@ -1,6 +1,6 @@
 # ChartNagari
 
-A personal workspace for exploring US stocks and crypto — from chart patterns to alerts and strategy review.
+A self-hosted research workspace for Forex, US stocks and crypto — from ICT/SMC chart context to alerts and strategy review.
 
 [Try the demo](https://ju571nk.github.io/ChartNagari/) · [Latest release](https://github.com/Ju571nK/ChartNagari/releases/latest) · [Get started](#get-started)
 
@@ -36,6 +36,13 @@ Grouped navigation, a chart-side signal inspector and shared chart → analysis 
 Upgrading? Read the [YAML migration notes](SETTINGS.md) and [release notes](docs/releases/v2.13.0.0.md) before restarting your server.
 
 ## Get started
+
+Forex/FX users can follow the [5-minute keyless Forex setup guide](docs/FOREX.md).
+Yahoo Finance provides default FX candles without an API key, but FX has no
+meaningful volume and Yahoo gold/silver use futures proxies. The guide explains
+optional OANDA eligibility, provider alignment and backtest cost limitations.
+See the [Forex sample interface demo](docs/assets/forex-demo.gif); it uses sample
+data and does not verify a live provider connection or release QA.
 
 **Just looking?** [Open the browser demo](https://ju571nk.github.io/ChartNagari/). It uses bundled sample data; live collection, persistent settings and connected services require a self-hosted server.
 

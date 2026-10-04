@@ -12,14 +12,14 @@ import (
 
 // staticRule always returns a fixed signal with a given base Score.
 type staticRule struct {
-	name       string
-	required   []string
-	baseScore  float64
-	direction  string
+	name      string
+	required  []string
+	baseScore float64
+	direction string
 }
 
-func (r *staticRule) Name() string                         { return r.name }
-func (r *staticRule) RequiredIndicators() []string         { return r.required }
+func (r *staticRule) Name() string                 { return r.name }
+func (r *staticRule) RequiredIndicators() []string { return r.required }
 func (r *staticRule) Analyze(_ models.AnalysisContext) (*models.Signal, error) {
 	return &models.Signal{
 		Rule:      r.name,
@@ -38,8 +38,8 @@ func (r *nilRule) Analyze(_ models.AnalysisContext) (*models.Signal, error) { re
 // errorRule returns an error from Analyze.
 type errorRule struct{ name string }
 
-func (r *errorRule) Name() string                         { return r.name }
-func (r *errorRule) RequiredIndicators() []string         { return nil }
+func (r *errorRule) Name() string                 { return r.name }
+func (r *errorRule) RequiredIndicators() []string { return nil }
 func (r *errorRule) Analyze(_ models.AnalysisContext) (*models.Signal, error) {
 	return nil, errors.New("analyze failed")
 }
@@ -51,8 +51,8 @@ type trackingRule struct {
 	called   bool
 }
 
-func (r *trackingRule) Name() string                         { return r.name }
-func (r *trackingRule) RequiredIndicators() []string         { return r.required }
+func (r *trackingRule) Name() string                 { return r.name }
+func (r *trackingRule) RequiredIndicators() []string { return r.required }
 func (r *trackingRule) Analyze(_ models.AnalysisContext) (*models.Signal, error) {
 	r.called = true
 	return &models.Signal{Rule: r.name, Score: 1.0}, nil
@@ -126,9 +126,9 @@ func TestRun_ScoreCalculation_TFWeightApplied(t *testing.T) {
 func TestRun_MultipleRules_SortedDescending(t *testing.T) {
 	cfg := RuleConfig{
 		Rules: map[string]RuleEntry{
-			"low_rule":  enabledEntry("1H", 1.0),  // 1.0 × 1.0 × 1.0 = 1.0
-			"mid_rule":  enabledEntry("4H", 1.0),  // 2.0 × 1.2 × 1.0 = 2.4
-			"high_rule": enabledEntry("1D", 3.0),  // 1.0 × 1.5 × 3.0 = 4.5
+			"low_rule":  enabledEntry("1H", 1.0), // 1.0 × 1.0 × 1.0 = 1.0
+			"mid_rule":  enabledEntry("4H", 1.0), // 2.0 × 1.2 × 1.0 = 2.4
+			"high_rule": enabledEntry("1D", 3.0), // 1.0 × 1.5 × 3.0 = 4.5
 		},
 	}
 	e := New(cfg)
@@ -188,6 +188,26 @@ func TestRun_MissingRequiredIndicator_RuleSkipped(t *testing.T) {
 	}
 	if tr.called {
 		t.Fatal("Analyze should not have been called when a required indicator is missing")
+	}
+}
+
+func TestRequiredIndicatorsMustShareAnAvailableTimeframe(t *testing.T) {
+	ctx := emptyCtx()
+	ctx.Timeframes["1H"] = []models.OHLCV{{}}
+	ctx.Timeframes["4H"] = []models.OHLCV{{}}
+	ctx.Indicators["1H:ATR_14"] = 2
+	ctx.Indicators["4H:VOLUME_MA_20"] = 100
+	required := []string{"ATR_14", "VOLUME_MA_20"}
+	if hasRequiredIndicators(ctx, required) {
+		t.Fatal("requirements from different timeframes must not satisfy one rule")
+	}
+	ctx.Indicators["1H:VOLUME_MA_20"] = 100
+	if !hasRequiredIndicators(ctx, required) {
+		t.Fatal("same-timeframe indicators should satisfy the rule")
+	}
+	delete(ctx.Timeframes, "1H")
+	if hasRequiredIndicators(ctx, required) {
+		t.Fatal("indicators without source bars must not satisfy the rule")
 	}
 }
 

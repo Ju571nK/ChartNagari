@@ -14,7 +14,7 @@ You don't need to write a single line of Go to help ChartNagari grow:
   test-case data for improving detection accuracy.
 - **Report false positives / false negatives** — Run the platform and see a signal that
   looks wrong? File a bug report with the symbol, timeframe, and what you observed.
-- **Propose new rules** — In [GitHub Discussions → Rules & Methodology](../../discussions),
+- **Propose new rules** — In [GitHub Discussions → Rules & Methodology](https://github.com/Ju571nK/ChartNagari/discussions),
   describe an ICT or Wyckoff pattern you'd like to see automated. You don't need to
   implement it — just describe what the setup looks like and when it fires.
 - **Translate the README** — The platform already supports `LLM_LANGUAGE: en | ko | ja`.
@@ -97,6 +97,24 @@ It does not require changes to the core or importing `internal` packages.
 ---
 
 ## Adding a New Rule — Step-by-Step
+
+### Adding an FX rule
+
+FX rules receive the market context through `models.AnalysisContext`, including
+`AssetClass`, `VolumeQuality` and (on the 1H analysis path) the Asian session
+range. Prefer price structure when a rule can work without volume. Yahoo FX bars
+have `VolumeQuality=none`; OANDA bars have `tick`, which is broker tick activity,
+not centralized traded volume. Pure-volume rules must respect the quality and
+skip `none`; confirmation rules can proceed without volume only when their
+semantics allow it, and should expose that the confirmation was unavailable.
+
+For a session-based rule, use `internal/market.SessionsAt` or the provided
+`AnalysisContext.Session` rather than hardcoding UTC hours. Those windows use
+America/New_York and follow DST. A useful first contribution is an Asian-range
+sweep rule that consumes the supplied range, checks its session/timeframe
+assumptions, and handles an unavailable or incomplete range without fabricating
+levels. Add table-driven cases for Yahoo (`none`), OANDA (`tick`), boundary times
+and DST transitions. See [Forex support and data limits](docs/FOREX.md).
 
 Every trading rule implements the `AnalysisRule` interface defined in
 `internal/rule/interface.go`:

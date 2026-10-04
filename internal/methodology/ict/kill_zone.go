@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
-// ICTKillZoneRule signals when the current UTC time is within a kill zone session.
-//
-// Kill zones (UTC):
-//   London:   08:00–11:00
-//   New York: 13:00–16:00
+// ICTKillZoneRule signals in the New York-local ICT kill zones. Session
+// boundaries follow daylight saving time through market.Sessions.
 //
 // Returns a NEUTRAL signal when in a kill zone, nil otherwise.
 // Score = 1.0 in kill zone.
@@ -34,28 +32,33 @@ func (r *ICTKillZoneRule) Analyze(ctx models.AnalysisContext) (*models.Signal, e
 		nowFn = time.Now
 	}
 
-	t := nowFn().UTC()
-	hour := t.Hour()
-	minute := t.Minute()
-	hhmm := hour*100 + minute
-
+	t := nowFn()
+	sessions := market.SessionsAt(t)
 	var sessionName string
-
-	if hhmm >= 800 && hhmm < 1100 {
+	switch {
+	case sessions.Asia.Contains(t):
+		sessionName = "Asia"
+	case sessions.London.Contains(t):
 		sessionName = "London"
-	} else if hhmm >= 1300 && hhmm < 1600 {
-		sessionName = "New York"
-	} else {
+	case sessions.NewYork.Contains(t):
+		sessionName = "New York AM"
+	case sessions.LondonClose.Contains(t):
+		sessionName = "London Close"
+	default:
 		return nil, nil
 	}
+	local, _ := time.LoadLocation("America/New_York")
+	ny := t.In(local)
 
 	return &models.Signal{
-		Symbol:    ctx.Symbol,
-		Timeframe: "ALL",
-		Rule:      r.Name(),
-		Direction: "NEUTRAL",
-		Score:     1.0,
-		Message:   fmt.Sprintf("%s Kill Zone 활성 (UTC %02d:%02d)", sessionName, hour, minute),
-		CreatedAt: nowFn(),
+		Symbol:        ctx.Symbol,
+		Timeframe:     "ALL",
+		Rule:          r.Name(),
+		Direction:     "NEUTRAL",
+		Score:         1.0,
+		Message:       fmt.Sprintf("%s kill zone active (%02d:%02d New York)", sessionName, ny.Hour(), ny.Minute()),
+		MessageKey:    "signal.ict.kill_zone",
+		MessageParams: map[string]string{"session": sessionName, "time": ny.Format("15:04"), "timezone": "America/New_York"},
+		CreatedAt:     t,
 	}, nil
 }

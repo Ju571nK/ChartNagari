@@ -10,7 +10,15 @@
 // App.tsx's apiFetch() wrapper and OnboardingModal.tsx's direct fetch() calls
 // without touching either.
 
+import { demoDxy, demoFxBars, demoFxSessions, demoSessionsFromBars } from './demoFx'
+import { instrument } from './forex'
+
 const DEMO_SYMBOL = 'DEMO_BTC'
+const DEMO_FX = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD', 'XAUUSD'] as const
+const demoSymbols = [
+  ...['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD', 'XAUUSD'].map(symbol => ({ symbol, enabled: true, type: 'forex', exchange: 'FX' })),
+  { symbol: DEMO_SYMBOL, enabled: true, type: 'crypto', exchange: 'binance' },
+]
 
 interface DemoBar {
   time: number
@@ -140,6 +148,7 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
       currentTf = tf
       return jsonResponse(scan.bars)
     }
+    if (DEMO_FX.some(item => item === sym)) { currentTf = tf; return jsonResponse(demoFxBars(sym, tf)) }
     return jsonResponse([]) // ^VIX overlay etc. — no data in demo
   }
 
@@ -149,6 +158,13 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
   // timeframe switches can place a stale chain's markers on the newer TF's
   // bars — cosmetic only, and the newer chain's setSignals lands last anyway.
   if (path === '/signals') {
+    if (DEMO_FX.some(item => item === search.get('symbol'))) {
+      const sym = search.get('symbol')!
+      const bars = demoFxBars(sym, currentTf)
+      const sample = bars[Math.floor(bars.length * 0.7)]
+      const providerSymbol = sym === 'XAUUSD' ? 'GC=F' : `${sym}=X`
+      return jsonResponse(sample ? [{ symbol: sym, timeframe: currentTf, time: sample.time, direction: 'LONG', rule: 'ict_liquidity_sweep', score: 7.2, message: 'Demo sample', message_key: 'forex.demoSignal', ai_interpretation: '', zone_low: sample.low, zone_high: sample.high, entry_price: sample.close, tp: sample.close + 30 * instrument(sym).pip, sl: sample.close - 15 * instrument(sym).pip, tp_pips: 30, sl_pips: 15, data_provider: 'yahoo', provider_symbol: providerSymbol, source_identity: `yahoo|${providerSymbol}|${sym === 'XAUUSD' ? 'proxy' : 'spot'}`, data_proxy: sym === 'XAUUSD', volume_unconfirmed: true }] : [])
+    }
     if (search.get('symbol') === DEMO_SYMBOL) {
       const scan = await loadScan(currentTf, realFetch)
       return jsonResponse(placeSignals(scan.bars, scan.signals))
@@ -156,13 +172,44 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
     return jsonResponse([])
   }
 
-  // Single enabled symbol → App auto-selects DEMO_BTC and renders immediately.
+  // EURUSD leads the demo watchlist, so the chart opens on FX without setup.
   if (path === '/symbols') {
-    return jsonResponse([{ symbol: DEMO_SYMBOL, enabled: true, type: 'crypto', exchange: 'binance' }])
+    return jsonResponse(demoSymbols)
   }
 
+  if (path === '/forex/status') return jsonResponse({ provider: 'yahoo', configured_provider: 'auto', volume_quality: 'none', state: 'ready', message: 'Demo sample' })
+  if (path === '/forex/strength') {
+    const lookback = Number(search.get('lookback') || 20)
+    const changes = new Map<string, number[]>()
+    for (const pair of DEMO_FX) {
+      const bars = demoFxBars(pair, search.get('tf') || '4H')
+      if (bars.length <= lookback) continue
+      const change = (bars.at(-1)!.close / bars.at(-1 - lookback)!.close - 1) * 100
+      for (const [currency, value] of [[pair.slice(0, 3), change], [pair.slice(3), -change]] as const) {
+        changes.set(currency, [...(changes.get(currency) ?? []), value])
+      }
+    }
+    const averages = [...changes].map(([currency, values]) => ({ currency, pairs: values.length, average: values.reduce((sum, v) => sum + v, 0) / values.length }))
+    const max = Math.max(0, ...averages.filter(item => item.pairs >= 2).map(item => Math.abs(item.average)))
+    return jsonResponse({ currencies: averages.map(item => ({ currency: item.currency, pairs: item.pairs, coverage: item.pairs >= 2 ? 'ok' : 'low', value: item.pairs >= 2 ? (max ? item.average / max * 100 : 0) : null })) })
+  }
+  if (path === '/forex/dxy') {
+    const usdBase = search.get('symbol')?.startsWith('USD')
+    return jsonResponse({ bars: demoDxy(), correlation_20: usdBase ? 0.72 : -0.78, correlation_60: usdBase ? 0.63 : -0.66 })
+  }
+  if (path === '/forex/sessions') {
+    const sym = search.get('symbol')
+    if (sym && DEMO_FX.some(item => item === sym)) return jsonResponse({ sessions: demoFxSessions(sym, Number(search.get('from')), Number(search.get('to'))) })
+    if (sym === DEMO_SYMBOL) {
+      const scan = await loadScan(search.get('tf') || '1H', realFetch)
+      return jsonResponse({ sessions: demoSessionsFromBars(scan.bars, Number(search.get('from')), Number(search.get('to'))) })
+    }
+    return jsonResponse({ sessions: [] })
+  }
+  if (path === '/forex/test-connection') return jsonResponse({ ok: true, message: 'Demo sample', provider: 'yahoo' })
+
   // Object-shaped endpoints touched on load.
-  if (path === '/settings/config') return jsonResponse({})
+  if (path === '/settings/config') return jsonResponse({ FOREX_PROVIDER: 'auto', OANDA_TOKEN: '', OANDA_ENVIRONMENT: 'practice' })
   if (path === '/env/config') return jsonResponse({})
   if (path === '/status') return jsonResponse({ phase: 'demo', running: false })
   if (path === '/vix/current') return noContent()
@@ -189,9 +236,8 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
   // apiFetch() maps 204 → null; PaperTab's summary render is null-guarded.
   if (path === '/paper/summary') return noContent()
 
-  // Anything else: empty array for GET. Keeps secondary tabs from throwing;
-  // they simply render empty in the demo.
-  return jsonResponse([])
+  // Unknown endpoints fail visibly rather than pretending a valid empty response.
+  return jsonResponse({ error: 'Demo endpoint unavailable' }, 404)
 }
 
 export function installDemoApi(): void {
@@ -219,6 +265,7 @@ export function installDemoApi(): void {
 
     const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
     if (method !== 'GET') {
+      if (pathname === '/api/forex/test-connection') return jsonResponse({ ok: true, message: 'Demo sample', provider: 'yahoo' })
       // The onboarding scan POST expects JSON on 2xx but treats 503 as the
       // graceful "LLM unavailable — scan still completes" path. Use that.
       if (pathname === '/api/analysis/full') {

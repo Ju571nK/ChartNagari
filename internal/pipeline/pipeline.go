@@ -8,6 +8,7 @@ package pipeline
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -105,7 +106,12 @@ type Pipeline struct {
 	symbols          []string
 	timeframes       []string
 	log              zerolog.Logger
-	cryptoSyms       map[string]bool
+	assetClasses     map[string]models.AssetClass
+	forexVolume      models.VolumeQuality
+	forexProxy       bool
+	forexReady       func() bool
+	forexSymbolReady func(string) bool
+	forexSources     map[string]models.Signal
 	marketOpen       bool // tracks NYSE open/close state for transition logging
 
 	priceAlertWatcher PriceAlertWatcher   // optional; set via SetPriceAlertWatcher
@@ -207,15 +213,45 @@ func (p *Pipeline) SetForwardReturnStore(frDB ForwardReturnDB, ohlcv ForwardRetu
 
 // SetCryptoSymbols records which symbols are crypto (vs stock) for TP/SL multiplier selection.
 func (p *Pipeline) SetCryptoSymbols(syms []string) {
-	p.cryptoSyms = make(map[string]bool, len(syms))
+	if p.assetClasses == nil {
+		p.assetClasses = make(map[string]models.AssetClass)
+	}
 	for _, s := range syms {
-		p.cryptoSyms[s] = true
+		p.assetClasses[s] = models.AssetCrypto
 	}
 }
 
-// isCrypto returns true if sym is a known crypto symbol.
-func (p *Pipeline) isCrypto(sym string) bool {
-	return p.cryptoSyms != nil && p.cryptoSyms[sym]
+func (p *Pipeline) SetForexSymbols(syms []string, quality models.VolumeQuality, proxy bool) {
+	if p.assetClasses == nil {
+		p.assetClasses = make(map[string]models.AssetClass)
+	}
+	for _, s := range syms {
+		p.assetClasses[s] = models.AssetForex
+	}
+	p.forexVolume = quality
+	p.forexProxy = proxy
+}
+
+func (p *Pipeline) SetForexReady(ready func() bool) { p.forexReady = ready }
+
+func (p *Pipeline) SetForexSymbolReady(ready func(string) bool) { p.forexSymbolReady = ready }
+
+func (p *Pipeline) SetForexSources(sources map[string]models.Signal) { p.forexSources = sources }
+
+func (p *Pipeline) SetIndexSymbols(syms []string) {
+	if p.assetClasses == nil {
+		p.assetClasses = make(map[string]models.AssetClass)
+	}
+	for _, s := range syms {
+		p.assetClasses[s] = models.AssetIndex
+	}
+}
+
+func (p *Pipeline) assetClass(sym string) models.AssetClass {
+	if class := p.assetClasses[sym]; class != "" {
+		return class
+	}
+	return models.AssetStock
 }
 
 // Run starts the periodic analysis loop. It blocks until ctx is cancelled.
@@ -254,7 +290,10 @@ func (p *Pipeline) runOnce(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if !p.isCrypto(sym) && !isOpen {
+		if !market.IsOpen(p.assetClass(sym), time.Now()) {
+			continue
+		}
+		if p.assetClass(sym) == models.AssetForex && !p.forexAnalysisReady(sym) {
 			continue
 		}
 		p.analyzeSymbol(ctx, sym)
@@ -272,8 +311,22 @@ func (p *Pipeline) runOnce(ctx context.Context) {
 
 	// Forward return tracking: update historical signals with actual returns.
 	if p.forwardReturnDB != nil && p.forwardReturnOHLCV != nil {
-		UpdateForwardReturns(p.forwardReturnDB, p.forwardReturnOHLCV, p.log)
+		updateForwardReturns(ctx, p.forwardReturnDB, p.forwardReturnOHLCV, p.forexSources, p.forexForwardReturnReady, p.log)
 	}
+}
+
+func (p *Pipeline) forexAnalysisReady(symbol string) bool {
+	if p.forexSymbolReady != nil {
+		return p.forexSymbolReady(symbol)
+	}
+	if p.forexReady != nil {
+		return p.forexReady()
+	}
+	return true
+}
+
+func (p *Pipeline) forexForwardReturnReady(symbol string) bool {
+	return (p.forexSymbolReady != nil || p.forexReady != nil) && p.forexAnalysisReady(symbol)
 }
 
 func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
@@ -309,28 +362,43 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
-	// Compute all indicators across all loaded timeframes.
-	indicators := indicator.Compute(allBars)
+	// Run the rule engine.
+	// Storage returns newest first for indicator and level calculations. Rules
+	// replay candles chronologically and treat the final bar as current.
+	ruleBars := make(map[string][]models.OHLCV, len(allBars))
+	for tf, bars := range allBars {
+		ordered := make([]models.OHLCV, len(bars))
+		for i, b := range bars {
+			ordered[len(bars)-1-i] = b
+		}
+		ruleBars[tf] = ordered
+	}
+	// Indicators consume the same chronological series as rules and backtests.
+	indicators := indicator.Compute(ruleBars)
 
 	// Inject benchmark (SPY) return for relative strength calculation.
-	// Only if SPY bars are available (SPY must be in the watchlist).
 	if sym != "SPY" {
 		for _, tf := range p.timeframes {
 			spyBars, err := p.db.GetOHLCV("SPY", tf, p.cfg.Lookback)
 			if err != nil || len(spyBars) < 20 {
 				continue
 			}
-			// spyBars are in DESC order; [0]=newest, [19]=20 bars ago
 			spyReturn := (spyBars[0].Close - spyBars[19].Close) / spyBars[19].Close
 			indicators[tf+":BENCHMARK_RETURN_20"] = spyReturn
 		}
 	}
-
-	// Run the rule engine.
 	analysisCtx := models.AnalysisContext{
-		Symbol:     sym,
-		Timeframes: allBars,
-		Indicators: indicators,
+		Symbol:        sym,
+		AssetClass:    p.assetClass(sym),
+		VolumeQuality: models.VolumeReal,
+		Timeframes:    ruleBars,
+		Indicators:    indicators,
+	}
+	if analysisCtx.AssetClass == models.AssetForex {
+		analysisCtx.VolumeQuality = p.forexVolume
+	}
+	if bars := allBars["1H"]; len(bars) > 0 {
+		analysisCtx.Session = market.AsianRange(bars, bars[0].OpenTime)
 	}
 	signals := p.eng.Run(analysisCtx)
 
@@ -396,9 +464,12 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	tpMult, slMult := 2.0, 1.0
 	if p.alertHolder != nil {
 		ac := p.alertHolder.Get()
-		if p.isCrypto(sym) {
+		switch p.assetClass(sym) {
+		case models.AssetCrypto:
 			tpMult, slMult = ac.CryptoTPMult, ac.CryptoSLMult
-		} else {
+		case models.AssetForex:
+			tpMult, slMult = ac.ForexTPMult, ac.ForexSLMult
+		default:
 			tpMult, slMult = ac.StockTPMult, ac.StockSLMult
 		}
 	}
@@ -410,6 +481,30 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 	for i := range signals {
 		enrichSignalLevels(&signals[i], allBars, indicators, tpMult, slMult)
+		signals[i].AssetClass = analysisCtx.AssetClass
+		signals[i].VolumeQuality = analysisCtx.VolumeQuality
+		if analysisCtx.AssetClass == models.AssetForex {
+			if source, ok := p.forexSources[sym]; ok {
+				signals[i].DataProvider = source.DataProvider
+				signals[i].ProviderSymbol = source.ProviderSymbol
+				signals[i].SourceIdentity = source.SourceIdentity
+			}
+			signals[i].DataProxy = p.forexProxy && (sym == "XAUUSD" || sym == "XAGUSD")
+			if source, ok := p.forexSources[sym]; ok {
+				signals[i].DataProxy = source.DataProxy
+			}
+			if p.profileHolder != nil {
+				if spread := p.profileHolder.SpreadOverride(sym); spread != nil {
+					signals[i].SpreadPips = *spread
+					signals[i].SpreadPipsSet = true
+				}
+			}
+			pip := market.Instrument(sym).PipSize
+			if pip > 0 {
+				signals[i].TPPips = math.Abs(signals[i].TP-signals[i].EntryPrice) / pip
+				signals[i].SLPips = math.Abs(signals[i].SL-signals[i].EntryPrice) / pip
+			}
+		}
 	}
 
 	// MTF 합의 필터: 동적 설정 우선, 없으면 정적 Config 사용

@@ -9,24 +9,38 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // PaperPosition represents one virtual trade.
 type PaperPosition struct {
-	ID         int64      `json:"id"`
-	Symbol     string     `json:"symbol"`
-	Timeframe  string     `json:"timeframe"`
-	Rule       string     `json:"rule"`
-	Direction  string     `json:"direction"`  // "LONG" | "SHORT"
-	EntryPrice float64    `json:"entry_price"`
-	TP         float64    `json:"tp"`
-	SL         float64    `json:"sl"`
-	EntryTime  time.Time  `json:"entry_time"`
-	ExitPrice  float64    `json:"exit_price"`
-	ExitTime   *time.Time `json:"exit_time"`
-	Status     string     `json:"status"` // "OPEN"|"CLOSED_TP"|"CLOSED_SL"|"CLOSED_MANUAL"
-	PnLPct     float64    `json:"pnl_pct"`
+	ID                  int64             `json:"id"`
+	Symbol              string            `json:"symbol"`
+	Timeframe           string            `json:"timeframe"`
+	Rule                string            `json:"rule"`
+	Direction           string            `json:"direction"` // "LONG" | "SHORT"
+	EntryPrice          float64           `json:"entry_price"`
+	EntryExecutionPrice float64           `json:"entry_execution_price,omitempty"`
+	TP                  float64           `json:"tp"`
+	SL                  float64           `json:"sl"`
+	EntryTime           time.Time         `json:"entry_time"`
+	ExitPrice           float64           `json:"exit_price"`
+	ExitExecutionPrice  float64           `json:"exit_execution_price,omitempty"`
+	PriceBasis          string            `json:"price_basis,omitempty"`
+	ExitTime            *time.Time        `json:"exit_time"`
+	Status              string            `json:"status"` // "OPEN"|"CLOSED_TP"|"CLOSED_SL"|"CLOSED_MANUAL"
+	PnLPct              float64           `json:"pnl_pct"`
+	AssetClass          models.AssetClass `json:"asset_class,omitempty"`
+	PipSize             float64           `json:"pip_size,omitempty"`
+	SpreadPips          float64           `json:"spread_pips,omitempty"`
+	PnLPips             float64           `json:"pnl_pips,omitempty"`
+	DataProvider        string            `json:"data_provider,omitempty"`
+	ProviderSymbol      string            `json:"provider_symbol,omitempty"`
+	SourceIdentity      string            `json:"source_identity,omitempty"`
+	DataProxy           bool              `json:"data_proxy,omitempty"`
+	Suspended           bool              `json:"suspended,omitempty"`
+	SuspensionReason    string            `json:"suspension_reason,omitempty"`
 }
 
 // PaperSummary holds aggregated paper trading statistics.
@@ -39,6 +53,10 @@ type PaperSummary struct {
 	TotalPnLPct   float64 `json:"total_pnl_pct"`
 	AvgWinPct     float64 `json:"avg_win_pct"`
 	AvgLossPct    float64 `json:"avg_loss_pct"`
+	AvgRR         float64 `json:"avg_rr"`
+	ProfitFactor  float64 `json:"profit_factor"`
+	NetPips       float64 `json:"net_pips,omitempty"`
+	AvgPips       float64 `json:"avg_pips,omitempty"`
 }
 
 // Store is the persistence interface for paper positions.
@@ -53,14 +71,21 @@ type Store interface {
 
 // Trader manages virtual paper positions driven by live rule engine signals.
 type Trader struct {
-	store Store
-	log   zerolog.Logger
-	mu    sync.Mutex
+	store        Store
+	log          zerolog.Logger
+	mu           sync.Mutex
+	forexSources map[string]string
 }
 
 // New creates a Trader backed by the given store.
 func New(store Store, log zerolog.Logger) *Trader {
 	return &Trader{store: store, log: log}
+}
+
+func (t *Trader) SetForexSources(sources map[string]string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.forexSources = sources
 }
 
 // OnSignals opens new paper positions for LONG/SHORT signals that have
@@ -85,15 +110,35 @@ func (t *Trader) OnSignals(signals []models.Signal) {
 		}
 
 		pos := PaperPosition{
-			Symbol:     sig.Symbol,
-			Timeframe:  sig.Timeframe,
-			Rule:       sig.Rule,
-			Direction:  sig.Direction,
-			EntryPrice: sig.EntryPrice,
-			TP:         sig.TP,
-			SL:         sig.SL,
-			EntryTime:  sig.CreatedAt,
-			Status:     "OPEN",
+			Symbol:         sig.Symbol,
+			Timeframe:      sig.Timeframe,
+			Rule:           sig.Rule,
+			Direction:      sig.Direction,
+			EntryPrice:     sig.EntryPrice,
+			PriceBasis:     "mid",
+			TP:             sig.TP,
+			SL:             sig.SL,
+			EntryTime:      sig.CreatedAt,
+			Status:         "OPEN",
+			AssetClass:     sig.AssetClass,
+			DataProvider:   sig.DataProvider,
+			ProviderSymbol: sig.ProviderSymbol,
+			SourceIdentity: sig.SourceIdentity,
+			DataProxy:      sig.DataProxy,
+		}
+		if sig.AssetClass == models.AssetForex {
+			if sig.SourceIdentity == "" || (t.forexSources != nil && t.forexSources[sig.Symbol] != sig.SourceIdentity) {
+				continue
+			}
+			spec := market.Instrument(sig.Symbol)
+			pos.PipSize, pos.SpreadPips = spec.PipSize, spec.DefaultSpreadPips
+			if sig.SpreadPipsSet || sig.SpreadPips > 0 {
+				pos.SpreadPips = sig.SpreadPips
+			}
+			pos.EntryExecutionPrice = pos.EntryPrice + pos.SpreadPips*pos.PipSize/2
+			if pos.Direction == "SHORT" {
+				pos.EntryExecutionPrice = pos.EntryPrice - pos.SpreadPips*pos.PipSize/2
+			}
 		}
 		id, err := t.store.SavePaperPosition(pos)
 		if err != nil {
@@ -127,6 +172,9 @@ func (t *Trader) CheckPositions(sym string, allBars map[string][]models.OHLCV) {
 	}
 
 	for _, pos := range positions {
+		if pos.Suspended || (pos.AssetClass == models.AssetForex && (pos.SourceIdentity == "" || t.forexSources[pos.Symbol] != pos.SourceIdentity)) {
+			continue
+		}
 		bars, ok := allBars[pos.Timeframe]
 		if !ok || len(bars) == 0 {
 			// Fall back to 1H as the most granular available TF.
@@ -136,23 +184,56 @@ func (t *Trader) CheckPositions(sym string, allBars map[string][]models.OHLCV) {
 			continue
 		}
 
-		// bars is DESC; iterate newest→oldest, but only check bars after entry.
-		for _, bar := range bars {
+		// bars is DESC; inspect oldest first so the first exit after entry wins.
+		// A candle that opened before (or at) the signal is excluded in full:
+		// its high/low may have occurred before entry and cannot safely trigger
+		// an exit without finer-grained quotes.
+		for i := len(bars) - 1; i >= 0; i-- {
+			bar := bars[i]
+			if pos.AssetClass == models.AssetForex {
+				expected := "yahoo_fx"
+				if pos.DataProvider == "oanda" {
+					expected = "oanda"
+				}
+				if pos.DataProvider == "" || bar.Source != expected {
+					continue
+				}
+			}
 			if !bar.OpenTime.After(pos.EntryTime) {
-				break // older than entry — stop
+				continue
 			}
 			status, exitPrice, hit := checkLevel(pos, bar)
 			if !hit {
 				continue
 			}
-			var pnlPct float64
+			var pnlPct, pnlPips float64
 			if pos.Direction == "LONG" {
 				pnlPct = (exitPrice - pos.EntryPrice) / pos.EntryPrice * 100
 			} else {
 				pnlPct = (pos.EntryPrice - exitPrice) / pos.EntryPrice * 100
 			}
-			if err := t.store.ClosePaperPosition(pos.ID, exitPrice, status, pnlPct); err != nil {
-				t.log.Error().Err(err).Int64("id", pos.ID).Msg("[Paper] position close failed")
+			if pos.PipSize > 0 {
+				pos.ExitExecutionPrice = exitPrice - pos.SpreadPips*pos.PipSize/2
+				if pos.Direction == "SHORT" {
+					pos.ExitExecutionPrice = exitPrice + pos.SpreadPips*pos.PipSize/2
+				}
+				pnlPips = pnlPct/100*pos.EntryPrice/pos.PipSize - pos.SpreadPips
+				entryExecution := pos.EntryPrice + pos.SpreadPips*pos.PipSize/2
+				if pos.Direction == "SHORT" {
+					entryExecution = pos.EntryPrice - pos.SpreadPips*pos.PipSize/2
+				}
+				pnlPct = pnlPips * pos.PipSize / entryExecution * 100
+			}
+			var closeErr error
+			if store, ok := t.store.(interface {
+				ClosePaperPositionWithPips(int64, float64, string, float64, float64) error
+			}); ok {
+				closeErr = store.ClosePaperPositionWithPips(pos.ID, exitPrice, status, pnlPct, pnlPips)
+			} else {
+				closeErr = t.store.ClosePaperPosition(pos.ID, exitPrice, status, pnlPct)
+			}
+			if closeErr != nil {
+				t.log.Error().Err(closeErr).Int64("id", pos.ID).Msg("[Paper] position close failed")
 				continue
 			}
 			t.log.Info().
@@ -193,8 +274,13 @@ func Summary(closed []PaperPosition, openCount int) PaperSummary {
 		return s
 	}
 	var winPnL, lossPnL []float64
+	var fxTrades int
 	for _, p := range closed {
 		s.TotalPnLPct += p.PnLPct
+		if p.PipSize > 0 {
+			fxTrades++
+			s.NetPips += p.PnLPips
+		}
 		if p.PnLPct > 0 {
 			s.Wins++
 			winPnL = append(winPnL, p.PnLPct)
@@ -208,6 +294,25 @@ func Summary(closed []PaperPosition, openCount int) PaperSummary {
 	}
 	s.AvgWinPct = mean(winPnL)
 	s.AvgLossPct = mean(lossPnL)
+	if fxTrades > 0 {
+		s.AvgPips = s.NetPips / float64(fxTrades)
+	}
+	if s.AvgLossPct < 0 {
+		s.AvgRR = s.AvgWinPct / -s.AvgLossPct
+	}
+	var grossWin, grossLoss float64
+	for _, p := range closed {
+		if p.PnLPct > 0 {
+			grossWin += p.PnLPct
+		} else {
+			grossLoss -= p.PnLPct
+		}
+	}
+	if grossLoss > 0 {
+		s.ProfitFactor = grossWin / grossLoss
+	} else if grossWin > 0 {
+		s.ProfitFactor = 99.99
+	}
 	return s
 }
 

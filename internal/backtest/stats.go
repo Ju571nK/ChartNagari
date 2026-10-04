@@ -11,6 +11,8 @@ type Stats struct {
 	Sharpe          float64 `json:"sharpe"`            // 샤프비율 (거래 횟수 기준)
 	TotalReturnPct  float64 `json:"total_return_pct"`  // 누적 수익률 %
 	MaxConsecLosses int     `json:"max_consec_losses"` // 최대 연속 손실 횟수
+	NetPips         float64 `json:"net_pips,omitempty"`
+	AvgPips         float64 `json:"avg_pips,omitempty"`
 }
 
 // ComputeStats derives all performance statistics from trade outcomes.
@@ -22,9 +24,11 @@ func ComputeStats(outcomes []TradeOutcome) Stats {
 
 	var wins int
 	var grossWin, grossLoss float64
+	var netPips float64
 	var winReturns, lossReturns, allReturns []float64
 
 	for _, o := range outcomes {
+		netPips += o.PnLPips
 		allReturns = append(allReturns, o.PnLPct)
 		if o.Win {
 			wins++
@@ -38,6 +42,8 @@ func ComputeStats(outcomes []TradeOutcome) Stats {
 
 	n := len(outcomes)
 	s := Stats{}
+	s.NetPips = netPips
+	s.AvgPips = netPips / float64(n)
 
 	// Win rate
 	s.WinRate = float64(wins) / float64(n)

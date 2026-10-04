@@ -9,8 +9,8 @@ vi.mock('lightweight-charts', () => ({
   CandlestickSeries: {}, HistogramSeries: {}, LineSeries: {}, CrosshairMode: { Normal: 0 },
   createSeriesMarkers: (_: unknown, markers: unknown) => { chartMocks.setMarkers(markers); return { detach: vi.fn(), setMarkers: chartMocks.setMarkers } },
   createChart: () => ({
-    addSeries: (...args: unknown[]) => { chartMocks.addSeries(...args); return { setData: chartMocks.setData, priceScale: () => ({ applyOptions: vi.fn() }), createPriceLine: vi.fn(), removePriceLine: vi.fn() } },
-    priceScale: () => ({ applyOptions: vi.fn() }), timeScale: () => ({ fitContent: chartMocks.fitContent }),
+    addSeries: (...args: unknown[]) => { chartMocks.addSeries(...args); return { setData: chartMocks.setData, applyOptions: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }), createPriceLine: vi.fn(), removePriceLine: vi.fn() } },
+    priceScale: () => ({ applyOptions: vi.fn() }), timeScale: () => ({ fitContent: chartMocks.fitContent, setVisibleLogicalRange: vi.fn() }),
     applyOptions: vi.fn(), remove: vi.fn(), removeSeries: chartMocks.removeSeries,
   }),
 }))
@@ -125,4 +125,42 @@ it('filters both markers and the signal list to the selected timeframe', async (
   expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0][0].time).toBe(bar.time)
   fireEvent.click(screen.getByRole('button', { name: '4H' }))
   await waitFor(() => expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]?.[0]?.time).toBe(bar.time + 10))
+})
+
+it.each([
+  { language: 'ko', message: 'America/New_York 10:30 기준 런던 마감 킬존 활성', context: '세션 정보', scope: '모든 시간봉' },
+  { language: 'ja', message: 'America/New_York 10:30 時点でロンドン引けキルゾーンが有効', context: 'セッション情報', scope: 'すべての時間足' },
+])('shows real ALL kill-zone context in $language without a candle marker', async ({ language, message, context, scope }) => {
+  await i18n.changeLanguage(language)
+  const session = {
+    symbol: 'SPCX', time: bar.time, timeframe: 'ALL', rule: 'ict_kill_zone', direction: 'NEUTRAL', score: 1,
+    message: 'London Close kill zone active (10:30 New York)', message_key: 'signal.ict.kill_zone',
+    message_params: { session: 'London Close', time: '10:30', timezone: 'America/New_York' },
+  }
+  const candleSignal = { symbol: 'SPCX', time: bar.time, timeframe: '1H', rule: 'smc_bos', direction: 'LONG', score: 0.9, message: 'Candle signal' }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const path = String(input)
+    return response(path.includes('/ohlcv/') ? [bar] : path.includes('/signals?') ? [session, candleSignal] : [])
+  })
+
+  render(<WorkspaceProvider><ChartTab uiMode="expert" /></WorkspaceProvider>)
+  expect(await screen.findByText(message)).toBeInTheDocument()
+  const sessionRow = screen.getByRole('button', { name: new RegExp(context) })
+  expect(sessionRow).toHaveTextContent(scope)
+  expect(sessionRow).not.toHaveTextContent('NEUTRAL')
+  await waitFor(() => expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]).toHaveLength(1))
+  expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0][0].text).toBe('BOS')
+  fireEvent.click(screen.getByRole('button', { name: /SMC.*BOS/i }))
+  expect(screen.getByText('Candle signal')).toBeInTheDocument()
+  fireEvent.click(sessionRow)
+  expect(screen.getByText(message)).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: '1D' }))
+  expect(await screen.findByText(message)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: new RegExp(context) })).toHaveTextContent(scope)
+  expect(screen.queryByText('Candle signal')).not.toBeInTheDocument()
+  await waitFor(() => expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]).toHaveLength(0))
+  fireEvent.click(screen.getByRole('button', { name: 'ICT' }))
+  expect(screen.getByRole('button', { name: 'ICT' })).toHaveAttribute('aria-pressed', 'false')
+  expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]).toHaveLength(0)
 })

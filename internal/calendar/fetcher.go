@@ -38,14 +38,104 @@ type Store interface {
 // Uses FMP if fmpKey is set, otherwise falls back to Finnhub.
 type Fetcher struct {
 	mu             sync.RWMutex
+	countries      map[string]bool
 	status         CollectionStatus
 	finnhubKey     string
 	fmpKey         string
 	store          Store
 	log            zerolog.Logger
 	client         *http.Client
-	finnhubBaseURL string // overridable for tests; defaults to finnhubBase
-	fmpBaseURL     string // overridable for tests; defaults to fmpBase
+	refresh        chan struct{} // coalesces watchlist changes until Run can fetch
+	finnhubBaseURL string        // overridable for tests; defaults to finnhubBase
+	fmpBaseURL     string        // overridable for tests; defaults to fmpBase
+}
+
+// SetForexSymbols updates the countries retained by future fetches. With no FX
+// symbols the historical US-only calendar behaviour is preserved.
+func (f *Fetcher) SetForexSymbols(symbols []string) {
+	countries := CountriesForSymbols(symbols)
+	f.mu.Lock()
+	changed := len(countries) != len(f.countries)
+	if !changed {
+		for country := range countries {
+			if !f.countries[country] {
+				changed = true
+				break
+			}
+		}
+	}
+	f.countries = countries
+	f.mu.Unlock()
+	if changed && f.refresh != nil {
+		select {
+		case f.refresh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (f *Fetcher) acceptsCountry(country string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.countries == nil {
+		return normalizeCountry(country) == "US"
+	}
+	return f.countries[normalizeCountry(country)]
+}
+
+func normalizeCountry(country string) string {
+	country = strings.ToUpper(strings.TrimSpace(country))
+	switch country {
+	case "UNITED STATES", "UNITED STATES OF AMERICA", "USA":
+		return "US"
+	case "EURO AREA", "EUROZONE", "EUROPEAN UNION":
+		return "EU"
+	case "GERMANY":
+		return "DE"
+	case "FRANCE":
+		return "FR"
+	case "ITALY":
+		return "IT"
+	case "UNITED KINGDOM", "UK":
+		return "GB"
+	case "JAPAN":
+		return "JP"
+	case "SWITZERLAND":
+		return "CH"
+	case "CANADA":
+		return "CA"
+	case "AUSTRALIA":
+		return "AU"
+	case "NEW ZEALAND":
+		return "NZ"
+	case "CHINA":
+		return "CN"
+	}
+	return country
+}
+
+var currencyCountries = map[string][]string{
+	"USD": {"US"}, "EUR": {"EU", "DE", "FR", "IT"},
+	"GBP": {"GB"}, "JPY": {"JP"}, "CHF": {"CH"},
+	"CAD": {"CA"}, "AUD": {"AU"}, "NZD": {"NZ"}, "CNY": {"CN"},
+}
+
+// CountriesForSymbols returns the relevant event countries, including US for
+// existing stock and crypto alerts. Unknown or malformed FX symbols are ignored.
+func CountriesForSymbols(symbols []string) map[string]bool {
+	countries := map[string]bool{"US": true}
+	for _, symbol := range symbols {
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		if len(symbol) != 6 {
+			continue
+		}
+		for _, currency := range []string{symbol[:3], symbol[3:]} {
+			for _, country := range currencyCountries[currency] {
+				countries[country] = true
+			}
+		}
+	}
+	return countries
 }
 
 // New creates a Fetcher. FMP is preferred when both keys are set.
@@ -57,6 +147,7 @@ func New(finnhubKey, fmpKey string, store Store, log zerolog.Logger) *Fetcher {
 		store:          store,
 		log:            log,
 		client:         &http.Client{Timeout: 15 * time.Second},
+		refresh:        make(chan struct{}, 1),
 		finnhubBaseURL: finnhubBase,
 		fmpBaseURL:     fmpBase,
 	}
@@ -76,6 +167,8 @@ func (f *Fetcher) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			f.fetchWithRetry(ctx)
+		case <-f.refresh:
 			f.fetchWithRetry(ctx)
 		case <-ctx.Done():
 			return
@@ -177,7 +270,7 @@ func (f *Fetcher) fetchFinnhub(ctx context.Context) error {
 
 	var events []storage.EconomicEvent
 	for _, e := range result.EconomicCalendar {
-		if e.Country != "US" {
+		if !f.acceptsCountry(e.Country) {
 			continue
 		}
 		t, err := time.Parse("2006-01-02 15:04:05", e.Time)
@@ -189,7 +282,7 @@ func (f *Fetcher) fetchFinnhub(ctx context.Context) error {
 		}
 		events = append(events, storage.EconomicEvent{
 			EventTime: t.UTC(),
-			Country:   e.Country,
+			Country:   normalizeCountry(e.Country),
 			Event:     e.Event,
 			Impact:    e.Impact,
 			Actual:    e.Actual,
@@ -250,7 +343,7 @@ func (f *Fetcher) fetchFMP(ctx context.Context) error {
 
 	var events []storage.EconomicEvent
 	for _, e := range result {
-		if e.Country != "US" {
+		if !f.acceptsCountry(e.Country) {
 			continue
 		}
 		t, err := time.Parse("2006-01-02 15:04:05", e.Date)
@@ -262,7 +355,7 @@ func (f *Fetcher) fetchFMP(ctx context.Context) error {
 		}
 		events = append(events, storage.EconomicEvent{
 			EventTime: t.UTC(),
-			Country:   e.Country,
+			Country:   normalizeCountry(e.Country),
 			Event:     e.Event,
 			Impact:    strings.ToLower(e.Impact), // normalize "High" → "high"
 			Actual:    fmtNum(e.Actual),
@@ -297,7 +390,7 @@ func (f *Fetcher) doGet(ctx context.Context, url string, headers map[string]stri
 
 func (f *Fetcher) upsert(events []storage.EconomicEvent, from, to, provider string) error {
 	if len(events) == 0 {
-		f.log.Debug().Str("provider", provider).Msg("calendar: no US events in response")
+		f.log.Debug().Str("provider", provider).Msg("calendar: no relevant events in response")
 		f.mu.Lock()
 		f.status.EventCount = 0
 		f.mu.Unlock()

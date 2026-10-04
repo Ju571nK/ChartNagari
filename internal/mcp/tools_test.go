@@ -24,6 +24,7 @@ func TestListWatchlist_RendersMarkdownTable(t *testing.T) {
 			Crypto  []appconfig.SymbolEntry `yaml:"crypto"`
 			Stocks  []appconfig.SymbolEntry `yaml:"stocks"`
 			Indices []appconfig.SymbolEntry `yaml:"indices"`
+			Forex   []appconfig.SymbolEntry `yaml:"forex"`
 		}{
 			Crypto: []appconfig.SymbolEntry{{Symbol: "BTCUSDT", Exchange: "BINANCE", Enabled: true}},
 			Stocks: []appconfig.SymbolEntry{{Symbol: "AAPL", Exchange: "NASDAQ", Enabled: true}},
@@ -111,6 +112,7 @@ func TestGetAnalysis_RendersFourTimeframes(t *testing.T) {
 			Crypto  []appconfig.SymbolEntry `yaml:"crypto"`
 			Stocks  []appconfig.SymbolEntry `yaml:"stocks"`
 			Indices []appconfig.SymbolEntry `yaml:"indices"`
+			Forex   []appconfig.SymbolEntry `yaml:"forex"`
 		}{
 			Crypto: []appconfig.SymbolEntry{{Symbol: "BTCUSDT", Enabled: true}},
 		},

@@ -21,8 +21,11 @@ import (
 // The rule scans the last 20 bars for swing-high/low pairs to identify impulses.
 type ICTOTERule struct{}
 
-func (r *ICTOTERule) Name() string                 { return "ict_ote" }
-func (r *ICTOTERule) RequiredIndicators() []string { return []string{"SWING_HIGH", "SWING_LOW"} }
+func (r *ICTOTERule) Name() string { return "ict_ote" }
+func (r *ICTOTERule) RequiredIndicators() []string {
+	// Analyze locates its own swing pair inside the historical scan window.
+	return nil
+}
 
 // findSwingLow returns the index and price of the lowest low in bars[start:end].
 func findSwingLow(bars []models.OHLCV, start, end int) (int, float64) {

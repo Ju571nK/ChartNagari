@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -20,6 +21,9 @@ func (r *WyckoffVolumeAnomalyRule) Name() string                 { return "wycko
 func (r *WyckoffVolumeAnomalyRule) RequiredIndicators() []string { return nil }
 
 func (r *WyckoffVolumeAnomalyRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
+	if !rule.HasVolume(ctx) {
+		return nil, nil
+	}
 	const threshold = 2.5
 
 	tfs := []string{"1W", "1D", "4H", "1H"}

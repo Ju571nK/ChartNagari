@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -13,20 +14,22 @@ import (
 // Three patterns:
 //
 // 1. Stopping Volume: high volume (>= 1.5x volume MA) + narrow body (<= 0.3x ATR)
-//    + close in bottom 40% of range + prior 5-bar downtrend → LONG
-//    (Institutional absorption of selling pressure.)
+//   - close in bottom 40% of range + prior 5-bar downtrend → LONG
+//     (Institutional absorption of selling pressure.)
 //
 // 2. No Demand: low volume (< 0.8x volume MA) + narrow body (<= 0.3x ATR)
-//    + bullish candle (close > open) + prior uptrend → SHORT
-//    (No buyers stepping in during uptrend — reversal imminent.)
+//   - bullish candle (close > open) + prior uptrend → SHORT
+//     (No buyers stepping in during uptrend — reversal imminent.)
 //
 // 3. No Supply: low volume (< 0.8x volume MA) + narrow body (<= 0.3x ATR)
-//    + bearish candle (close < open) + prior downtrend → LONG
-//    (No sellers stepping in during downtrend — reversal imminent.)
+//   - bearish candle (close < open) + prior downtrend → LONG
+//     (No sellers stepping in during downtrend — reversal imminent.)
 type VSAEffortCandleRule struct{}
 
-func (r *VSAEffortCandleRule) Name() string                 { return "vsa_effort_candle" }
-func (r *VSAEffortCandleRule) RequiredIndicators() []string { return []string{"ATR_14", "VOLUME_MA_20"} }
+func (r *VSAEffortCandleRule) Name() string { return "vsa_effort_candle" }
+func (r *VSAEffortCandleRule) RequiredIndicators() []string {
+	return []string{"ATR_14", "VOLUME_MA_20"}
+}
 
 // isDowntrend checks if the last `n` bars show a downtrend (close[last] < close[first]).
 func isDowntrend(bars []models.OHLCV, end int, lookback int) bool {
@@ -53,6 +56,9 @@ func isUptrend(bars []models.OHLCV, end int, lookback int) bool {
 }
 
 func (r *VSAEffortCandleRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
+	if !rule.HasVolume(ctx) {
+		return nil, nil
+	}
 	tfs := []string{"1W", "1D", "4H", "1H"}
 	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0}
 

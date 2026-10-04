@@ -16,7 +16,41 @@ Format:
 
 ## [Unreleased]
 
+### Added
+- Forex analysis support for configured pairs, with keyless Yahoo candles,
+  optional OANDA candle collection, session-aware chart context and pip-based
+  spread-adjusted backtest stats. Yahoo FX has no meaningful volume; Yahoo gold
+  and silver use futures proxies. See `docs/FOREX.md` for limitations.
+
 ### Changed
+- Clarified the dual-provider Forex setup: Yahoo is keyless by default, `auto`
+  selects by saved OANDA token, and OANDA eligibility varies by region/account.
+- ICT kill-zone and session windows now follow America/New_York daylight saving
+  time for all asset classes; UTC firing times therefore change seasonally.
+- Indicator calculations now clone and sort their input candles chronologically;
+  storage and current-price paths may continue to use newest-first ordering.
+- FX backtests subtract the round-trip spread assumption but do not model swap,
+  commission or slippage.
+- Four-hour-only backtests cannot derive an exact Asian range. The range is
+  marked unavailable and AMD does not infer one from 4H candles; exact AMD range
+  evaluation requires hourly history. Live session overlays use 1H data even
+  when the chart displays 4H.
+- Paper positions retain their entry data source, environment, provider mapping
+  and proxy identity. A provider/source mismatch suspends evaluation and
+  preserves position history; legacy FX positions with unknown source are also
+  suspended. Paper evaluation begins with a fully eligible candle after entry.
+  Both FX backtests and paper use the inherited optimistic TP-first choice when
+  one candle touches both TP and SL; the actual intrabar sequence is unknown.
+- FX alert proximity uses `CALENDAR_FX_ALERT_WINDOW` (default 60 minutes,
+  clamped to 5–1440) independently of the legacy `CALENDAR_ALERT_WINDOW`
+  (default 30 minutes, same bounds).
+- Starting with an enabled USD FX pair adds DXY once; its persisted opt-out is
+  respected, and removing DXY disables the DXY endpoint.
+- Paper positions retain mid/reference prices alongside execution prices.
+  FX backtest `EntryPrice` and `ExitPrice` are execution prices adjusted by
+  half-spread at entry and exit; TP/SL derive from mid prices, and net pips
+  include the round-trip spread assumption.
+
 - Added local/remote server connection profiles, authenticated capability checks,
   explicit workspace switching, and authenticated cross-origin downloads/streams.
   Opt-in remote mode protects API reads and browser WebSockets; tokens are kept

@@ -2,6 +2,7 @@
 package pipeline
 
 import (
+	"context"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -24,11 +25,22 @@ type ForwardReturnOHLCVReader interface {
 // forwardReturnPeriods defines the day offsets we track.
 var forwardReturnPeriods = []int{5, 10, 20, 40}
 
+const maxForwardReturnCandidates = 200
+
 // UpdateForwardReturns checks signals older than 5 days and fills in forward returns.
 // Called periodically (e.g., once per pipeline tick).
 // It gracefully handles partial data: if only 5d data is available, it fills 5d and
 // leaves the rest at 0 for future updates.
 func UpdateForwardReturns(frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader, log zerolog.Logger) {
+	updateForwardReturns(context.Background(), frDB, ohlcv, nil, nil, log)
+}
+
+// updateForwardReturns uses the current collector generation's source mapping and
+// health for FX signals. The caller owns that immutable generation snapshot.
+func updateForwardReturns(ctx context.Context, frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader, forexSources map[string]models.Signal, forexReady func(string) bool, log zerolog.Logger) {
+	if ctx.Err() != nil {
+		return
+	}
 	sigs, err := frDB.GetSignalsNeedingForwardReturn(5)
 	if err != nil {
 		log.Warn().Err(err).Msg("forward return: failed to query signals")
@@ -38,10 +50,23 @@ func UpdateForwardReturns(frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader, 
 		return
 	}
 
+	processed := 0
 	for _, sig := range sigs {
+		if ctx.Err() != nil {
+			return
+		}
+		fxSource, activeForex := forexSources[sig.Symbol]
+		isForex := sig.AssetClass == models.AssetForex || activeForex || sig.SourceIdentity != "" || sig.DataProvider != ""
+		if isForex && !forwardReturnFXReady(sig, fxSource, activeForex, forexReady) {
+			continue
+		}
 		if sig.EntryPrice <= 0 {
 			continue // no entry price available; skip
 		}
+		if processed >= maxForwardReturnCandidates {
+			break
+		}
+		processed++
 
 		// Load 1D bars for the symbol to find closes after N days.
 		bars, err := ohlcv.GetOHLCV(sig.Symbol, "1D", 200)
@@ -51,6 +76,22 @@ func UpdateForwardReturns(frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader, 
 		}
 		if len(bars) == 0 {
 			continue
+		}
+		if isForex {
+			expectedSource := "yahoo_fx"
+			if sig.DataProvider == "oanda" {
+				expectedSource = "oanda"
+			}
+			matching := make([]models.OHLCV, 0, len(bars))
+			for _, bar := range bars {
+				if bar.Source == expectedSource {
+					matching = append(matching, bar)
+				}
+			}
+			bars = matching
+			if len(bars) == 0 {
+				continue
+			}
 		}
 
 		// bars are in DESC order (newest first). We need to find bars after the signal date.
@@ -100,6 +141,14 @@ func UpdateForwardReturns(frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader, 
 		if !updated {
 			continue
 		}
+		// Health may have changed while bars were loaded. A generation switch
+		// drains the old pipeline before purging its bars.
+		if isForex && !forwardReturnFXReady(sig, fxSource, activeForex, forexReady) {
+			continue
+		}
+		if ctx.Err() != nil {
+			return
+		}
 
 		if err := frDB.UpdateForwardReturns(sig.ID, r5, r10, r20, r40); err != nil {
 			log.Warn().Err(err).Int64("signal_id", sig.ID).Msg("forward return: update failed")
@@ -112,6 +161,16 @@ func UpdateForwardReturns(frDB ForwardReturnDB, ohlcv ForwardReturnOHLCVReader, 
 				Msg("forward return updated")
 		}
 	}
+}
+
+func forwardReturnFXReady(sig storage.SignalForForwardReturn, current models.Signal, active bool, ready func(string) bool) bool {
+	return active && ready != nil && ready(sig.Symbol) &&
+		sig.AssetClass == models.AssetForex && sig.SourceIdentity != "" &&
+		(sig.DataProvider == "yahoo" || sig.DataProvider == "oanda") && sig.ProviderSymbol != "" &&
+		sig.SourceIdentity == current.SourceIdentity &&
+		sig.DataProvider == current.DataProvider &&
+		sig.ProviderSymbol == current.ProviderSymbol &&
+		sig.DataProxy == current.DataProxy
 }
 
 // findCloseNearDate finds the close price of the bar closest to the target date.

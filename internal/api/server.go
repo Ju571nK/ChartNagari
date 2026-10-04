@@ -32,6 +32,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/history"
 	"github.com/Ju571nK/Chatter/internal/indicator"
 	"github.com/Ju571nK/Chatter/internal/llm"
+	"github.com/Ju571nK/Chatter/internal/market"
 	"github.com/Ju571nK/Chatter/internal/marks"
 	"github.com/Ju571nK/Chatter/internal/mcp"
 	"github.com/Ju571nK/Chatter/internal/paper"
@@ -47,10 +48,12 @@ import (
 
 // SymbolItem is the JSON representation of a single watchlist entry.
 type SymbolItem struct {
-	Symbol   string `json:"symbol"`
-	Type     string `json:"type"` // "crypto" | "stock"
-	Exchange string `json:"exchange"`
-	Enabled  bool   `json:"enabled"`
+	Symbol         string `json:"symbol"`
+	Type           string `json:"type"` // "crypto" | "stock"
+	Exchange       string `json:"exchange"`
+	Enabled        bool   `json:"enabled"`
+	ProviderSymbol string `json:"provider_symbol,omitempty"`
+	Proxy          bool   `json:"proxy,omitempty"`
 }
 
 // RuleItem is the JSON representation of a single analysis rule.
@@ -85,22 +88,38 @@ type OHLCVBar struct {
 
 // SignalBar is the chart signal marker response.
 type SignalBar struct {
-	Symbol           string  `json:"symbol"`
-	Timeframe        string  `json:"timeframe"`
-	Time             int64   `json:"time"`
-	Direction        string  `json:"direction"`
-	Rule             string  `json:"rule"`
-	Score            float64 `json:"score"`
-	Message          string  `json:"message"`
-	AIInterpretation string  `json:"ai_interpretation"`
-	ZoneLow          float64 `json:"zone_low,omitempty"`
-	ZoneHigh         float64 `json:"zone_high,omitempty"`
-	ForwardReturn5d  float64 `json:"forward_return_5d,omitempty"`
-	ForwardReturn10d float64 `json:"forward_return_10d,omitempty"`
-	ForwardReturn20d float64 `json:"forward_return_20d,omitempty"`
-	ForwardReturn40d float64 `json:"forward_return_40d,omitempty"`
-	HTFTrend         string  `json:"htf_trend,omitempty"`
-	ATRPercentile    float64 `json:"atr_percentile,omitempty"`
+	Symbol            string               `json:"symbol"`
+	Timeframe         string               `json:"timeframe"`
+	Time              int64                `json:"time"`
+	Direction         string               `json:"direction"`
+	Rule              string               `json:"rule"`
+	Score             float64              `json:"score"`
+	Message           string               `json:"message"`
+	AIInterpretation  string               `json:"ai_interpretation"`
+	ZoneLow           float64              `json:"zone_low,omitempty"`
+	ZoneHigh          float64              `json:"zone_high,omitempty"`
+	ForwardReturn5d   float64              `json:"forward_return_5d,omitempty"`
+	ForwardReturn10d  float64              `json:"forward_return_10d,omitempty"`
+	ForwardReturn20d  float64              `json:"forward_return_20d,omitempty"`
+	ForwardReturn40d  float64              `json:"forward_return_40d,omitempty"`
+	HTFTrend          string               `json:"htf_trend,omitempty"`
+	ATRPercentile     float64              `json:"atr_percentile,omitempty"`
+	AssetClass        models.AssetClass    `json:"asset_class,omitempty"`
+	VolumeQuality     models.VolumeQuality `json:"volume_quality,omitempty"`
+	DataProxy         bool                 `json:"data_proxy,omitempty"`
+	DataProvider      string               `json:"data_provider,omitempty"`
+	ProviderSymbol    string               `json:"provider_symbol,omitempty"`
+	SourceIdentity    string               `json:"source_identity,omitempty"`
+	VolumeUnconfirmed bool                 `json:"volume_unconfirmed,omitempty"`
+	MessageKey        string               `json:"message_key,omitempty"`
+	MessageParams     map[string]string    `json:"message_params,omitempty"`
+	EntryPrice        float64              `json:"entry_price,omitempty"`
+	TP                float64              `json:"tp,omitempty"`
+	SL                float64              `json:"sl,omitempty"`
+	TPPips            float64              `json:"tp_pips,omitempty"`
+	SLPips            float64              `json:"sl_pips,omitempty"`
+	SpreadPips        float64              `json:"spread_pips,omitempty"`
+	SpreadPipsSet     bool                 `json:"spread_pips_set,omitempty"`
 }
 
 // AggregatedRuleStat aggregates per-rule backtest stats across multiple symbols.
@@ -185,52 +204,54 @@ type PriceAlertStore interface {
 // It serves a REST API for managing watchlist symbols and analysis rules,
 // and optionally serves the compiled React frontend as static files.
 type Server struct {
-	watchlistChanged   func(appconfig.WatchlistConfig)
-	configDir          string
-	static             http.Handler                    // nil when webDist is absent or not built yet
-	chartStore         ChartStore                      // optional; set via WithChartStore
-	backtestRunner     BacktestRunner                  // optional; set via WithBacktestRunner
-	paperStore         PaperStore                      // optional; set via WithPaperStore
-	reportSched        ReportScheduler                 // optional; set via WithReportScheduler
-	alertHolder        *appconfig.AlertConfigHolder    // optional; set via WithAlertConfigHolder
-	fullStore          FullStore                       // optional; set via WithFullStore
-	analystDirector    AnalystDirector                 // optional; set via WithAnalystDirector
-	announcer          Announcer                       // optional; set via WithAnnouncer
-	priceAlertStore    PriceAlertStore                 // optional; set via WithPriceAlertStore
-	wsHub              WSHub                           // optional; set via WithHub
-	calendarStore      CalendarStore                   // optional; set via WithCalendarStore
-	settingsFile       string                          // path to settings.yaml; set via WithSettingsFile
-	demoEngine         *engine.RuleEngine              // optional; set via WithDemoEngine for /api/demo/scan
-	profileHolder      *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
-	signalTuningHolder *appconfig.SignalTuningHolder   // optional; set via WithSignalTuningHolder
-	overrideStore      *storage.SymbolOverrideStore    // optional; set via WithOverrideStore
-	validRuleNames     map[string]struct{}             // optional; set via WithValidRuleNames
-	dbPath             string                          // path to SQLite DB file; set via WithDBPath
-	startTime          time.Time                       // server start timestamp for uptime
-	dataSources        []string                        // active data sources (e.g. ["Binance","Tiingo"])
-	allowedOrigins     map[string]bool                 // CORS allowlist; set via WithAllowedOrigins
-	apiToken           string                          // optional bearer token; set via WithAPIToken
-	execHolder         *appconfig.ExecutionHolder      // optional; set via WithExecutionHolder
-	execPath           string                          // path to execution.yaml; set via WithExecutionPath
-	execDispatcher     ExecutionReleaser               // optional; set via WithExecutionDispatcher
-	execFeedback       FeedbackRecorder                // optional; set via WithExecutionFeedback
-	execDB             *sql.DB                         // optional; set via WithExecutionDB for feedback queries
-	execState          *execution.StateStore           // optional; set via WithExecutionState for config versioning
-	markStore          *storage.SignalMarkStore        // optional; set via WithMarkStore
-	aggregator         *marks.Aggregator               // optional; set via WithAggregator
-	mcpRegistry        *mcp.Registry                   // optional; set via WithMCPRegistry
-	mcpSessions        *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
-	ollamaDetector     OllamaStatusProvider            // optional; set via WithOllamaDetector
-	ollamaPullRunner   OllamaPullRunner                // optional; set via WithOllamaPullRunner
-	ollamaStarter      OllamaStarter                   // optional; set via WithOllamaStarter
-	ollamaRepoRoot     string                          // optional; set via WithOllamaRepoRoot
-	ollamaTester       OllamaTester                    // optional; set via WithOllamaTester
-	aiProfiles         *appconfig.AIProfileStore
-	aiProvider         *llm.Switch
-	aiActivated        func()
-	aiSetupMu          sync.Mutex
-	mu                 sync.RWMutex
-	configUpdateOnce   sync.Once // guards the one-shot "execState nil" startup warning
+	watchlistChanged     func(appconfig.WatchlistConfig)
+	configDir            string
+	static               http.Handler                 // nil when webDist is absent or not built yet
+	chartStore           ChartStore                   // optional; set via WithChartStore
+	backtestRunner       BacktestRunner               // optional; set via WithBacktestRunner
+	paperStore           PaperStore                   // optional; set via WithPaperStore
+	reportSched          ReportScheduler              // optional; set via WithReportScheduler
+	alertHolder          *appconfig.AlertConfigHolder // optional; set via WithAlertConfigHolder
+	fullStore            FullStore                    // optional; set via WithFullStore
+	analystDirector      AnalystDirector              // optional; set via WithAnalystDirector
+	announcer            Announcer                    // optional; set via WithAnnouncer
+	priceAlertStore      PriceAlertStore              // optional; set via WithPriceAlertStore
+	wsHub                WSHub                        // optional; set via WithHub
+	calendarStore        CalendarStore                // optional; set via WithCalendarStore
+	settingsFile         string                       // path to settings.yaml; set via WithSettingsFile
+	forexSettingsChanged func()
+	forexStatus          func() any
+	demoEngine           *engine.RuleEngine              // optional; set via WithDemoEngine for /api/demo/scan
+	profileHolder        *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
+	signalTuningHolder   *appconfig.SignalTuningHolder   // optional; set via WithSignalTuningHolder
+	overrideStore        *storage.SymbolOverrideStore    // optional; set via WithOverrideStore
+	validRuleNames       map[string]struct{}             // optional; set via WithValidRuleNames
+	dbPath               string                          // path to SQLite DB file; set via WithDBPath
+	startTime            time.Time                       // server start timestamp for uptime
+	dataSources          []string                        // active data sources (e.g. ["Binance","Tiingo"])
+	allowedOrigins       map[string]bool                 // CORS allowlist; set via WithAllowedOrigins
+	apiToken             string                          // optional bearer token; set via WithAPIToken
+	execHolder           *appconfig.ExecutionHolder      // optional; set via WithExecutionHolder
+	execPath             string                          // path to execution.yaml; set via WithExecutionPath
+	execDispatcher       ExecutionReleaser               // optional; set via WithExecutionDispatcher
+	execFeedback         FeedbackRecorder                // optional; set via WithExecutionFeedback
+	execDB               *sql.DB                         // optional; set via WithExecutionDB for feedback queries
+	execState            *execution.StateStore           // optional; set via WithExecutionState for config versioning
+	markStore            *storage.SignalMarkStore        // optional; set via WithMarkStore
+	aggregator           *marks.Aggregator               // optional; set via WithAggregator
+	mcpRegistry          *mcp.Registry                   // optional; set via WithMCPRegistry
+	mcpSessions          *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
+	ollamaDetector       OllamaStatusProvider            // optional; set via WithOllamaDetector
+	ollamaPullRunner     OllamaPullRunner                // optional; set via WithOllamaPullRunner
+	ollamaStarter        OllamaStarter                   // optional; set via WithOllamaStarter
+	ollamaRepoRoot       string                          // optional; set via WithOllamaRepoRoot
+	ollamaTester         OllamaTester                    // optional; set via WithOllamaTester
+	aiProfiles           *appconfig.AIProfileStore
+	aiProvider           *llm.Switch
+	aiActivated          func()
+	aiSetupMu            sync.Mutex
+	mu                   sync.RWMutex
+	configUpdateOnce     sync.Once // guards the one-shot "execState nil" startup warning
 
 	startupSettings     map[string]string
 	calendarDiagnostics func() any
@@ -493,6 +514,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/connection", s.connectionInfo)
 	mux.HandleFunc("POST /api/connection/ws-ticket", s.connectionWSTicket)
 	mux.HandleFunc("GET /api/status", s.getStatus)
+	mux.HandleFunc("GET /api/forex/status", s.getForexStatus)
+	mux.HandleFunc("POST /api/forex/test-connection", s.testForexConnection)
+	mux.HandleFunc("GET /api/forex/strength", s.getForexStrength)
+	mux.HandleFunc("GET /api/forex/dxy", s.getForexDXY)
+	mux.HandleFunc("GET /api/forex/sessions", s.getForexSessions)
 
 	// Watchlist symbols
 	mux.HandleFunc("GET /api/symbols/validate", s.validateSymbol)
@@ -654,7 +680,7 @@ func (s *Server) getStatus(w http.ResponseWriter, _ *http.Request) {
 	wl, _ := s.readWatchlist()
 	rc, _ := s.readRules()
 
-	total := len(wl.Symbols.Crypto) + len(wl.Symbols.Stocks)
+	total := len(wl.Symbols.Crypto) + len(wl.Symbols.Stocks) + len(wl.Symbols.Forex)
 
 	// Last signal time via optional type assertion (avoids interface change).
 	var lastSignal int64
@@ -779,12 +805,24 @@ func (s *Server) getSymbols(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	items := make([]SymbolItem, 0, len(wl.Symbols.Crypto)+len(wl.Symbols.Stocks))
+	items := make([]SymbolItem, 0, len(wl.Symbols.Crypto)+len(wl.Symbols.Stocks)+len(wl.Symbols.Forex)+len(wl.Symbols.Indices))
 	for _, sym := range wl.Symbols.Crypto {
 		items = append(items, SymbolItem{Symbol: sym.Symbol, Type: "crypto", Exchange: sym.Exchange, Enabled: sym.Enabled})
 	}
 	for _, sym := range wl.Symbols.Stocks {
 		items = append(items, SymbolItem{Symbol: sym.Symbol, Type: "stock", Exchange: sym.Exchange, Enabled: sym.Enabled})
+	}
+	for _, sym := range wl.Symbols.Indices {
+		items = append(items, SymbolItem{Symbol: sym.Symbol, Type: "index", Exchange: sym.Exchange, Enabled: sym.Enabled})
+	}
+	provider := "yahoo"
+	if s.settingsFile != "" {
+		if settings, err := appconfig.LoadSettings(s.settingsFile); err == nil {
+			provider = (appconfig.ForexConfig{Provider: settings.Forex.Provider, OANDA: appconfig.OANDAConfig{Token: settings.Forex.OANDA.Token}}).EffectiveProvider()
+		}
+	}
+	for _, sym := range wl.Symbols.Forex {
+		items = append(items, SymbolItem{Symbol: sym.Symbol, Type: "forex", Exchange: "FX", Enabled: sym.Enabled, ProviderSymbol: sym.ProviderSymbol, Proxy: provider == "yahoo" && (sym.Symbol == "XAUUSD" || sym.Symbol == "XAGUSD")})
 	}
 	jsonOK(w, items)
 }
@@ -827,6 +865,27 @@ func (s *Server) updateSymbol(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !found {
+		for i := range wl.Symbols.Indices {
+			if wl.Symbols.Indices[i].Symbol == symbol {
+				wl.Symbols.Indices[i].Enabled = body.Enabled
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		for i := range wl.Symbols.Forex {
+			if wl.Symbols.Forex[i].Symbol == symbol {
+				if body.Enabled && !wl.Symbols.Forex[i].Enabled && strings.Contains(symbol, "USD") && !hasEnabledUSDPair(wl) {
+					autoAddDXY(&wl)
+				}
+				wl.Symbols.Forex[i].Enabled = body.Enabled
+				found = true
+				break
+			}
+		}
+	}
 	if !found {
 		http.Error(w, "symbol not found", http.StatusNotFound)
 		return
@@ -964,22 +1023,38 @@ func (s *Server) getChartSignals(w http.ResponseWriter, r *http.Request) {
 	result := make([]SignalBar, len(sigs))
 	for i, sig := range sigs {
 		result[i] = SignalBar{
-			Symbol:           sig.Symbol,
-			Timeframe:        sig.Timeframe,
-			Time:             sig.CreatedAt.Unix(),
-			Direction:        sig.Direction,
-			Rule:             sig.Rule,
-			Score:            sig.Score,
-			Message:          sig.Message,
-			AIInterpretation: sig.AIInterpretation,
-			ZoneLow:          sig.ZoneLow,
-			ZoneHigh:         sig.ZoneHigh,
-			ForwardReturn5d:  sig.ForwardReturn5d,
-			ForwardReturn10d: sig.ForwardReturn10d,
-			ForwardReturn20d: sig.ForwardReturn20d,
-			ForwardReturn40d: sig.ForwardReturn40d,
-			HTFTrend:         sig.HTFTrend,
-			ATRPercentile:    sig.ATRPercentile,
+			Symbol:            sig.Symbol,
+			Timeframe:         sig.Timeframe,
+			Time:              sig.CreatedAt.Unix(),
+			Direction:         sig.Direction,
+			Rule:              sig.Rule,
+			Score:             sig.Score,
+			Message:           sig.Message,
+			AIInterpretation:  sig.AIInterpretation,
+			ZoneLow:           sig.ZoneLow,
+			ZoneHigh:          sig.ZoneHigh,
+			ForwardReturn5d:   sig.ForwardReturn5d,
+			ForwardReturn10d:  sig.ForwardReturn10d,
+			ForwardReturn20d:  sig.ForwardReturn20d,
+			ForwardReturn40d:  sig.ForwardReturn40d,
+			HTFTrend:          sig.HTFTrend,
+			ATRPercentile:     sig.ATRPercentile,
+			AssetClass:        sig.AssetClass,
+			VolumeQuality:     sig.VolumeQuality,
+			DataProxy:         sig.DataProxy,
+			DataProvider:      sig.DataProvider,
+			ProviderSymbol:    sig.ProviderSymbol,
+			SourceIdentity:    sig.SourceIdentity,
+			VolumeUnconfirmed: sig.VolumeUnconfirmed,
+			MessageKey:        sig.MessageKey,
+			MessageParams:     sig.MessageParams,
+			EntryPrice:        sig.EntryPrice,
+			TP:                sig.TP,
+			SL:                sig.SL,
+			TPPips:            sig.TPPips,
+			SLPips:            sig.SLPips,
+			SpreadPips:        sig.SpreadPips,
+			SpreadPipsSet:     sig.SpreadPipsSet,
 		}
 	}
 	jsonOK(w, result)
@@ -1050,22 +1125,38 @@ func (s *Server) getHistory(w http.ResponseWriter, r *http.Request) {
 	result := make([]SignalBar, len(sigs))
 	for i, sig := range sigs {
 		result[i] = SignalBar{
-			Symbol:           sig.Symbol,
-			Timeframe:        sig.Timeframe,
-			Time:             sig.CreatedAt.Unix(),
-			Direction:        sig.Direction,
-			Rule:             sig.Rule,
-			Score:            sig.Score,
-			Message:          sig.Message,
-			AIInterpretation: sig.AIInterpretation,
-			ZoneLow:          sig.ZoneLow,
-			ZoneHigh:         sig.ZoneHigh,
-			ForwardReturn5d:  sig.ForwardReturn5d,
-			ForwardReturn10d: sig.ForwardReturn10d,
-			ForwardReturn20d: sig.ForwardReturn20d,
-			ForwardReturn40d: sig.ForwardReturn40d,
-			HTFTrend:         sig.HTFTrend,
-			ATRPercentile:    sig.ATRPercentile,
+			Symbol:            sig.Symbol,
+			Timeframe:         sig.Timeframe,
+			Time:              sig.CreatedAt.Unix(),
+			Direction:         sig.Direction,
+			Rule:              sig.Rule,
+			Score:             sig.Score,
+			Message:           sig.Message,
+			AIInterpretation:  sig.AIInterpretation,
+			ZoneLow:           sig.ZoneLow,
+			ZoneHigh:          sig.ZoneHigh,
+			ForwardReturn5d:   sig.ForwardReturn5d,
+			ForwardReturn10d:  sig.ForwardReturn10d,
+			ForwardReturn20d:  sig.ForwardReturn20d,
+			ForwardReturn40d:  sig.ForwardReturn40d,
+			HTFTrend:          sig.HTFTrend,
+			ATRPercentile:     sig.ATRPercentile,
+			AssetClass:        sig.AssetClass,
+			VolumeQuality:     sig.VolumeQuality,
+			DataProxy:         sig.DataProxy,
+			DataProvider:      sig.DataProvider,
+			ProviderSymbol:    sig.ProviderSymbol,
+			SourceIdentity:    sig.SourceIdentity,
+			VolumeUnconfirmed: sig.VolumeUnconfirmed,
+			MessageKey:        sig.MessageKey,
+			MessageParams:     sig.MessageParams,
+			EntryPrice:        sig.EntryPrice,
+			TP:                sig.TP,
+			SL:                sig.SL,
+			TPPips:            sig.TPPips,
+			SLPips:            sig.SLPips,
+			SpreadPips:        sig.SpreadPips,
+			SpreadPipsSet:     sig.SpreadPipsSet,
 		}
 	}
 	jsonOK(w, result)
@@ -1081,11 +1172,12 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Symbol    string  `json:"symbol"`
-		Timeframe string  `json:"timeframe"`
-		Rule      string  `json:"rule"`    // optional filter
-		TPMult    float64 `json:"tp_mult"` // 0 = use default
-		SLMult    float64 `json:"sl_mult"` // 0 = use default
+		Symbol     string   `json:"symbol"`
+		Timeframe  string   `json:"timeframe"`
+		Rule       string   `json:"rule"`    // optional filter
+		TPMult     float64  `json:"tp_mult"` // 0 = use default
+		SLMult     float64  `json:"sl_mult"` // 0 = use default
+		SpreadPips *float64 `json:"spread_pips"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -1096,7 +1188,19 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.backtestRunner.RunBacktest(req.Symbol, req.Timeframe, req.Rule, req.TPMult, req.SLMult)
+	spread := req.SpreadPips
+	if spread == nil && s.profileHolder != nil {
+		spread = s.profileHolder.SpreadOverride(req.Symbol)
+	}
+	var result *backtest.BacktestResult
+	var err error
+	if withSpread, ok := s.backtestRunner.(interface {
+		RunBacktestWithSpread(string, string, string, float64, float64, *float64) (*backtest.BacktestResult, error)
+	}); ok {
+		result, err = withSpread.RunBacktestWithSpread(req.Symbol, req.Timeframe, req.Rule, req.TPMult, req.SLMult, spread)
+	} else {
+		result, err = s.backtestRunner.RunBacktest(req.Symbol, req.Timeframe, req.Rule, req.TPMult, req.SLMult)
+	}
 	if err != nil {
 		if errors.Is(err, backtest.ErrInsufficientHistory) {
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
@@ -1128,7 +1232,27 @@ func (s *Server) runPerRuleBacktest(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("sl_mult"); v != "" {
 		slMult, _ = strconv.ParseFloat(v, 64)
 	}
-	stats, err := s.backtestRunner.RunPerRule(symbol, timeframe, tpMult, slMult)
+	var spread *float64
+	if s.profileHolder != nil {
+		spread = s.profileHolder.SpreadOverride(symbol)
+	}
+	if raw := r.URL.Query().Get("spread_pips"); raw != "" {
+		v, e := strconv.ParseFloat(raw, 64)
+		if e != nil || v < 0 {
+			http.Error(w, "invalid spread_pips", 400)
+			return
+		}
+		spread = &v
+	}
+	var stats []backtest.RuleStats
+	var err error
+	if withSpread, ok := s.backtestRunner.(interface {
+		RunPerRuleWithSpread(string, string, float64, float64, *float64) ([]backtest.RuleStats, error)
+	}); ok {
+		stats, err = withSpread.RunPerRuleWithSpread(symbol, timeframe, tpMult, slMult, spread)
+	} else {
+		stats, err = s.backtestRunner.RunPerRule(symbol, timeframe, tpMult, slMult)
+	}
 	if err != nil {
 		if errors.Is(err, backtest.ErrInsufficientHistory) {
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
@@ -1182,7 +1306,19 @@ func (s *Server) getPerformanceRules(w http.ResponseWriter, r *http.Request) {
 		if sym == "" {
 			continue
 		}
-		stats, err := s.backtestRunner.RunPerRule(sym, timeframe, tpMult, slMult)
+		var spread *float64
+		if s.profileHolder != nil {
+			spread = s.profileHolder.SpreadOverride(sym)
+		}
+		var stats []backtest.RuleStats
+		var err error
+		if withSpread, ok := s.backtestRunner.(interface {
+			RunPerRuleWithSpread(string, string, float64, float64, *float64) ([]backtest.RuleStats, error)
+		}); ok {
+			stats, err = withSpread.RunPerRuleWithSpread(sym, timeframe, tpMult, slMult, spread)
+		} else {
+			stats, err = s.backtestRunner.RunPerRule(sym, timeframe, tpMult, slMult)
+		}
 		if err != nil || len(stats) == 0 {
 			continue
 		}
@@ -1290,13 +1426,37 @@ func (s *Server) getPaperSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // addSymbol handles POST /api/symbols — adds a new symbol to watchlist.yaml.
+func hasEnabledUSDPair(wl appconfig.WatchlistConfig) bool {
+	for _, entry := range wl.Symbols.Forex {
+		if entry.Enabled && strings.Contains(entry.Symbol, "USD") {
+			return true
+		}
+	}
+	return false
+}
+
+func autoAddDXY(wl *appconfig.WatchlistConfig) {
+	if wl.DXYAutoInitialized {
+		return
+	}
+	wl.DXYAutoInitialized = true
+	for _, entry := range wl.Symbols.Indices {
+		if entry.Symbol == "DX-Y.NYB" {
+			return
+		}
+	}
+	wl.Symbols.Indices = append(wl.Symbols.Indices, appconfig.SymbolEntry{Symbol: "DX-Y.NYB", Exchange: "nyb", Enabled: true})
+}
+
+// addSymbol handles POST /api/symbols — adds a new symbol to watchlist.yaml.
 // Body: {"symbol":"AAPL","type":"stock","exchange":"nasdaq"}
 // Note: collectors restart is required for live data collection to begin.
 func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Symbol   string `json:"symbol"`
-		Type     string `json:"type"`     // "crypto" | "stock"
-		Exchange string `json:"exchange"` // optional
+		Symbol         string `json:"symbol"`
+		Type           string `json:"type"`     // "crypto" | "stock"
+		Exchange       string `json:"exchange"` // optional
+		ProviderSymbol string `json:"provider_symbol"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -1304,9 +1464,15 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Symbol = strings.ToUpper(strings.TrimSpace(body.Symbol))
 	body.Exchange = strings.TrimSpace(body.Exchange)
-	if body.Symbol == "" || (body.Type != "crypto" && body.Type != "stock") {
-		http.Error(w, "symbol required; type must be 'crypto' or 'stock'", http.StatusBadRequest)
+	if body.Symbol == "" || (body.Type != "crypto" && body.Type != "stock" && body.Type != "forex") {
+		http.Error(w, "symbol required; type must be 'crypto', 'stock', or 'forex'", http.StatusBadRequest)
 		return
+	}
+	if body.Type == "forex" {
+		if err := appconfig.ValidateForexPair(body.Symbol); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -1319,11 +1485,13 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entry := appconfig.SymbolEntry{
-		Symbol:   strings.ToUpper(body.Symbol),
-		Exchange: body.Exchange,
-		Enabled:  true,
+		Symbol:         strings.ToUpper(body.Symbol),
+		Exchange:       body.Exchange,
+		Enabled:        true,
+		ProviderSymbol: body.ProviderSymbol,
 	}
-	for _, existing := range append(append([]appconfig.SymbolEntry{}, wl.Symbols.Crypto...), wl.Symbols.Stocks...) {
+	firstUSD := body.Type == "forex" && strings.Contains(body.Symbol, "USD") && !hasEnabledUSDPair(wl)
+	for _, existing := range append(append(append([]appconfig.SymbolEntry{}, wl.Symbols.Crypto...), wl.Symbols.Stocks...), wl.Symbols.Forex...) {
 		if strings.EqualFold(existing.Symbol, body.Symbol) {
 			http.Error(w, "symbol already registered", http.StatusConflict)
 			return
@@ -1334,6 +1502,11 @@ func (s *Server) addSymbol(w http.ResponseWriter, r *http.Request) {
 		wl.Symbols.Crypto = append(wl.Symbols.Crypto, entry)
 	case "stock":
 		wl.Symbols.Stocks = append(wl.Symbols.Stocks, entry)
+	case "forex":
+		wl.Symbols.Forex = append(wl.Symbols.Forex, entry)
+		if firstUSD {
+			autoAddDXY(&wl)
+		}
 	}
 
 	if err := s.writeWatchlistLocked(wl); err != nil {
@@ -1376,6 +1549,24 @@ func (s *Server) removeSymbol(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	wl.Symbols.Stocks = filtered
+	filtered = wl.Symbols.Indices[:0]
+	for _, e := range wl.Symbols.Indices {
+		if strings.EqualFold(e.Symbol, target) {
+			found = true
+		} else {
+			filtered = append(filtered, e)
+		}
+	}
+	wl.Symbols.Indices = filtered
+	filtered = wl.Symbols.Forex[:0]
+	for _, e := range wl.Symbols.Forex {
+		if strings.EqualFold(e.Symbol, target) {
+			found = true
+		} else {
+			filtered = append(filtered, e)
+		}
+	}
+	wl.Symbols.Forex = filtered
 
 	if !found {
 		http.Error(w, "symbol not found", http.StatusNotFound)
@@ -1464,7 +1655,7 @@ func (s *Server) alertCfgFile() string { return s.configDir + "/alert.yaml" }
 
 // readAlertConfigLocked reads alert.yaml. Caller must hold s.mu (read or write).
 func (s *Server) readAlertConfigLocked() (appconfig.AlertConfig, error) {
-	var cfg appconfig.AlertConfig
+	cfg := appconfig.AlertConfig{ForexTPMult: 1.5, ForexSLMult: 1}
 	f, err := os.Open(s.alertCfgFile())
 	if err != nil {
 		return cfg, err
@@ -1485,7 +1676,7 @@ func (s *Server) writeAlertConfigLocked(cfg appconfig.AlertConfig) error {
 // getAlertConfig handles GET /api/alert/config.
 func (s *Server) getAlertConfig(w http.ResponseWriter, _ *http.Request) {
 	if s.alertHolder == nil {
-		jsonOK(w, appconfig.AlertConfig{ScoreThreshold: 12.0, CooldownHours: 4, MTFConsensusMin: 2})
+		jsonOK(w, appconfig.AlertConfig{ScoreThreshold: 12.0, CooldownHours: 4, MTFConsensusMin: 2, ForexTPMult: 1.5, ForexSLMult: 1})
 		return
 	}
 	jsonOK(w, s.alertHolder.Get())
@@ -1501,6 +1692,12 @@ func (s *Server) updateAlertConfig(w http.ResponseWriter, r *http.Request) {
 	if cfg.ScoreThreshold <= 0 || cfg.CooldownHours <= 0 || cfg.MTFConsensusMin < 1 {
 		http.Error(w, "invalid values", http.StatusBadRequest)
 		return
+	}
+	if cfg.ForexTPMult == 0 {
+		cfg.ForexTPMult = 1.5
+	}
+	if cfg.ForexSLMult == 0 {
+		cfg.ForexSLMult = 1
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1748,6 +1945,10 @@ func (s *Server) validateSymbol(w http.ResponseWriter, r *http.Request) {
 	symbol := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("symbol")))
 	if symbol == "" {
 		http.Error(w, "symbol query param required", http.StatusBadRequest)
+		return
+	}
+	if err := appconfig.ValidateForexPair(symbol); err == nil {
+		jsonOK(w, map[string]any{"found": true, "type": "forex", "exchange": "FX", "name": symbol[:3] + "/" + symbol[3:]})
 		return
 	}
 	type ValidateResult struct {
@@ -2089,6 +2290,7 @@ const envSentinel = "__configured__"
 
 // envSensitiveKeys lists setting keys whose values are masked in GET responses.
 var envSensitiveKeys = map[string]bool{
+	"OANDA_TOKEN":               true,
 	"CHARTNAGARI_TOKEN":         true,
 	"ALPACA_API_KEY":            true,
 	"ALPACA_API_SECRET":         true,
@@ -2118,9 +2320,10 @@ var envExposedKeys = []string{
 	"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "DISCORD_WEBHOOK_URL",
 	"TIINGO_API_KEY", "TIINGO_POLL_INTERVAL",
 	"YAHOO_POLL_INTERVAL",
+	"FOREX_PROVIDER", "OANDA_TOKEN", "OANDA_ENVIRONMENT",
 	"BINANCE_API_KEY", "BINANCE_SECRET_KEY",
 	"ALPHAVANTAGE_API_KEY",
-	"FINNHUB_API_KEY", "FMP_API_KEY", "CALENDAR_ALERT_WINDOW",
+	"FINNHUB_API_KEY", "FMP_API_KEY", "CALENDAR_ALERT_WINDOW", "CALENDAR_FX_ALERT_WINDOW",
 	"LLM_PROVIDER",
 	"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY",
 	"AI_MIN_SCORE", "LLM_LANGUAGE",
@@ -2194,6 +2397,19 @@ func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	settings.ApplyMap(filtered)
+	fx := appconfig.ForexConfig{Provider: settings.Forex.Provider, OANDA: appconfig.OANDAConfig{Token: settings.Forex.OANDA.Token, Environment: settings.Forex.OANDA.Environment}}
+	if fx.Provider != "auto" && fx.Provider != "yahoo" && fx.Provider != "oanda" {
+		http.Error(w, "invalid forex provider", http.StatusBadRequest)
+		return
+	}
+	if fx.OANDA.Environment != "practice" && fx.OANDA.Environment != "live" {
+		http.Error(w, "invalid OANDA environment", http.StatusBadRequest)
+		return
+	}
+	if fx.EffectiveProvider() == "oanda" && fx.OANDA.Token == "" {
+		http.Error(w, "OANDA provider requires token", http.StatusBadRequest)
+		return
+	}
 	if err := appconfig.ValidateRemoteSettings(settings.ToMap()); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -2204,7 +2420,17 @@ func (s *Server) updateEnvConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to write settings.yaml: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	jsonOK(w, map[string]string{"message": "saved — restart the server to apply changes"})
+	_, changedProvider := filtered["FOREX_PROVIDER"]
+	_, changedToken := filtered["OANDA_TOKEN"]
+	_, changedEnvironment := filtered["OANDA_ENVIRONMENT"]
+	if (changedProvider || changedToken || changedEnvironment) && s.forexSettingsChanged != nil {
+		s.forexSettingsChanged()
+	}
+	message := "saved — restart the server to apply changes"
+	if changedProvider || changedToken || changedEnvironment {
+		message = "saved — Forex collector updating"
+	}
+	jsonOK(w, map[string]string{"message": message})
 }
 
 // readSettingsFile loads settings.yaml into a SettingsYAML struct.
@@ -2387,9 +2613,16 @@ func (s *Server) demoScan(w http.ResponseWriter, r *http.Request) {
 	indicators := indicator.Compute(allBars)
 
 	ctx := models.AnalysisContext{
-		Symbol:     symbol,
-		Timeframes: allBars,
-		Indicators: indicators,
+		Symbol:        symbol,
+		AssetClass:    models.AssetStock,
+		VolumeQuality: models.VolumeReal,
+		Timeframes:    allBars,
+		Indicators:    indicators,
+	}
+	if err := appconfig.ValidateForexPair(symbol); err == nil {
+		ctx.AssetClass = models.AssetForex
+		ctx.VolumeQuality = models.VolumeNone
+		ctx.Session = market.AsianRange(allBars["1H"], allBars["1H"][len(allBars["1H"])-1].OpenTime)
 	}
 
 	// Run rule engine

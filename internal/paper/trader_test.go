@@ -1,6 +1,7 @@
 package paper
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -56,6 +57,23 @@ func (m *mockStore) ClosePaperPosition(id int64, exitPrice float64, status strin
 	return nil
 }
 
+func (m *mockStore) ClosePaperPositionWithPips(id int64, exitPrice float64, status string, pnlPct, pnlPips float64) error {
+	if err := m.ClosePaperPosition(id, exitPrice, status, pnlPct); err != nil {
+		return err
+	}
+	for i := range m.positions {
+		if m.positions[i].ID == id {
+			m.positions[i].PnLPips = pnlPips
+		}
+	}
+	for i := range m.closed {
+		if m.closed[i].ID == id {
+			m.closed[i].PnLPips = pnlPips
+		}
+	}
+	return nil
+}
+
 func (m *mockStore) GetClosedPositions(limit int) ([]PaperPosition, error) {
 	return m.closed, nil
 }
@@ -88,6 +106,81 @@ func makeBar(symbol, tf string, openTime time.Time, high, low, close_ float64) m
 		Low:       low,
 		Close:     close_,
 		Volume:    1000,
+	}
+}
+
+func TestForexPaperSpreadPipsLongShort(t *testing.T) {
+	for _, tc := range []struct {
+		direction               string
+		tp, sl, high, low, exit float64
+	}{
+		{"LONG", 1.1020, 1.0980, 1.1021, 1.0990, 1.1020},
+		{"SHORT", 1.0980, 1.1020, 1.1010, 1.0979, 1.0980},
+	} {
+		t.Run(tc.direction, func(t *testing.T) {
+			store := &mockStore{}
+			tr := New(store, nopLog())
+			tr.SetForexSources(map[string]string{"EURUSD": "yahoo:public:EURUSD=X"})
+			sig := makeSig("EURUSD", tc.direction, "test", 1.1000, tc.tp, tc.sl)
+			sig.AssetClass = models.AssetForex
+			sig.SourceIdentity = "yahoo:public:EURUSD=X"
+			sig.DataProvider = "yahoo"
+			tr.OnSignals([]models.Signal{sig})
+			bars := map[string][]models.OHLCV{"1H": {makeBar("EURUSD", "1H", sig.CreatedAt.Add(time.Hour), tc.high, tc.low, tc.exit)}}
+			bars["1H"][0].Source = "yahoo_fx"
+			tr.CheckPositions("EURUSD", bars)
+			if len(store.closed) != 1 {
+				t.Fatalf("expected close, got %d", len(store.closed))
+			}
+			got := store.closed[0]
+			if math.Abs(got.PnLPips-19) > 1e-8 || got.SpreadPips != 1 {
+				t.Fatalf("expected 19 net pips, got %+v", got)
+			}
+			if got.PnLPct <= 0 {
+				t.Fatalf("expected positive net percent, got %+v", got)
+			}
+			summary := Summary(store.closed, 0)
+			if math.Abs(summary.NetPips-19) > 1e-8 || math.Abs(summary.AvgPips-19) > 1e-8 {
+				t.Fatalf("wrong stats: %+v", summary)
+			}
+		})
+	}
+}
+
+func TestForexPaperExplicitZeroSpread(t *testing.T) {
+	store := &mockStore{}
+	tr := New(store, nopLog())
+	tr.SetForexSources(map[string]string{"EURUSD": "yahoo:public:EURUSD=X"})
+	sig := makeSig("EURUSD", "LONG", "test", 1.1000, 1.1020, 1.0980)
+	sig.AssetClass = models.AssetForex
+	sig.SourceIdentity = "yahoo:public:EURUSD=X"
+	sig.DataProvider = "yahoo"
+	sig.SpreadPipsSet = true
+	sig.SpreadPips = 0
+	tr.OnSignals([]models.Signal{sig})
+	bar := makeBar("EURUSD", "1H", sig.CreatedAt.Add(time.Hour), 1.1021, 1.0990, 1.1020)
+	bar.Source = "yahoo_fx"
+	tr.CheckPositions("EURUSD", map[string][]models.OHLCV{"1H": {bar}})
+	if len(store.closed) != 1 || math.Abs(store.closed[0].PnLPips-20) > 1e-8 {
+		t.Fatalf("explicit zero spread lost: %+v", store.closed)
+	}
+}
+
+func TestPaperChecksFirstHistoricalExit(t *testing.T) {
+	store := &mockStore{}
+	tr := New(store, nopLog())
+	tr.SetForexSources(map[string]string{"EURUSD": "yahoo:public:EURUSD=X"})
+	sig := makeSig("EURUSD", "LONG", "test", 1.1000, 1.1020, 1.0980)
+	sig.AssetClass = models.AssetForex
+	sig.SourceIdentity = "yahoo:public:EURUSD=X"
+	sig.DataProvider = "yahoo"
+	tr.OnSignals([]models.Signal{sig})
+	newer := makeBar("EURUSD", "1H", sig.CreatedAt.Add(2*time.Hour), 1.1030, 1.0990, 1.1020)
+	older := makeBar("EURUSD", "1H", sig.CreatedAt.Add(time.Hour), 1.1010, 1.0970, 1.0980)
+	newer.Source, older.Source = "yahoo_fx", "yahoo_fx"
+	tr.CheckPositions("EURUSD", map[string][]models.OHLCV{"1H": {newer, older}})
+	if len(store.closed) != 1 || store.closed[0].Status != "CLOSED_SL" || store.closed[0].PnLPips >= 0 {
+		t.Fatalf("first exit should be stop, got %+v", store.closed)
 	}
 }
 

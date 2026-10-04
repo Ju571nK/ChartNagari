@@ -2,6 +2,8 @@
 package config
 
 import (
+	"fmt"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -22,7 +24,8 @@ type Profile struct {
 
 // SymbolOverride maps a symbol to a named profile.
 type SymbolOverride struct {
-	Profile string `yaml:"profile" json:"profile"`
+	Profile    string   `yaml:"profile" json:"profile"`
+	SpreadPips *float64 `yaml:"spread_pips,omitempty" json:"spread_pips,omitempty"`
 }
 
 // SymbolProfilesConfig is the top-level structure for config/symbol_profiles.yaml.
@@ -83,7 +86,22 @@ func (h *SymbolProfilesHolder) SetSymbolProfile(symbol, profileName string) {
 	if h.cfg.SymbolOverrides == nil {
 		h.cfg.SymbolOverrides = make(map[string]SymbolOverride)
 	}
-	h.cfg.SymbolOverrides[symbol] = SymbolOverride{Profile: profileName}
+	entry := h.cfg.SymbolOverrides[symbol]
+	entry.Profile = profileName
+	h.cfg.SymbolOverrides[symbol] = entry
+}
+
+func (h *SymbolProfilesHolder) SpreadOverride(symbol string) *float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if value := h.cfg.SymbolOverrides[symbol].SpreadPips; value != nil {
+		if *value < 0 || math.IsNaN(*value) || math.IsInf(*value, 0) {
+			return nil
+		}
+		v := *value
+		return &v
+	}
+	return nil
 }
 
 // ProfileNames returns all available profile names.
@@ -124,16 +142,31 @@ func LoadSymbolProfiles(path string) (SymbolProfilesConfig, error) {
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
 		return cfg, err
 	}
+	if err := validateSpreads(cfg); err != nil {
+		return SymbolProfilesConfig{}, err
+	}
 	return cfg, nil
 }
 
 // SaveSymbolProfiles writes the config to the given YAML path.
 func SaveSymbolProfiles(path string, cfg SymbolProfilesConfig) error {
+	if err := validateSpreads(cfg); err != nil {
+		return err
+	}
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+func validateSpreads(cfg SymbolProfilesConfig) error {
+	for symbol, override := range cfg.SymbolOverrides {
+		if override.SpreadPips != nil && (*override.SpreadPips < 0 || math.IsNaN(*override.SpreadPips) || math.IsInf(*override.SpreadPips, 0)) {
+			return fmt.Errorf("invalid spread_pips for %s", symbol)
+		}
+	}
+	return nil
 }
 
 // IsSignalAllowed checks whether a signal with the given rule name is allowed

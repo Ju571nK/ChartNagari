@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -43,6 +44,7 @@ import (
 	"github.com/Ju571nK/Chatter/internal/report"
 	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/internal/storage"
+	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 func main() {
@@ -59,6 +61,9 @@ func main() {
 	cfg, err := appconfig.Load(".env", "config")
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load config")
+	}
+	if _, err := appconfig.InitializeDXY("config/watchlist.yaml", &cfg.Watchlist); err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize DXY watchlist")
 	}
 
 	// ── 로거 초기화 ──────────────────────────────────────────────────
@@ -101,17 +106,45 @@ func main() {
 	allSymbols := append(cfg.EnabledCryptoSymbols(), stockSymbols...)
 
 	watchRuntime := collector.NewRuntime(cfg.Watchlist)
+	calFetcher := calendar.New(cfg.Finnhub.APIKey, cfg.FMP.APIKey, db, log.Logger)
+	calFetcher.SetForexSymbols(cfg.EnabledForexSymbols())
+	var forexStatusMu sync.RWMutex
+	configuredForexProvider := cfg.Forex.Provider
+	forexProviderChanged := false
+	forexSourceChanged := false
+	forexIssues := map[string]string{}
+	forexReadySymbols := map[string]bool{}
+	forexState := map[string]any{"provider": cfg.Forex.EffectiveProvider(), "configured_provider": configuredForexProvider, "state": "rebackfilling", "volume_quality": "none"}
+	setForexIssues := func(issues map[string]string, symbols []string) {
+		forexStatusMu.Lock()
+		defer forexStatusMu.Unlock()
+		forexIssues = issues
+		forexReadySymbols = map[string]bool{}
+		for _, symbol := range symbols {
+			ready := true
+			for series := range issues {
+				if strings.HasPrefix(series, symbol+"/") {
+					ready = false
+					break
+				}
+			}
+			forexReadySymbols[symbol] = ready
+		}
+		forexState["series_issues"] = forexIssues
+		forexState["ready_symbols"] = forexReadySymbols
+	}
+	setForexState := func(provider, state, detail string) {
+		forexStatusMu.Lock()
+		defer forexStatusMu.Unlock()
+		quality := "none"
+		if provider == "oanda" {
+			quality = "tick"
+		}
+		forexState = map[string]any{"provider": provider, "configured_provider": configuredForexProvider, "state": state, "message": detail, "volume_quality": quality, "proxy_metals": provider == "yahoo", "provider_changed": forexProviderChanged, "source_changed": forexSourceChanged, "series_issues": forexIssues, "ready_symbols": forexReadySymbols}
+	}
 
 	// ── Index (VIX) data collector — 1D only, not included in pipeline ──
-	indexSymbols := cfg.EnabledIndexSymbols()
-	if len(indexSymbols) > 0 {
-		indexTFs := []string{"1D"} // indices use daily timeframe only
-		// Index tickers (e.g. ^VIX) are Yahoo symbols, not Tiingo equity tickers.
-		// A configured Tiingo key must only change the stock collector.
-		yahooIdx := collector.NewYahooCollector(db, indexSymbols, indexTFs, cfg.Yahoo.PollInterval)
-		go yahooIdx.Start(ctx)
-		log.Info().Strs("symbols", indexSymbols).Msg("Index collector started (Yahoo, 1D only)")
-	}
+	// Index collection is started per watchlist generation below.
 
 	// ── AlphaVantage 20년 일봉 수집기 (1회 실행) ─────────────────────
 	if cfg.AlphaVantage.APIKey != "" {
@@ -269,10 +302,15 @@ func main() {
 		defer close(runtimeDone)
 		watchRuntime.Run(ctx, func(workerCtx context.Context, wl appconfig.WatchlistConfig) {
 			generation := &appconfig.Config{Watchlist: wl}
-			cryptoSymbols, stockSymbols := generation.EnabledCryptoSymbols(), generation.EnabledStockSymbols()
+			cryptoSymbols, stockSymbols, forexSymbols := generation.EnabledCryptoSymbols(), generation.EnabledStockSymbols(), generation.EnabledForexSymbols()
+			calFetcher.SetForexSymbols(forexSymbols)
+			indexSymbols := generation.EnabledIndexSymbols()
 			timeframes := wl.Timeframes
 			var workers sync.WaitGroup
 			start := func(run func(context.Context)) { workers.Add(1); go func() { defer workers.Done(); run(workerCtx) }() }
+			if len(indexSymbols) > 0 {
+				start(collector.NewYahooCollector(db, indexSymbols, []string{"1D"}, cfg.Yahoo.PollInterval).Start)
+			}
 			if len(cryptoSymbols) > 0 {
 				start(collector.NewBinanceCollector(db, cryptoSymbols, timeframes).Start)
 			}
@@ -285,7 +323,93 @@ func main() {
 					start(collector.NewYahooCollector(db, stockSymbols, timeframes, cfg.Yahoo.PollInterval).Start)
 				}
 			}
-			allSymbols := append(cryptoSymbols, stockSymbols...)
+			forexSettings, settingsErr := appconfig.LoadSettings("config/settings.yaml")
+			if settingsErr != nil {
+				log.Error().Err(settingsErr).Msg("Forex settings read failed")
+				setForexState("unknown", "error", "settings unreadable")
+			}
+			forexConfig := cfg.Forex
+			if forexSettings != nil {
+				forexConfig = appconfig.ForexConfig{Provider: forexSettings.Forex.Provider, OANDA: appconfig.OANDAConfig{Token: forexSettings.Forex.OANDA.Token, Environment: forexSettings.Forex.OANDA.Environment}}
+			}
+			provider := forexConfig.EffectiveProvider()
+			forexStatusMu.Lock()
+			forexProviderChanged, forexSourceChanged = false, false
+			forexStatusMu.Unlock()
+			pending := map[string]string{}
+			for _, symbol := range forexSymbols {
+				for _, tf := range timeframes {
+					pending[symbol+"/"+tf] = "pending"
+				}
+			}
+			setForexIssues(pending, forexSymbols)
+			identities := map[string]string{}
+			pipelineSources := map[string]models.Signal{}
+			for _, entry := range wl.Symbols.Forex {
+				if !entry.Enabled {
+					continue
+				}
+				source := collector.SourceForForex(entry, provider, forexConfig.OANDA.Environment, forexConfig.OANDA.Token)
+				identities[entry.Symbol] = source.Identity
+				pipelineSources[entry.Symbol] = models.Signal{DataProvider: source.Provider, ProviderSymbol: source.ProviderSymbol, SourceIdentity: source.Identity, DataProxy: source.Proxy}
+			}
+			paperTrader.SetForexSources(identities)
+			var forexSymbolReady func(string) bool
+			forexStatusMu.Lock()
+			configuredForexProvider = forexConfig.Provider
+			forexStatusMu.Unlock()
+			quality := models.VolumeNone
+			if provider == "oanda" {
+				quality = models.VolumeTick
+			}
+			if len(forexSymbols) == 0 && settingsErr == nil {
+				setForexState(provider, "ready", "")
+			}
+			if len(forexSymbols) > 0 && settingsErr == nil {
+				previousProvider, previousErr := db.ForexProvider()
+				if previousErr != nil {
+					log.Warn().Err(previousErr).Msg("Forex prior provider unavailable")
+				}
+				if changed, err := db.EnsureForexSources(provider, identities); err != nil {
+					log.Error().Err(err).Msg("Forex provider transition failed")
+					setForexState(provider, "error", "provider transition failed")
+				} else {
+					forexStatusMu.Lock()
+					forexProviderChanged = previousProvider != "" && previousProvider != provider
+					forexSourceChanged = changed
+					forexStatusMu.Unlock()
+					if changed {
+						log.Warn().Str("provider", provider).Msg("Forex source changed; purged FX candles for backfill")
+					}
+					setForexState(provider, "rebackfilling", "")
+					if provider == "oanda" {
+						if forexConfig.OANDA.Token == "" {
+							setForexState(provider, "error", "OANDA token required")
+						} else {
+							fx := collector.NewOANDACollector(db, wl.Symbols.Forex, timeframes, cfg.Yahoo.PollInterval, forexConfig.OANDA.Token, forexConfig.OANDA.Environment)
+							forexSymbolReady = fx.Ready
+							fx.OnStatus(func(issues map[string]string) { setForexIssues(issues, forexSymbols) })
+							fx.OnError(func(err error) {
+								state := "degraded"
+								if errors.Is(err, collector.ErrOANDATokenRejected) {
+									state = "error"
+								}
+								setForexState(provider, state, err.Error())
+							})
+							fx.OnSuccess(func() { setForexState(provider, "ready", "") })
+							start(fx.Start)
+						}
+					} else {
+						fx := collector.NewYahooFXCollector(db, wl.Symbols.Forex, timeframes, cfg.Yahoo.PollInterval)
+						forexSymbolReady = fx.Ready
+						fx.OnStatus(func(issues map[string]string) { setForexIssues(issues, forexSymbols) })
+						fx.OnError(func(err error) { setForexState(provider, "degraded", err.Error()) })
+						fx.OnSuccess(func() { setForexState(provider, "ready", "") })
+						start(fx.Start)
+					}
+				}
+			}
+			allSymbols := append(append(cryptoSymbols, stockSymbols...), forexSymbols...)
 			if len(allSymbols) > 0 {
 				pipe := pipeline.New(
 					pipeline.DefaultConfig(),
@@ -309,6 +433,15 @@ func main() {
 				pipe.SetSignalTuningHolder(tuningHolder)
 				pipe.SetForwardReturnStore(db, db)
 				pipe.SetCryptoSymbols(cryptoSymbols)
+				pipe.SetForexSymbols(forexSymbols, quality, provider == "yahoo")
+				pipe.SetForexSources(pipelineSources)
+				pipe.SetForexSymbolReady(forexSymbolReady)
+				pipe.SetForexReady(func() bool {
+					forexStatusMu.RLock()
+					defer forexStatusMu.RUnlock()
+					return forexState["state"] == "ready" && forexState["provider"] == provider
+				})
+				pipe.SetIndexSymbols(indexSymbols)
 				pipe.SetExecutionDispatcher(dispatcher)
 				start(pipe.Run)
 				log.Info().
@@ -323,7 +456,6 @@ func main() {
 	defer func() { cancel(); <-runtimeDone }()
 
 	// ── 경제 캘린더 ───────────────────────────────────────────────────
-	calFetcher := calendar.New(cfg.Finnhub.APIKey, cfg.FMP.APIKey, db, log.Logger)
 	if cfg.Finnhub.APIKey != "" || cfg.FMP.APIKey != "" {
 		calProvider := "finnhub"
 		if cfg.FMP.APIKey != "" {
@@ -336,6 +468,7 @@ func main() {
 		// Annotate outgoing signal alerts when a high-impact event is within the
 		// same window. Fail-open inside the Notifier, so no extra guarding here.
 		notif.WithMacroStore(macroLookup{db}, alertWindow)
+		notif.WithForexMacroWindow(time.Duration(cfg.Finnhub.ForexAlertWindowMinutes) * time.Minute)
 		log.Info().Str("provider", calProvider).Msg("economic calendar enabled")
 	} else {
 		log.Info().Msg("economic calendar disabled (set FMP_API_KEY or FINNHUB_API_KEY)")
@@ -344,6 +477,23 @@ func main() {
 	// ── 백테스팅 엔진 구성 ────────────────────────────────────────────
 	btEngine := backtest.New(allRules, toEngineConfig(cfg.Rules), backtest.DefaultConfig())
 	btRunner := backtest.NewRunner(db, btEngine)
+	btRunner.WithAssetClassResolver(func(symbol string) models.AssetClass {
+		return models.AssetClass(watchRuntime.Watchlist().AssetClass(symbol))
+	})
+	btRunner.WithVolumeQualityResolver(func(symbol string) models.VolumeQuality {
+		if watchRuntime.Watchlist().AssetClass(symbol) != "forex" {
+			return models.VolumeReal
+		}
+		settings, err := appconfig.LoadSettings("config/settings.yaml")
+		if err != nil {
+			return models.VolumeNone
+		}
+		provider := (appconfig.ForexConfig{Provider: settings.Forex.Provider, OANDA: appconfig.OANDAConfig{Token: settings.Forex.OANDA.Token}}).EffectiveProvider()
+		if provider == "oanda" {
+			return models.VolumeTick
+		}
+		return models.VolumeNone
+	})
 
 	// ── 일일 리포트 스케줄러 ─────────────────────────────────────────────────────────────────
 	reporter := report.NewDailyReporter(db, notif, stockSymbols, log.Logger)
@@ -356,6 +506,15 @@ func main() {
 
 	// ── HTTP API + 설정 UI 서버 ───────────────────────────────────────
 	apiSrv := api.New("config", "web/dist")
+	apiSrv.WithForexRuntime(watchRuntime.Reload, func() any {
+		forexStatusMu.RLock()
+		defer forexStatusMu.RUnlock()
+		copy := make(map[string]any, len(forexState))
+		for k, v := range forexState {
+			copy[k] = v
+		}
+		return copy
+	})
 	apiSrv.WithWatchlistChanged(watchRuntime.Update)
 	apiSrv.WithSettingsFile("config/settings.yaml")
 	apiSrv.WithStartupSettings(cfg.StartupSettings)
@@ -525,7 +684,7 @@ func main() {
 	activeSources := []string{"Binance"}
 	if cfg.Tiingo.APIKey != "" {
 		activeSources = append(activeSources, "Tiingo")
-		if len(indexSymbols) > 0 {
+		if len(cfg.EnabledIndexSymbols()) > 0 {
 			activeSources = append(activeSources, "Yahoo Finance")
 		}
 	} else {
@@ -586,9 +745,10 @@ func toEngineConfig(rc appconfig.RulesConfig) engine.RuleConfig {
 			weight = s
 		}
 		rules[r.Name] = engine.RuleEntry{
-			Enabled:   r.Enabled,
-			Timeframe: "ALL",
-			Weight:    weight,
+			Enabled:      r.Enabled,
+			Timeframe:    "ALL",
+			Weight:       weight,
+			AssetClasses: r.AssetClasses,
 		}
 	}
 	return engine.RuleConfig{Rules: rules}

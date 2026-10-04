@@ -7,7 +7,7 @@ import (
 
 // GetImminentHighImpact is the read-only, non-consuming query that backs alert
 // annotation. It must return only high-impact events inside the window, soonest
-// first, ignoring medium/low impact, past events, and the alerted flag.
+// first, ignoring medium/low impact, events outside the symmetric window, and the alerted flag.
 func TestGetImminentHighImpact(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -17,7 +17,7 @@ func TestGetImminentHighImpact(t *testing.T) {
 		makeEvent(25, "high"),   // in window, later
 		makeEvent(12, "medium"), // excluded: not high impact
 		makeEvent(600, "high"),  // excluded: outside 30m window
-		makeEvent(-10, "high"),  // excluded: already past
+		makeEvent(-10, "high"),  // in window: recently past
 	}
 	if err := db.UpsertEconomicEvents(events); err != nil {
 		t.Fatalf("upsert: %v", err)
@@ -27,8 +27,8 @@ func TestGetImminentHighImpact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetImminentHighImpact: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("expected 2 imminent high-impact events, got %d", len(got))
+	if len(got) != 3 {
+		t.Fatalf("expected 3 high-impact events in +/-30m, got %d", len(got))
 	}
 	if !got[0].EventTime.Before(got[1].EventTime) {
 		t.Errorf("expected soonest-first ordering, got %v then %v", got[0].EventTime, got[1].EventTime)
@@ -37,8 +37,8 @@ func TestGetImminentHighImpact(t *testing.T) {
 		if e.Impact != "high" {
 			t.Errorf("non-high event leaked: impact=%q", e.Impact)
 		}
-		if !e.EventTime.After(time.Now().Add(-time.Minute)) {
-			t.Errorf("past event leaked: %v", e.EventTime)
+		if e.EventTime.Before(time.Now().Add(-30 * time.Minute)) {
+			t.Errorf("event outside past window leaked: %v", e.EventTime)
 		}
 	}
 }

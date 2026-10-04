@@ -17,8 +17,9 @@ type AnalysisRule interface {
 	// Name returns the unique identifier for this rule (must match rules.yaml key).
 	Name() string
 
-	// RequiredIndicators returns the list of indicator keys this rule needs.
-	// The engine will ensure these are computed before calling Analyze.
+	// RequiredIndicators returns indicator names this rule needs. Bare names
+	// must coexist on one available timeframe; prefixed names select an exact
+	// timeframe. Analyze remains responsible for choosing a qualifying series.
 	RequiredIndicators() []string
 
 	// Analyze evaluates the rule against the given context and returns a Signal.

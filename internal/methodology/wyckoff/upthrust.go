@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/rule"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
@@ -46,7 +47,7 @@ func (r *WyckoffUpthrustRule) Analyze(ctx models.AnalysisContext) (*models.Signa
 
 		swingHigh, hasSwingHigh := ctx.Indicators[swingHighKey]
 		volMA, hasVolMA := ctx.Indicators[volMAKey]
-		if !hasSwingHigh || !hasVolMA {
+		if !hasSwingHigh || (rule.HasVolume(ctx) && !hasVolMA) {
 			continue
 		}
 
@@ -71,7 +72,7 @@ func (r *WyckoffUpthrustRule) Analyze(ctx models.AnalysisContext) (*models.Signa
 		}
 
 		// Volume confirmation
-		if curr.Volume < volMultiplier*volMA {
+		if rule.HasVolume(ctx) && curr.Volume < volMultiplier*volMA {
 			continue
 		}
 
@@ -89,12 +90,13 @@ func (r *WyckoffUpthrustRule) Analyze(ctx models.AnalysisContext) (*models.Signa
 	}
 
 	return &models.Signal{
-		Symbol:    ctx.Symbol,
-		Timeframe: bestTF,
-		Rule:      r.Name(),
-		Direction: "SHORT",
-		Score:     1.0,
-		Message:   fmt.Sprintf("[%s] Wyckoff 업스러스트 패턴 → SHORT (스윙고점: %.4f)", bestTF, bestSwingHigh),
-		CreatedAt: time.Now(),
+		Symbol:            ctx.Symbol,
+		Timeframe:         bestTF,
+		Rule:              r.Name(),
+		Direction:         "SHORT",
+		Score:             1.0,
+		Message:           fmt.Sprintf("[%s] Wyckoff 업스러스트 패턴 → SHORT (스윙고점: %.4f)", bestTF, bestSwingHigh),
+		VolumeUnconfirmed: !rule.HasVolume(ctx),
+		CreatedAt:         time.Now(),
 	}, nil
 }

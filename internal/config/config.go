@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/Ju571nK/Chatter/pkg/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,6 +31,7 @@ type Config struct {
 
 	Binance      BinanceConfig
 	Yahoo        YahooConfig
+	Forex        ForexConfig
 	Tiingo       TiingoConfig
 	AlphaVantage AlphaVantageConfig
 	Finnhub      FinnhubConfig
@@ -68,6 +71,26 @@ type YahooConfig struct {
 	PollInterval time.Duration
 }
 
+type ForexConfig struct {
+	Provider string // auto, yahoo, oanda
+	OANDA    OANDAConfig
+}
+
+type OANDAConfig struct {
+	Token       string
+	Environment string // practice or live
+}
+
+func (f ForexConfig) EffectiveProvider() string {
+	if f.Provider == "yahoo" || f.Provider == "oanda" {
+		return f.Provider
+	}
+	if f.OANDA.Token != "" {
+		return "oanda"
+	}
+	return "yahoo"
+}
+
 type TiingoConfig struct {
 	APIKey       string
 	PollInterval time.Duration
@@ -78,8 +101,9 @@ type AlphaVantageConfig struct {
 }
 
 type FinnhubConfig struct {
-	APIKey             string
-	AlertWindowMinutes int // minutes before event to send pre-alert (default 30)
+	APIKey                  string
+	AlertWindowMinutes      int // minutes before event to send pre-alert (default 30)
+	ForexAlertWindowMinutes int // FX event proximity (default 60)
 }
 
 type FMPConfig struct {
@@ -103,6 +127,8 @@ type AlertConfig struct {
 	CryptoSLMult    float64 `yaml:"crypto_sl_mult" json:"crypto_sl_mult"`
 	StockTPMult     float64 `yaml:"stock_tp_mult" json:"stock_tp_mult"`
 	StockSLMult     float64 `yaml:"stock_sl_mult" json:"stock_sl_mult"`
+	ForexTPMult     float64 `yaml:"forex_tp_mult" json:"forex_tp_mult"`
+	ForexSLMult     float64 `yaml:"forex_sl_mult" json:"forex_sl_mult"`
 }
 
 // AlertConfigHolder is a mutex-protected holder for live-updated AlertConfig.
@@ -158,10 +184,11 @@ type RulesConfig struct {
 }
 
 type RuleEntry struct {
-	Name        string                 `yaml:"name"`
-	Enabled     bool                   `yaml:"enabled"`
-	Methodology string                 `yaml:"methodology"`
-	Params      map[string]interface{} `yaml:"params"`
+	Name         string                 `yaml:"name"`
+	Enabled      bool                   `yaml:"enabled"`
+	Methodology  string                 `yaml:"methodology"`
+	Params       map[string]interface{} `yaml:"params"`
+	AssetClasses []models.AssetClass    `yaml:"asset_classes,omitempty"`
 }
 
 type ScoringConfig struct {
@@ -171,18 +198,21 @@ type ScoringConfig struct {
 
 // WatchlistConfig mirrors config/watchlist.yaml structure.
 type WatchlistConfig struct {
-	Symbols struct {
+	DXYAutoInitialized bool `yaml:"dxy_auto_initialized,omitempty"`
+	Symbols            struct {
 		Crypto  []SymbolEntry `yaml:"crypto"`
 		Stocks  []SymbolEntry `yaml:"stocks"`
 		Indices []SymbolEntry `yaml:"indices"`
+		Forex   []SymbolEntry `yaml:"forex"`
 	} `yaml:"symbols"`
 	Timeframes []string `yaml:"timeframes"`
 }
 
 type SymbolEntry struct {
-	Symbol   string `yaml:"symbol"`
-	Exchange string `yaml:"exchange"`
-	Enabled  bool   `yaml:"enabled"`
+	Symbol         string `yaml:"symbol"`
+	Exchange       string `yaml:"exchange"`
+	Enabled        bool   `yaml:"enabled"`
+	ProviderSymbol string `yaml:"provider_symbol,omitempty" json:"provider_symbol,omitempty"`
 }
 
 // SettingsYAML is the structure of config/settings.yaml.
@@ -213,6 +243,13 @@ type SettingsYAML struct {
 	Yahoo struct {
 		PollInterval int `yaml:"poll_interval"`
 	} `yaml:"yahoo"`
+	Forex struct {
+		Provider string `yaml:"provider"`
+		OANDA    struct {
+			Token       string `yaml:"token"`
+			Environment string `yaml:"environment"`
+		} `yaml:"oanda"`
+	} `yaml:"forex"`
 	Telegram struct {
 		BotToken string `yaml:"bot_token"`
 		ChatID   string `yaml:"chat_id"`
@@ -249,8 +286,9 @@ type SettingsYAML struct {
 		APIKey string `yaml:"api_key"`
 	} `yaml:"alphavantage"`
 	Finnhub struct {
-		APIKey             string `yaml:"api_key"`
-		AlertWindowMinutes int    `yaml:"alert_window_minutes"`
+		APIKey                  string `yaml:"api_key"`
+		AlertWindowMinutes      int    `yaml:"alert_window_minutes"`
+		ForexAlertWindowMinutes int    `yaml:"forex_alert_window_minutes"`
 	} `yaml:"finnhub"`
 	Fmp struct {
 		APIKey string `yaml:"api_key"`
@@ -272,37 +310,41 @@ func (s *SettingsYAML) ToMap() map[string]string {
 		return strconv.FormatFloat(f, 'f', -1, 64)
 	}
 	m := map[string]string{
-		"DB_PATH":                s.Database.Path,
-		"ENV":                    s.Server.Env,
-		"SERVER_HOST":            s.Server.Host,
-		"SERVER_PORT":            s.Server.Port,
-		"LOG_LEVEL":              s.Server.LogLevel,
-		"API_TOKEN":              s.Server.APIToken,
-		"REMOTE_ACCESS":          s.Server.RemoteAccess,
-		"REMOTE_ALLOWED_ORIGINS": s.Server.AllowedOrigins,
-		"BINANCE_API_KEY":        s.Binance.APIKey,
-		"BINANCE_SECRET_KEY":     s.Binance.SecretKey,
-		"TIINGO_API_KEY":         s.Tiingo.APIKey,
-		"TIINGO_POLL_INTERVAL":   itoa(s.Tiingo.PollInterval),
-		"YAHOO_POLL_INTERVAL":    itoa(s.Yahoo.PollInterval),
-		"TELEGRAM_BOT_TOKEN":     s.Telegram.BotToken,
-		"TELEGRAM_CHAT_ID":       s.Telegram.ChatID,
-		"DISCORD_WEBHOOK_URL":    s.Discord.WebhookURL,
-		"ALERT_COOLDOWN_HOURS":   itoa(s.Alert.CooldownHours),
-		"LLM_PROVIDER":           s.LLM.Provider,
-		"LLM_LANGUAGE":           s.LLM.Language,
-		"AI_MIN_SCORE":           ftoa(s.LLM.MinScore),
-		"ANTHROPIC_API_KEY":      s.Anthropic.APIKey,
-		"OPENAI_API_KEY":         s.OpenAI.APIKey,
-		"GROQ_API_KEY":           s.Groq.APIKey,
-		"GEMINI_API_KEY":         s.Gemini.APIKey,
-		"OLLAMA_HOST":            s.Ollama.Host,
-		"OLLAMA_MODEL":           s.Ollama.Model,
-		"OLLAMA_TIMEOUT_SEC":     itoa(s.Ollama.TimeoutSec),
-		"ALPHAVANTAGE_API_KEY":   s.AlphaVantage.APIKey,
-		"FINNHUB_API_KEY":        s.Finnhub.APIKey,
-		"CALENDAR_ALERT_WINDOW":  itoa(s.Finnhub.AlertWindowMinutes),
-		"FMP_API_KEY":            s.Fmp.APIKey,
+		"DB_PATH":                  s.Database.Path,
+		"ENV":                      s.Server.Env,
+		"SERVER_HOST":              s.Server.Host,
+		"SERVER_PORT":              s.Server.Port,
+		"LOG_LEVEL":                s.Server.LogLevel,
+		"API_TOKEN":                s.Server.APIToken,
+		"REMOTE_ACCESS":            s.Server.RemoteAccess,
+		"REMOTE_ALLOWED_ORIGINS":   s.Server.AllowedOrigins,
+		"BINANCE_API_KEY":          s.Binance.APIKey,
+		"BINANCE_SECRET_KEY":       s.Binance.SecretKey,
+		"TIINGO_API_KEY":           s.Tiingo.APIKey,
+		"TIINGO_POLL_INTERVAL":     itoa(s.Tiingo.PollInterval),
+		"YAHOO_POLL_INTERVAL":      itoa(s.Yahoo.PollInterval),
+		"FOREX_PROVIDER":           s.Forex.Provider,
+		"OANDA_TOKEN":              s.Forex.OANDA.Token,
+		"OANDA_ENVIRONMENT":        s.Forex.OANDA.Environment,
+		"TELEGRAM_BOT_TOKEN":       s.Telegram.BotToken,
+		"TELEGRAM_CHAT_ID":         s.Telegram.ChatID,
+		"DISCORD_WEBHOOK_URL":      s.Discord.WebhookURL,
+		"ALERT_COOLDOWN_HOURS":     itoa(s.Alert.CooldownHours),
+		"LLM_PROVIDER":             s.LLM.Provider,
+		"LLM_LANGUAGE":             s.LLM.Language,
+		"AI_MIN_SCORE":             ftoa(s.LLM.MinScore),
+		"ANTHROPIC_API_KEY":        s.Anthropic.APIKey,
+		"OPENAI_API_KEY":           s.OpenAI.APIKey,
+		"GROQ_API_KEY":             s.Groq.APIKey,
+		"GEMINI_API_KEY":           s.Gemini.APIKey,
+		"OLLAMA_HOST":              s.Ollama.Host,
+		"OLLAMA_MODEL":             s.Ollama.Model,
+		"OLLAMA_TIMEOUT_SEC":       itoa(s.Ollama.TimeoutSec),
+		"ALPHAVANTAGE_API_KEY":     s.AlphaVantage.APIKey,
+		"FINNHUB_API_KEY":          s.Finnhub.APIKey,
+		"CALENDAR_ALERT_WINDOW":    itoa(s.Finnhub.AlertWindowMinutes),
+		"CALENDAR_FX_ALERT_WINDOW": itoa(s.Finnhub.ForexAlertWindowMinutes),
+		"FMP_API_KEY":              s.Fmp.APIKey,
 	}
 	for key, fallback := range ClientDefaults {
 		m[key] = fallback
@@ -364,6 +406,9 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.Tiingo.APIKey, "TIINGO_API_KEY")
 	setInt(&s.Tiingo.PollInterval, "TIINGO_POLL_INTERVAL")
 	setInt(&s.Yahoo.PollInterval, "YAHOO_POLL_INTERVAL")
+	set(&s.Forex.Provider, "FOREX_PROVIDER")
+	set(&s.Forex.OANDA.Token, "OANDA_TOKEN")
+	set(&s.Forex.OANDA.Environment, "OANDA_ENVIRONMENT")
 	set(&s.Telegram.BotToken, "TELEGRAM_BOT_TOKEN")
 	set(&s.Telegram.ChatID, "TELEGRAM_CHAT_ID")
 	set(&s.Discord.WebhookURL, "DISCORD_WEBHOOK_URL")
@@ -381,6 +426,7 @@ func (s *SettingsYAML) ApplyMap(m map[string]string) {
 	set(&s.AlphaVantage.APIKey, "ALPHAVANTAGE_API_KEY")
 	set(&s.Finnhub.APIKey, "FINNHUB_API_KEY")
 	setInt(&s.Finnhub.AlertWindowMinutes, "CALENDAR_ALERT_WINDOW")
+	setInt(&s.Finnhub.ForexAlertWindowMinutes, "CALENDAR_FX_ALERT_WINDOW")
 	set(&s.Fmp.APIKey, "FMP_API_KEY")
 }
 
@@ -392,7 +438,9 @@ func LoadSettings(path string) (*SettingsYAML, error) {
 		"DB_PATH": "./data/chart_analyzer.db", "TIINGO_POLL_INTERVAL": "900", "YAHOO_POLL_INTERVAL": "60",
 		"ALERT_COOLDOWN_HOURS": "4", "AI_MIN_SCORE": "12", "LLM_LANGUAGE": "en",
 		"OLLAMA_HOST": "http://localhost:11434", "OLLAMA_MODEL": "gemma4:4b", "OLLAMA_TIMEOUT_SEC": "120",
-		"CALENDAR_ALERT_WINDOW": "30",
+		"CALENDAR_ALERT_WINDOW":    "30",
+		"CALENDAR_FX_ALERT_WINDOW": "60",
+		"FOREX_PROVIDER":           "auto", "OANDA_ENVIRONMENT": "practice",
 	})
 	if err := loadYAML(path, &s); err != nil {
 		if os.IsNotExist(err) || errors.Is(err, io.EOF) {
@@ -458,6 +506,7 @@ func Load(envFile, configDir string) (*Config, error) {
 		Yahoo: YahooConfig{
 			PollInterval: getEnvOrDuration("YAHOO_POLL_INTERVAL", s.Yahoo.PollInterval, 60, time.Second),
 		},
+		Forex: ForexConfig{Provider: getEnvOr("FOREX_PROVIDER", s.Forex.Provider, "auto"), OANDA: OANDAConfig{Token: s.Forex.OANDA.Token, Environment: getEnvOr("OANDA_ENVIRONMENT", s.Forex.OANDA.Environment, "practice")}},
 		Tiingo: TiingoConfig{
 			APIKey:       getEnvOr("TIINGO_API_KEY", s.Tiingo.APIKey, ""),
 			PollInterval: getEnvOrDuration("TIINGO_POLL_INTERVAL", s.Tiingo.PollInterval, 900, time.Second),
@@ -466,8 +515,9 @@ func Load(envFile, configDir string) (*Config, error) {
 			APIKey: getEnvOr("ALPHAVANTAGE_API_KEY", s.AlphaVantage.APIKey, ""),
 		},
 		Finnhub: FinnhubConfig{
-			APIKey:             getEnvOr("FINNHUB_API_KEY", s.Finnhub.APIKey, ""),
-			AlertWindowMinutes: getEnvOrInt("CALENDAR_ALERT_WINDOW", s.Finnhub.AlertWindowMinutes, 30),
+			APIKey:                  getEnvOr("FINNHUB_API_KEY", s.Finnhub.APIKey, ""),
+			AlertWindowMinutes:      getEnvOrInt("CALENDAR_ALERT_WINDOW", s.Finnhub.AlertWindowMinutes, 30),
+			ForexAlertWindowMinutes: getEnvOrInt("CALENDAR_FX_ALERT_WINDOW", s.Finnhub.ForexAlertWindowMinutes, 60),
 		},
 		FMP: FMPConfig{
 			APIKey: getEnvOr("FMP_API_KEY", s.Fmp.APIKey, ""),
@@ -487,6 +537,8 @@ func Load(envFile, configDir string) (*Config, error) {
 			CryptoSLMult:    0.75,
 			StockTPMult:     2.0,
 			StockSLMult:     1.0,
+			ForexTPMult:     1.5,
+			ForexSLMult:     1.0,
 		},
 		Anthropic: AnthropicConfig{
 			APIKey:   getEnvOr("ANTHROPIC_API_KEY", s.Anthropic.APIKey, ""),
@@ -519,6 +571,20 @@ func Load(envFile, configDir string) (*Config, error) {
 	if err := loadYAML(configDir+"/watchlist.yaml", &cfg.Watchlist); err != nil {
 		return nil, fmt.Errorf("failed to load watchlist.yaml: %w", err)
 	}
+	for _, entry := range cfg.Watchlist.Symbols.Forex {
+		if err := ValidateForexPair(entry.Symbol); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.Forex.Provider != "auto" && cfg.Forex.Provider != "yahoo" && cfg.Forex.Provider != "oanda" {
+		return nil, fmt.Errorf("invalid forex provider %q", cfg.Forex.Provider)
+	}
+	if cfg.Forex.OANDA.Environment != "practice" && cfg.Forex.OANDA.Environment != "live" {
+		return nil, fmt.Errorf("invalid OANDA environment %q", cfg.Forex.OANDA.Environment)
+	}
+	if cfg.Forex.EffectiveProvider() == "oanda" && cfg.Forex.OANDA.Token == "" {
+		return nil, fmt.Errorf("OANDA provider requires token")
+	}
 
 	// Load report.yaml — use defaults if absent
 	cfg.DailyReport = DailyReportConfig{
@@ -546,6 +612,11 @@ func Load(envFile, configDir string) (*Config, error) {
 		cfg.Finnhub.AlertWindowMinutes = 5
 	} else if cfg.Finnhub.AlertWindowMinutes > 1440 {
 		cfg.Finnhub.AlertWindowMinutes = 1440
+	}
+	if cfg.Finnhub.ForexAlertWindowMinutes < 5 {
+		cfg.Finnhub.ForexAlertWindowMinutes = 5
+	} else if cfg.Finnhub.ForexAlertWindowMinutes > 1440 {
+		cfg.Finnhub.ForexAlertWindowMinutes = 1440
 	}
 
 	return cfg, nil
@@ -582,6 +653,57 @@ func (c *Config) EnabledIndexSymbols() []string {
 		}
 	}
 	return out
+}
+
+func (c *Config) EnabledForexSymbols() []string {
+	var out []string
+	for _, s := range c.Watchlist.Symbols.Forex {
+		if s.Enabled {
+			out = append(out, s.Symbol)
+		}
+	}
+	return out
+}
+
+// AssetClass resolves from the configured watchlist; unknown symbols retain the
+// historical stock default.
+func (w WatchlistConfig) AssetClass(symbol string) string {
+	for _, e := range w.Symbols.Crypto {
+		if e.Symbol == symbol {
+			return "crypto"
+		}
+	}
+	for _, e := range w.Symbols.Indices {
+		if e.Symbol == symbol {
+			return "index"
+		}
+	}
+	for _, e := range w.Symbols.Forex {
+		if e.Symbol == symbol {
+			return "forex"
+		}
+	}
+	return "stock"
+}
+
+var forexCurrencies = map[string]bool{"USD": true, "EUR": true, "GBP": true, "JPY": true, "CHF": true, "CAD": true, "AUD": true, "NZD": true}
+
+// ValidateForexPair accepts the supported G10 currency crosses and USD metals.
+func ValidateForexPair(symbol string) error {
+	if len(symbol) != 6 || strings.ToUpper(symbol) != symbol {
+		return fmt.Errorf("invalid forex pair %q: use six uppercase letters", symbol)
+	}
+	base, quote := symbol[:3], symbol[3:]
+	if base == quote {
+		return fmt.Errorf("invalid forex pair %q: currencies must differ", symbol)
+	}
+	if (base == "XAU" || base == "XAG") && quote == "USD" {
+		return nil
+	}
+	if !forexCurrencies[base] || !forexCurrencies[quote] {
+		return fmt.Errorf("unsupported forex pair %q", symbol)
+	}
+	return nil
 }
 
 func loadYAML(path string, v interface{}) error {

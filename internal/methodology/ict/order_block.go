@@ -16,9 +16,12 @@ var _ rule.AnalysisRule = (*ICTOrderBlockRule)(nil)
 // ICTOrderBlockRule detects ICT Order Blocks and signals when price returns to them.
 //
 // Bullish OB: the last bearish candle immediately before an impulse upward move
-//   -> price returning to that candle's range -> LONG
+//
+//	-> price returning to that candle's range -> LONG
+//
 // Bearish OB: the last bullish candle immediately before an impulse downward move
-//   -> price returning to that candle's range -> SHORT
+//
+//	-> price returning to that candle's range -> SHORT
 //
 // Enhancements:
 //   - Mitigation tracking: if price has already revisited and closed through the OB zone,
@@ -29,8 +32,11 @@ var _ rule.AnalysisRule = (*ICTOrderBlockRule)(nil)
 // Requires >= 5 bars per TF.
 type ICTOrderBlockRule struct{}
 
-func (r *ICTOrderBlockRule) Name() string                 { return "ict_order_block" }
-func (r *ICTOrderBlockRule) RequiredIndicators() []string { return []string{"ATR_14"} }
+func (r *ICTOrderBlockRule) Name() string { return "ict_order_block" }
+func (r *ICTOrderBlockRule) RequiredIndicators() []string {
+	// Analyze explicitly allows price-only impulses when ATR is unavailable.
+	return nil
+}
 
 // isMitigated checks whether an OB zone has been mitigated by any bar between
 // the OB formation and the current bar.

@@ -28,6 +28,7 @@ func TestMapTradeSignalToOrder(t *testing.T) {
 		{"short sizing", func(s *models.TradeSignal) { s.Direction = "SHORT"; s.EntryPrice = 100 }, 1000, "sell", "10", ""},
 		{"empty symbol", func(s *models.TradeSignal) { s.Symbol = "" }, 1000, "", "", "empty symbol"},
 		{"crypto rejected", func(s *models.TradeSignal) { s.AssetClass = "crypto" }, 1000, "", "", "crypto asset_class"},
+		{"forex rejected", func(s *models.TradeSignal) { s.AssetClass = "forex"; s.Symbol = "EURUSD" }, 1000, "", "", "forex asset_class"},
 		{"bad direction", func(s *models.TradeSignal) { s.Direction = "FLAT" }, 1000, "", "", "unsupported direction"},
 		{"zero price", func(s *models.TradeSignal) { s.EntryPrice = 0 }, 1000, "", "", "entry_price"},
 		{"zero notional", func(*models.TradeSignal) {}, 0, "", "", "notional"},

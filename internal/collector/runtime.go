@@ -13,9 +13,10 @@ import (
 // Runtime serializes watchlist generations. A replacement never overlaps the
 // old collectors/pipeline, and rapid edits are coalesced to the latest snapshot.
 type Runtime struct {
-	mu      sync.Mutex
-	desired appconfig.WatchlistConfig
-	wake    chan struct{}
+	mu       sync.Mutex
+	desired  appconfig.WatchlistConfig
+	wake     chan struct{}
+	revision uint64
 }
 
 func NewRuntime(initial appconfig.WatchlistConfig) *Runtime {
@@ -28,6 +29,7 @@ func cloneWatchlist(w appconfig.WatchlistConfig) appconfig.WatchlistConfig {
 	w.Symbols.Crypto = append([]appconfig.SymbolEntry(nil), w.Symbols.Crypto...)
 	w.Symbols.Stocks = append([]appconfig.SymbolEntry(nil), w.Symbols.Stocks...)
 	w.Symbols.Indices = append([]appconfig.SymbolEntry(nil), w.Symbols.Indices...)
+	w.Symbols.Forex = append([]appconfig.SymbolEntry(nil), w.Symbols.Forex...)
 	w.Timeframes = append([]string(nil), w.Timeframes...)
 	return w
 }
@@ -35,12 +37,17 @@ func cloneWatchlist(w appconfig.WatchlistConfig) appconfig.WatchlistConfig {
 func (r *Runtime) Update(w appconfig.WatchlistConfig) {
 	r.mu.Lock()
 	r.desired = cloneWatchlist(w)
+	r.revision++
 	r.mu.Unlock()
 	select {
 	case r.wake <- struct{}{}:
 	default:
 	}
 }
+
+// Reload restarts the current collector generation after provider settings
+// change, even when the watchlist itself is unchanged.
+func (r *Runtime) Reload() { r.Update(r.Watchlist()) }
 
 func (r *Runtime) Watchlist() appconfig.WatchlistConfig {
 	r.mu.Lock()
@@ -51,6 +58,7 @@ func (r *Runtime) Watchlist() appconfig.WatchlistConfig {
 // run must return only after all workers of its generation have stopped.
 func (r *Runtime) Run(ctx context.Context, run func(context.Context, appconfig.WatchlistConfig)) {
 	var current appconfig.WatchlistConfig
+	var currentRevision uint64
 	var cancel context.CancelFunc
 	var done chan struct{}
 	stop := func() {
@@ -67,7 +75,10 @@ func (r *Runtime) Run(ctx context.Context, run func(context.Context, appconfig.W
 			return
 		case <-r.wake:
 			next := r.Watchlist()
-			if cancel != nil && reflect.DeepEqual(current, next) {
+			r.mu.Lock()
+			revision := r.revision
+			r.mu.Unlock()
+			if cancel != nil && reflect.DeepEqual(current, next) && currentRevision == revision {
 				continue
 			}
 			stop()
@@ -75,6 +86,7 @@ func (r *Runtime) Run(ctx context.Context, run func(context.Context, appconfig.W
 				return
 			}
 			current = r.Watchlist()
+			currentRevision = revision
 			workerCtx, workerCancel := context.WithCancel(ctx)
 			cancel = workerCancel
 			done = make(chan struct{})

@@ -3,8 +3,7 @@
 **Date:** 2026-10-04
 **Target version:** v2.14.0.0 ("ICT for Forex")
 **Branch:** `feat/forex-support`
-**Status:** Implemented in the working tree; pending final review and release
-validation. This remains unreleased.
+**Status:** Implemented and validated for v2.14.0.0 on 2026-10-09.
 **Scope decisions (confirmed by user):** Scope **B** (analysis + alerts + backtest + FX-specific visuals). Data source **A** (Yahoo keyless default, OANDA optional candle provider, subject to account eligibility).
 
 ---

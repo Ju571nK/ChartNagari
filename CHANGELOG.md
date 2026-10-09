@@ -14,13 +14,33 @@ Format:
 
 ---
 
-## [Unreleased]
+## [2.14.0.0] - 2026-10-09
 
 ### Added
 - Forex analysis support for configured pairs, with keyless Yahoo candles,
   optional OANDA candle collection, session-aware chart context and pip-based
   spread-adjusted backtest stats. Yahoo FX has no meaningful volume; Yahoo gold
   and silver use futures proxies. See `docs/FOREX.md` for limitations.
+- AI setup wizard with model presets, local/remote connection profiles, targeted
+  Ollama model downloads, sample response tests and explicit runtime activation.
+  Profiles persist across restarts; Laya is identified separately as a future
+  typed-decision integration rather than a text-generation provider.
+- Issue #32, phase 2b: versioned five-day opportunity forward outcomes with
+  explicit pending/missing/complete states, directional returns and documented
+  cost assumptions; bounded background retries and read-only ATR-decile
+  performance API. Automatic penalty calibration remains disabled.
+- Issue #32, phase 2a: versioned pre-filter 1H/4H opportunity collection,
+  preserving original weighted scores, raw/effective HTF context and indicator
+  snapshots. Repeated candle observations are deduplicated; automatic penalty
+  calibration remains blocked pending replay and outcome validation.
+- Issue #32, phase 1: read-only HTF calibration history inventory in Backtest for
+  1H/4H signals, with ten ATR deciles, counts, distinct UTC dates and two-year
+  history gates. Automatic calibration remains blocked: stored post-filter
+  signals are not unbiased calibration samples. Existing scoring is unchanged.
+- Experimental order plugin developer kit v1 with a versioned HTTP contract,
+  public Go SDK, paper simulator and read-only compatibility checker. The host
+  can inspect registered plugin metadata; it does not route signals through
+  the new order API or enable live trading.
 
 ### Changed
 - Clarified the dual-provider Forex setup: Yahoo is keyless by default, `auto`
@@ -76,24 +96,6 @@ Format:
 - Alert hub groups signal alerts, price alerts and delivery channels. General
   settings focus on display/language; server settings move to Advanced, with
   explicit unsaved/restart-required state and a persistent save action.
-
-### Added
-- AI setup wizard with model presets, local/remote connection profiles, targeted
-  Ollama model downloads, sample response tests and explicit runtime activation.
-  Profiles persist across restarts; Laya is identified separately as a future
-  typed-decision integration rather than a text-generation provider.
-- Issue #32, phase 2b: versioned five-day opportunity forward outcomes with
-  explicit pending/missing/complete states, directional returns and documented
-  cost assumptions; bounded background retries and read-only ATR-decile
-  performance API. Automatic penalty calibration remains disabled.
-- Issue #32, phase 2a: versioned pre-filter 1H/4H opportunity collection,
-  preserving original weighted scores, raw/effective HTF context and indicator
-  snapshots. Repeated candle observations are deduplicated; automatic penalty
-  calibration remains blocked pending replay and outcome validation.
-- Issue #32, phase 1: read-only HTF calibration history inventory in Backtest for
-  1H/4H signals, with ten ATR deciles, counts, distinct UTC dates and two-year
-  history gates. Automatic calibration remains blocked: stored post-filter
-  signals are not unbiased calibration samples. Existing scoring is unchanged.
 
 ## [2.13.0.0] - 2026-09-12
 

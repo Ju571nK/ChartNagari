@@ -22,18 +22,18 @@ English, Korean and Japanese interfaces are available. AI interpretation is opti
 
 ## What's new
 
-**Latest release: [v2.13.0.0 — Web Settings & Clearer Charts](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.13.0.0)**
+**Latest release: [v2.14.0.0 — Forex analysis and a broader research workspace](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.14.0.0)**
 
-Grouped navigation, a chart-side signal inspector and shared chart → analysis → backtest context.
+Keyless Forex candles, session-aware ICT context and pip-based backtests, with guided AI setup and clearer workspace controls.
 
 **Included in this release**
 
-- Visible FVG/OB candidate ranges with distinct colors and counts.
-- Clearer loading, missing-data and retry states; history checks before backtesting.
-- YAML-backed web settings, masked keys and explicit key removal.
-- Fixes for symbol settings, alert persistence, timeframe filtering and VIX collection.
+- Yahoo FX by default, optional eligible OANDA candles, and spread-adjusted FX backtests.
+- Read-only HTF opportunity outcomes and bucket performance; automatic calibration remains off.
+- Guided AI setup, authenticated remote server profiles and refined settings/navigation.
+- Experimental order plugin developer kit for paper adapter development.
 
-Upgrading? Read the [YAML migration notes](SETTINGS.md) and [release notes](docs/releases/v2.13.0.0.md) before restarting your server.
+Upgrading? Read the [release notes](docs/releases/v2.14.0.0.md) and [Forex guide](docs/FOREX.md) before restarting your server.
 
 ## Get started
 

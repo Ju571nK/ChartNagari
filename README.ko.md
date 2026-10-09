@@ -22,18 +22,18 @@
 
 ## 무엇이 달라졌나요?
 
-**최신 정식 릴리즈: [v2.13.0.0 — Web Settings & Clearer Charts](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.13.0.0)**
+**최신 정식 릴리즈: [v2.14.0.0 — Forex analysis and a broader research workspace](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.14.0.0)**
 
-목적별 탐색 메뉴, 차트 옆 신호 패널, 차트·분석·백테스트 간 종목과 시간봉 연결이 추가되었습니다.
+키 없이 시작하는 외환 데이터, 세션 기반 ICT 차트 정보와 핍 단위 백테스트, AI 설정 안내가 추가되었습니다.
 
 **이번 릴리즈에 포함된 개선**
 
-- 색상과 건수로 구분되는 FVG·OB 후보 영역 표시
-- 로딩·데이터 없음·재시도 안내와 백테스트 이력 점검
-- YAML 기반 웹 설정, 비밀키 마스킹과 명시적 삭제
-- 종목 설정, 알림 저장, 시간봉별 신호 표시, VIX 수집 수정
+- 기본 Yahoo 외환 데이터와 선택형 OANDA 캔들, 스프레드를 반영한 외환 백테스트
+- 읽기 전용 HTF 기회 결과와 구간별 성과; 자동 페널티 보정은 아직 비활성화
+- AI 설정 안내, 인증된 원격 서버 프로필, 개선된 설정·탐색 화면
+- 모의 어댑터 개발을 위한 실험적 주문 플러그인 개발자 키트
 
-기존 사용자는 서버를 재시작하기 전에 [YAML 전환 안내](SETTINGS.md)와 [릴리즈 노트](docs/releases/v2.13.0.0.md)를 확인하세요.
+기존 사용자는 서버를 재시작하기 전에 [릴리즈 노트](docs/releases/v2.14.0.0.md)와 [외환 안내](docs/FOREX.md)를 확인하세요.
 
 ## 시작하기
 

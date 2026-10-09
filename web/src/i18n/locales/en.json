@@ -432,6 +432,7 @@
   "not_verified": "Not found — enter manually",
   "profile": "Signal Profile",
   "profile_crypto": "Crypto",
+  "profile_forex": "Forex",
   "profile_large_cap_stock": "Large Cap Stock",
   "profile_small_cap_stock": "Small Cap Stock",
   "signal_profile": "Signal Profile",
@@ -783,5 +784,23 @@
     "environment_live": "Live",
     "saveEffect": "Changing the FX provider rebuilds FX candles from that source and may take time.",
     "settingsRestart": "Settings are saved to config/settings.yaml. FX provider changes apply immediately; other data sources may require a server restart."
+  },
+  "messageTemplate": {
+    "expand": "Expand alert settings and Telegram wording",
+    "collapse": "Collapse alert settings and Telegram wording",
+    "heading": "Telegram alert wording",
+    "description": "Add a note to this symbol's LONG or SHORT Telegram alert. The standard signal and risk details stay in place. Empty text uses the standard alert. Changes are saved only when you press Save.",
+    "direction": "Alert direction",
+    "editor": "{{direction}} message text",
+    "length": "{{count}} / 500 characters",
+    "tokens": "Fields: {종목} symbol, {시간봉} timeframe, {방향} direction, {진입가} entry price, {TP} take profit, {SL} stop loss, {점수} score, {근거} signal reason.",
+    "aliases": "English aliases: {symbol}, {timeframe}, {direction}, {entry}, {tp}, {sl}, {score}, {reason}.",
+    "sample": "Preview uses fixed sample values, never current market prices. Preview never sends a message.",
+    "omitted": "The custom note was omitted because the full Telegram message would exceed 4,096 characters.",
+    "demoUnavailable": "Telegram wording needs a connected server and is unavailable in the static demo.",
+    "reset": "Reset direction to default",
+    "preview": "Preview",
+    "save": "Save wording",
+    "saved": "Wording saved"
   }
 }

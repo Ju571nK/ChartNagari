@@ -260,6 +260,15 @@ func (db *DB) migrate() error {
 		updated_at           INTEGER NOT NULL
 	);
 
+	-- User-authored Telegram note text; separate from alert overrides so legacy
+	-- override PUT/DELETE cannot erase message templates.
+	CREATE TABLE IF NOT EXISTS symbol_message_templates (
+		symbol TEXT PRIMARY KEY,
+		long_template TEXT NOT NULL DEFAULT '',
+		short_template TEXT NOT NULL DEFAULT '',
+		updated_at INTEGER NOT NULL
+	);
+
 	-- Signal performance tracking (Phase: signal-performance-tracking).
 	-- Lazy-created on first mark; absent row = implicit PENDING.
 	CREATE TABLE IF NOT EXISTS signal_marks (

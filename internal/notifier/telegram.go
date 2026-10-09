@@ -9,15 +9,22 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Ju571nK/Chatter/internal/storage"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
 
 // TelegramSender dispatches signals to a Telegram chat via the Bot API.
 // Requires a valid bot token and chat ID configured in .env.
 type TelegramSender struct {
-	token  string
-	chatID string
-	client *http.Client
+	token     string
+	chatID    string
+	client    *http.Client
+	templates *storage.SymbolMessageTemplateStore
+}
+
+func (s *TelegramSender) WithTemplateStore(store *storage.SymbolMessageTemplateStore) *TelegramSender {
+	s.templates = store
+	return s
 }
 
 // NewTelegramSender creates a TelegramSender with a 10-second HTTP timeout.
@@ -73,9 +80,19 @@ func (s *TelegramSender) SendAlert(ctx context.Context, sig models.Signal) (int6
 		return 0, fmt.Errorf("telegram: token 또는 chatID 미설정")
 	}
 
+	template := ""
+	if s.templates != nil && (sig.Direction == "LONG" || sig.Direction == "SHORT") {
+		if saved, err := s.templates.Get(sig.Symbol); err == nil {
+			if sig.Direction == "LONG" {
+				template = saved.Long
+			} else {
+				template = saved.Short
+			}
+		}
+	}
 	payload := map[string]any{
 		"chat_id":      s.chatID,
-		"text":         formatTelegram(sig),
+		"text":         RenderTelegramAlert(sig, template),
 		"parse_mode":   "HTML",
 		"reply_markup": KeyboardForStatus("PENDING", sig.ID),
 	}

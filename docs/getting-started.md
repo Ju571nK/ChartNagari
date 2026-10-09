@@ -1,8 +1,10 @@
 # Getting started / 설치 안내
 
-These instructions target **v2.14.0.0**. Older releases can have
+These instructions target **v2.15.0.0**. Older releases can have
 different configuration behavior. Existing users should read [migration notes](../SETTINGS.md)
-first and must not replace their settings with the example.
+first and must not replace their settings or database with examples. This source
+release preserves existing configs and databases; the Telegram wording table is
+automatically created without a destructive migration.
 
 ## Try without installing
 

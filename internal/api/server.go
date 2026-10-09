@@ -221,31 +221,32 @@ type Server struct {
 	settingsFile         string                       // path to settings.yaml; set via WithSettingsFile
 	forexSettingsChanged func()
 	forexStatus          func() any
-	demoEngine           *engine.RuleEngine              // optional; set via WithDemoEngine for /api/demo/scan
-	profileHolder        *appconfig.SymbolProfilesHolder // optional; set via WithSymbolProfiles
-	signalTuningHolder   *appconfig.SignalTuningHolder   // optional; set via WithSignalTuningHolder
-	overrideStore        *storage.SymbolOverrideStore    // optional; set via WithOverrideStore
-	validRuleNames       map[string]struct{}             // optional; set via WithValidRuleNames
-	dbPath               string                          // path to SQLite DB file; set via WithDBPath
-	startTime            time.Time                       // server start timestamp for uptime
-	dataSources          []string                        // active data sources (e.g. ["Binance","Tiingo"])
-	allowedOrigins       map[string]bool                 // CORS allowlist; set via WithAllowedOrigins
-	apiToken             string                          // optional bearer token; set via WithAPIToken
-	execHolder           *appconfig.ExecutionHolder      // optional; set via WithExecutionHolder
-	execPath             string                          // path to execution.yaml; set via WithExecutionPath
-	execDispatcher       ExecutionReleaser               // optional; set via WithExecutionDispatcher
-	execFeedback         FeedbackRecorder                // optional; set via WithExecutionFeedback
-	execDB               *sql.DB                         // optional; set via WithExecutionDB for feedback queries
-	execState            *execution.StateStore           // optional; set via WithExecutionState for config versioning
-	markStore            *storage.SignalMarkStore        // optional; set via WithMarkStore
-	aggregator           *marks.Aggregator               // optional; set via WithAggregator
-	mcpRegistry          *mcp.Registry                   // optional; set via WithMCPRegistry
-	mcpSessions          *mcpSessionStore                // in-memory session store; lazy-init or set via WithMCPRegistry
-	ollamaDetector       OllamaStatusProvider            // optional; set via WithOllamaDetector
-	ollamaPullRunner     OllamaPullRunner                // optional; set via WithOllamaPullRunner
-	ollamaStarter        OllamaStarter                   // optional; set via WithOllamaStarter
-	ollamaRepoRoot       string                          // optional; set via WithOllamaRepoRoot
-	ollamaTester         OllamaTester                    // optional; set via WithOllamaTester
+	demoEngine           *engine.RuleEngine                  // optional; set via WithDemoEngine for /api/demo/scan
+	profileHolder        *appconfig.SymbolProfilesHolder     // optional; set via WithSymbolProfiles
+	signalTuningHolder   *appconfig.SignalTuningHolder       // optional; set via WithSignalTuningHolder
+	overrideStore        *storage.SymbolOverrideStore        // optional; set via WithOverrideStore
+	messageTemplateStore *storage.SymbolMessageTemplateStore // optional; set via WithMessageTemplateStore
+	validRuleNames       map[string]struct{}                 // optional; set via WithValidRuleNames
+	dbPath               string                              // path to SQLite DB file; set via WithDBPath
+	startTime            time.Time                           // server start timestamp for uptime
+	dataSources          []string                            // active data sources (e.g. ["Binance","Tiingo"])
+	allowedOrigins       map[string]bool                     // CORS allowlist; set via WithAllowedOrigins
+	apiToken             string                              // optional bearer token; set via WithAPIToken
+	execHolder           *appconfig.ExecutionHolder          // optional; set via WithExecutionHolder
+	execPath             string                              // path to execution.yaml; set via WithExecutionPath
+	execDispatcher       ExecutionReleaser                   // optional; set via WithExecutionDispatcher
+	execFeedback         FeedbackRecorder                    // optional; set via WithExecutionFeedback
+	execDB               *sql.DB                             // optional; set via WithExecutionDB for feedback queries
+	execState            *execution.StateStore               // optional; set via WithExecutionState for config versioning
+	markStore            *storage.SignalMarkStore            // optional; set via WithMarkStore
+	aggregator           *marks.Aggregator                   // optional; set via WithAggregator
+	mcpRegistry          *mcp.Registry                       // optional; set via WithMCPRegistry
+	mcpSessions          *mcpSessionStore                    // in-memory session store; lazy-init or set via WithMCPRegistry
+	ollamaDetector       OllamaStatusProvider                // optional; set via WithOllamaDetector
+	ollamaPullRunner     OllamaPullRunner                    // optional; set via WithOllamaPullRunner
+	ollamaStarter        OllamaStarter                       // optional; set via WithOllamaStarter
+	ollamaRepoRoot       string                              // optional; set via WithOllamaRepoRoot
+	ollamaTester         OllamaTester                        // optional; set via WithOllamaTester
 	aiProfiles           *appconfig.AIProfileStore
 	aiProvider           *llm.Switch
 	aiActivated          func()
@@ -472,6 +473,10 @@ func (s *Server) WithOverrideStore(store *storage.SymbolOverrideStore) {
 	s.overrideStore = store
 }
 
+func (s *Server) WithMessageTemplateStore(store *storage.SymbolMessageTemplateStore) {
+	s.messageTemplateStore = store
+}
+
 // WithValidRuleNames sets the closed set of known rule names used to validate
 // PUT /api/symbol-overrides/{symbol} requests.
 func (s *Server) WithValidRuleNames(names map[string]struct{}) {
@@ -599,6 +604,11 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/symbol-overrides/{symbol}", s.getSymbolOverride)
 		mux.HandleFunc("PUT /api/symbol-overrides/{symbol}", s.putSymbolOverride)
 		mux.HandleFunc("DELETE /api/symbol-overrides/{symbol}", s.deleteSymbolOverride)
+	}
+	if s.messageTemplateStore != nil {
+		mux.HandleFunc("GET /api/symbol-message-templates/{symbol}", s.getSymbolMessageTemplates)
+		mux.HandleFunc("PUT /api/symbol-message-templates/{symbol}", s.putSymbolMessageTemplates)
+		mux.HandleFunc("POST /api/symbol-message-templates/{symbol}/preview", s.previewSymbolMessageTemplate)
 	}
 
 	// Economic calendar

@@ -22,18 +22,17 @@ Forex・米国株・暗号資産を調べるセルフホスト型リサーチワ
 
 ## 新しくなったこと
 
-**最新の正式リリース：[v2.14.0.0 — Forex analysis and a broader research workspace](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.14.0.0)**
+**最新の正式リリース：[v2.15.0.0 — Forex watchlist profiles and Telegram wording](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.15.0.0)**
 
-キー不要のForexデータ、セッションに沿ったICT表示とpips単位のバックテスト、AI設定ガイドを追加しました。
+Forexのウォッチリストに資産別の通知プロファイルを適用し、銘柄ごとにLONG/SHORTのTelegram文面を保存できます。
 
 **今回のリリースに含まれる改善**
 
-- Yahooを既定とするForexデータ、任意のOANDAローソク足、スプレッドを反映したバックテスト
-- 読み取り専用のHTF機会結果と区分別成績。ペナルティの自動調整は無効のまま
-- AI設定ガイド、認証付きリモートサーバープロファイル、設定とナビゲーションの改善
-- ペーパー取引アダプター開発向けの実験的な注文プラグインキット
+- ICT/SMC、一般テクニカル分析、ローソク足ルールを含むForex既定プロファイル。明示的に設定したプロファイルは保持されます。
+- 銘柄ごとのLONG/SHORT Telegram文面を固定サンプルでプレビューし、明示的に保存または方向別にリセットできます。
+- 文面がない通知は従来どおりです。既存DBを置き換えず、専用テーブルを自動作成します。
 
-更新する方は、サーバーを再起動する前に[リリースノート](docs/releases/v2.14.0.0.md)と[Forexガイド](docs/FOREX.md)を確認してください。
+更新する方は、サーバー再起動前に[リリースノート](docs/releases/v2.15.0.0.md)と[設定ガイド](SETTINGS.md)を確認してください。
 
 ## 始める
 

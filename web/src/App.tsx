@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
+import { SymbolMessageTemplateEditor } from './SymbolMessageTemplateEditor'
 import { WorkspaceProvider, useWorkspace } from './Workspace'
 import { WorkspaceNav, pageKeys } from './WorkspaceNav'
 import { MarketDataStatus, useMarketData } from './MarketDataStatus'
@@ -591,9 +592,9 @@ export function SymbolsTab() {
               <button
                 onClick={() => setExpandedSymbol(prev => prev === sym.symbol ? null : sym.symbol)}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '1rem', padding: '0 4px' }}
-                title="Custom alert overrides"
+                title={t('messageTemplate.expand')}
                 aria-expanded={expandedSymbol === sym.symbol}
-                aria-label={expandedSymbol === sym.symbol ? 'Collapse override editor' : 'Expand override editor'}
+                aria-label={expandedSymbol === sym.symbol ? t('messageTemplate.collapse') : t('messageTemplate.expand')}
               >
                 {expandedSymbol === sym.symbol ? '▼' : '▶'}
               </button>
@@ -603,10 +604,10 @@ export function SymbolsTab() {
           {expandedSymbol === sym.symbol && (() => {
             const profileName = symbolProfiles[sym.symbol] ?? ''
             const profileObj = profiles.find(p => p.name === profileName)
-            if (!profileObj) return null
             return (
               <div style={{ padding: '8px 16px 16px' }}>
-                <SymbolOverrideEditor symbol={sym.symbol} profile={profileObj} />
+                {profileObj && <SymbolOverrideEditor symbol={sym.symbol} profile={profileObj} />}
+                <SymbolMessageTemplateEditor key={sym.symbol} symbol={sym.symbol} />
               </div>
             )
           })()}

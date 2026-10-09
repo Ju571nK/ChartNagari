@@ -22,18 +22,17 @@
 
 ## 무엇이 달라졌나요?
 
-**최신 정식 릴리즈: [v2.14.0.0 — Forex analysis and a broader research workspace](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.14.0.0)**
+**최신 정식 릴리즈: [v2.15.0.0 — Forex watchlist profiles and Telegram wording](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.15.0.0)**
 
-키 없이 시작하는 외환 데이터, 세션 기반 ICT 차트 정보와 핍 단위 백테스트, AI 설정 안내가 추가되었습니다.
+외환 관심 종목에 자산별 알림 프로필을 적용하고, 종목별 LONG/SHORT Telegram 문구를 저장할 수 있습니다.
 
 **이번 릴리즈에 포함된 개선**
 
-- 기본 Yahoo 외환 데이터와 선택형 OANDA 캔들, 스프레드를 반영한 외환 백테스트
-- 읽기 전용 HTF 기회 결과와 구간별 성과; 자동 페널티 보정은 아직 비활성화
-- AI 설정 안내, 인증된 원격 서버 프로필, 개선된 설정·탐색 화면
-- 모의 어댑터 개발을 위한 실험적 주문 플러그인 개발자 키트
+- ICT/SMC·일반 기술 분석·캔들스틱 규칙을 포함한 외환 기본 프로필; 직접 설정한 프로필은 보존됩니다.
+- 종목별 LONG/SHORT Telegram 문구를 미리 보고 명시적으로 저장하거나 방향별로 초기화할 수 있습니다.
+- 해당 문구가 없는 알림은 기존 형식을 유지하며, 기존 DB를 교체하지 않고 별도 테이블을 자동 생성합니다.
 
-기존 사용자는 서버를 재시작하기 전에 [릴리즈 노트](docs/releases/v2.14.0.0.md)와 [외환 안내](docs/FOREX.md)를 확인하세요.
+기존 사용자는 서버를 재시작하기 전에 [릴리즈 노트](docs/releases/v2.15.0.0.md)와 [설정 안내](SETTINGS.md)를 확인하세요.
 
 ## 시작하기
 

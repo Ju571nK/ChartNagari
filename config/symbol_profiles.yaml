@@ -1,6 +1,13 @@
 default_profile: large_cap_stock
 
 profiles:
+  forex:
+    allowed_methodologies: [ict, smc, general_ta, candlestick]
+    blocked_methodologies: [wyckoff]
+    alert_limit_per_day: 3
+    cooldown_hours: 4
+    score_threshold: 12.0
+
   crypto:
     allowed_methodologies: [ict, smc, general_ta, candlestick]
     blocked_methodologies: [wyckoff]

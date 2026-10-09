@@ -19,6 +19,11 @@ const demoSymbols = [
   ...['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD', 'XAUUSD'].map(symbol => ({ symbol, enabled: true, type: 'forex', exchange: 'FX' })),
   { symbol: DEMO_SYMBOL, enabled: true, type: 'crypto', exchange: 'binance' },
 ]
+const demoProfiles = [
+  { name: 'forex', allowed_methodologies: ['ict', 'smc', 'general_ta', 'candlestick'], blocked_methodologies: ['wyckoff'], allowed_rules: [], alert_limit_per_day: 3, cooldown_hours: 4, score_threshold: 12 },
+  { name: 'crypto', allowed_methodologies: ['ict', 'smc', 'general_ta', 'candlestick'], blocked_methodologies: ['wyckoff'], allowed_rules: [], alert_limit_per_day: 3, cooldown_hours: 6, score_threshold: 12 },
+]
+const demoProfileSelections = new Map<string, string>()
 
 interface DemoBar {
   time: number
@@ -214,7 +219,12 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
   if (path === '/status') return jsonResponse({ phase: 'demo', running: false })
   if (path === '/vix/current') return noContent()
   if (path.startsWith('/wyckoff/')) return jsonResponse({ events: [] })
-  if (path.startsWith('/profiles/')) return jsonResponse({})
+  if (path === '/profiles') return jsonResponse(demoProfiles)
+  if (path.startsWith('/profiles/')) {
+    const symbol = decodeURIComponent(path.slice('/profiles/'.length))
+    const name = demoProfileSelections.get(symbol) ?? (DEMO_FX.some(item => item === symbol) ? 'forex' : 'crypto')
+    return jsonResponse({ symbol, profile: name, detail: demoProfiles.find(profile => profile.name === name) })
+  }
 
   // Object-shaped endpoints whose consumers dereference fields — an empty
   // array here would crash the tab (ExecutionTab: config.plugins.map,
@@ -265,6 +275,13 @@ export function installDemoApi(): void {
 
     const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
     if (method !== 'GET') {
+      if (method === 'PUT' && pathname.startsWith('/api/profiles/')) {
+        const symbol = decodeURIComponent(pathname.slice('/api/profiles/'.length))
+        const body = JSON.parse(String(init?.body ?? '{}')) as { profile?: string }
+        if (!demoProfiles.some(profile => profile.name === body.profile)) return new Response('unknown profile', { status: 400 })
+        demoProfileSelections.set(symbol, body.profile!)
+        return noContent()
+      }
       if (pathname === '/api/forex/test-connection') return jsonResponse({ ok: true, message: 'Demo sample', provider: 'yahoo' })
       // The onboarding scan POST expects JSON on 2xx but treats 503 as the
       // graceful "LLM unavailable — scan still completes" path. Use that.

@@ -92,6 +92,7 @@ func main() {
 	log.Info().Str("path", cfg.DBPath).Msg("SQLite connected")
 
 	overrideStore := storage.NewSymbolOverrideStore(db)
+	messageTemplateStore := storage.NewSymbolMessageTemplateStore(db)
 
 	// Signal performance tracking (v2.9).
 	markStore := storage.NewSignalMarkStore(db)
@@ -230,6 +231,7 @@ func main() {
 		profilesCfg = appconfig.SymbolProfilesConfig{}
 	}
 	profileHolder := appconfig.NewSymbolProfilesHolder(profilesCfg)
+	profileHolder.SetWatchlist(cfg.Watchlist)
 	log.Info().
 		Int("profiles", len(profilesCfg.Profiles)).
 		Int("overrides", len(profilesCfg.SymbolOverrides)).
@@ -253,7 +255,7 @@ func main() {
 	notif.WithMarkStore(markStore)
 
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
-		notif.Register(notifier.NewTelegramSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID))
+		notif.Register(notifier.NewTelegramSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID).WithTemplateStore(messageTemplateStore))
 		log.Info().Msg("Telegram notifications enabled")
 	}
 	if cfg.Discord.WebhookURL != "" {
@@ -515,7 +517,10 @@ func main() {
 		}
 		return copy
 	})
-	apiSrv.WithWatchlistChanged(watchRuntime.Update)
+	apiSrv.WithWatchlistChanged(func(wl appconfig.WatchlistConfig) {
+		profileHolder.SetWatchlist(wl)
+		watchRuntime.Update(wl)
+	})
 	apiSrv.WithSettingsFile("config/settings.yaml")
 	apiSrv.WithStartupSettings(cfg.StartupSettings)
 	apiSrv.WithRemoteAccess(cfg.StartupSettings["REMOTE_ACCESS"] == "true")
@@ -537,6 +542,7 @@ func main() {
 	apiSrv.WithSymbolProfiles(profileHolder)
 	apiSrv.WithSignalTuningHolder(tuningHolder)
 	apiSrv.WithOverrideStore(overrideStore)
+	apiSrv.WithMessageTemplateStore(messageTemplateStore)
 	validRules := make(map[string]struct{}, len(cfg.Rules.Rules))
 	for _, r := range cfg.Rules.Rules {
 		validRules[r.Name] = struct{}{}

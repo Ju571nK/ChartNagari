@@ -37,13 +37,38 @@ type SymbolProfilesConfig struct {
 
 // SymbolProfilesHolder provides thread-safe access to symbol profile configuration.
 type SymbolProfilesHolder struct {
-	mu  sync.RWMutex
-	cfg SymbolProfilesConfig
+	mu           sync.RWMutex
+	cfg          SymbolProfilesConfig
+	forexSymbols map[string]struct{}
+}
+
+// DefaultForexProfile is used for registered Forex symbols when no profile was selected.
+func DefaultForexProfile() Profile {
+	return Profile{
+		AllowedMethodologies: []string{"ict", "smc", "general_ta", "candlestick"},
+		BlockedMethodologies: []string{"wyckoff"},
+		ScoreThreshold:       12,
+		CooldownHours:        4,
+		AlertLimitPerDay:     3,
+	}
+}
+
+func withForexDefault(cfg SymbolProfilesConfig) SymbolProfilesConfig {
+	if _, ok := cfg.Profiles["forex"]; ok {
+		return cfg
+	}
+	profiles := make(map[string]Profile, len(cfg.Profiles)+1)
+	for name, profile := range cfg.Profiles {
+		profiles[name] = profile
+	}
+	profiles["forex"] = DefaultForexProfile()
+	cfg.Profiles = profiles
+	return cfg
 }
 
 // NewSymbolProfilesHolder creates a holder with the given initial config.
 func NewSymbolProfilesHolder(cfg SymbolProfilesConfig) *SymbolProfilesHolder {
-	return &SymbolProfilesHolder{cfg: cfg}
+	return &SymbolProfilesHolder{cfg: withForexDefault(cfg)}
 }
 
 // Get returns the current configuration.
@@ -57,7 +82,28 @@ func (h *SymbolProfilesHolder) Get() SymbolProfilesConfig {
 func (h *SymbolProfilesHolder) Set(cfg SymbolProfilesConfig) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.cfg = cfg
+	h.cfg = withForexDefault(cfg)
+}
+
+// SetWatchlist refreshes the registered Forex symbols used for default resolution.
+func (h *SymbolProfilesHolder) SetWatchlist(wl WatchlistConfig) {
+	symbols := make(map[string]struct{}, len(wl.Symbols.Forex))
+	for _, entry := range wl.Symbols.Forex {
+		symbols[strings.ToUpper(entry.Symbol)] = struct{}{}
+	}
+	h.mu.Lock()
+	h.forexSymbols = symbols
+	h.mu.Unlock()
+}
+
+func (h *SymbolProfilesHolder) profileName(symbol string) string {
+	if override, ok := h.cfg.SymbolOverrides[symbol]; ok && override.Profile != "" {
+		return override.Profile
+	}
+	if _, ok := h.forexSymbols[strings.ToUpper(symbol)]; ok {
+		return "forex"
+	}
+	return h.cfg.DefaultProfile
 }
 
 // GetProfile returns the profile for a given symbol. If the symbol has an override,
@@ -66,17 +112,14 @@ func (h *SymbolProfilesHolder) Set(cfg SymbolProfilesConfig) {
 func (h *SymbolProfilesHolder) GetProfile(symbol string) Profile {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return getProfile(h.cfg, symbol)
+	return h.cfg.Profiles[h.profileName(symbol)]
 }
 
 // GetProfileName returns the profile name assigned to a symbol.
 func (h *SymbolProfilesHolder) GetProfileName(symbol string) string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if override, ok := h.cfg.SymbolOverrides[symbol]; ok {
-		return override.Profile
-	}
-	return h.cfg.DefaultProfile
+	return h.profileName(symbol)
 }
 
 // SetSymbolProfile sets the profile override for a symbol.
@@ -118,7 +161,7 @@ func (h *SymbolProfilesHolder) ProfileNames() []string {
 // getProfile resolves the effective profile for a symbol from the config.
 func getProfile(cfg SymbolProfilesConfig, symbol string) Profile {
 	profileName := cfg.DefaultProfile
-	if override, ok := cfg.SymbolOverrides[symbol]; ok {
+	if override, ok := cfg.SymbolOverrides[symbol]; ok && override.Profile != "" {
 		profileName = override.Profile
 	}
 	if p, ok := cfg.Profiles[profileName]; ok {

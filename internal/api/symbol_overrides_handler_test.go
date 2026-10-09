@@ -41,6 +41,27 @@ func newTestServer(t *testing.T, apiToken string) (*Server, *storage.SymbolOverr
 	return s, store
 }
 
+func TestForexProfileAPIUsesRuntimeHolder(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	var wl appconfig.WatchlistConfig
+	wl.Symbols.Forex = []appconfig.SymbolEntry{{Symbol: "EURUSD"}}
+	s.profileHolder.SetWatchlist(wl)
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles/EURUSD", nil)
+	req.SetPathValue("symbol", "EURUSD")
+	w := httptest.NewRecorder()
+	s.getSymbolProfile(w, req)
+	var got SymbolProfileResponse
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Profile != "forex" || got.Detail.CooldownHours != 4 || got.Detail.ScoreThreshold != 12 {
+		t.Errorf("API Forex profile = %+v", got)
+	}
+	if eff := appconfig.EffectiveAlertConfig("EURUSD", s.profileHolder, s.overrideStore); eff.CooldownHours != got.Detail.CooldownHours {
+		t.Errorf("runtime profile cooldown = %d, API = %d", eff.CooldownHours, got.Detail.CooldownHours)
+	}
+}
+
 func TestGetSymbolOverride_Empty(t *testing.T) {
 	// GET with no override stored must return the merged effective shape
 	// ({value, source}) so the React editor can read it without a PUT first.

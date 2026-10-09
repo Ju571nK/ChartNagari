@@ -123,13 +123,13 @@ func TestProfileIsSignalAllowed(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "empty profile allows everything",
+			name:    "empty profile allows everything",
 			profile: Profile{},
 			rule:    "ict_order_block",
 			want:    true,
 		},
 		{
-			name:    "blocked methodology takes precedence over allowed rules",
+			name: "blocked methodology takes precedence over allowed rules",
 			profile: Profile{
 				AllowedRules:         []string{"wyckoff_spring"},
 				BlockedMethodologies: []string{"wyckoff"},
@@ -170,13 +170,13 @@ func TestGetProfile(t *testing.T) {
 	}
 
 	tests := []struct {
-		symbol         string
-		wantCooldown   int
-		wantThreshold  float64
+		symbol        string
+		wantCooldown  int
+		wantThreshold float64
 	}{
-		{"BTCUSDT", 6, 12.0},       // has override
-		{"SPY", 8, 10.0},           // uses default
-		{"UNKNOWN", 8, 10.0},       // uses default
+		{"BTCUSDT", 6, 12.0}, // has override
+		{"SPY", 8, 10.0},     // uses default
+		{"UNKNOWN", 8, 10.0}, // uses default
 	}
 
 	for _, tt := range tests {
@@ -240,7 +240,7 @@ func TestSymbolProfilesHolder(t *testing.T) {
 	cfg := SymbolProfilesConfig{
 		DefaultProfile: "large_cap_stock",
 		Profiles: map[string]Profile{
-			"crypto":         {CooldownHours: 6},
+			"crypto":          {CooldownHours: 6},
 			"large_cap_stock": {CooldownHours: 8},
 		},
 		SymbolOverrides: map[string]SymbolOverride{},
@@ -265,8 +265,74 @@ func TestSymbolProfilesHolder(t *testing.T) {
 
 	// ProfileNames
 	names := h.ProfileNames()
-	if len(names) != 2 {
-		t.Errorf("ProfileNames() len = %d, want 2", len(names))
+	if len(names) != 3 {
+		t.Errorf("ProfileNames() len = %d, want 3", len(names))
+	}
+}
+
+func TestForexProfileResolvesOnlyRegisteredSymbols(t *testing.T) {
+	spread := 1.5
+	h := NewSymbolProfilesHolder(SymbolProfilesConfig{
+		DefaultProfile: "stock",
+		Profiles: map[string]Profile{
+			"stock":     {CooldownHours: 8},
+			"custom_fx": {CooldownHours: 2},
+		},
+		SymbolOverrides: map[string]SymbolOverride{
+			"USDJPY": {Profile: "custom_fx"},
+			"JPYUSD": {SpreadPips: &spread},
+		},
+	})
+	var wl WatchlistConfig
+	for _, symbol := range []string{"EURUSD", "USDJPY", "JPYUSD", "XAUUSD"} {
+		wl.Symbols.Forex = append(wl.Symbols.Forex, SymbolEntry{Symbol: symbol, Enabled: true})
+	}
+	h.SetWatchlist(wl)
+	for _, symbol := range []string{"EURUSD", "JPYUSD", "XAUUSD"} {
+		if got := h.GetProfileName(symbol); got != "forex" {
+			t.Errorf("%s profile = %q, want forex", symbol, got)
+		}
+		p := h.GetProfile(symbol)
+		if p.ScoreThreshold != 12 || p.CooldownHours != 4 || p.AlertLimitPerDay != 3 || p.IsSignalAllowed("wyckoff_spring") || !p.IsSignalAllowed("ict_order_block") {
+			t.Errorf("%s effective Forex profile = %+v", symbol, p)
+		}
+	}
+	if got := h.GetProfileName("USDJPY"); got != "custom_fx" {
+		t.Errorf("manual Forex selection = %q", got)
+	}
+	if got := h.SpreadOverride("JPYUSD"); got == nil || *got != spread {
+		t.Errorf("spread-only override = %v", got)
+	}
+	if got := h.GetProfileName("ABCDEF"); got != "stock" {
+		t.Errorf("six-letter stock profile = %q", got)
+	}
+	next := WatchlistConfig{}
+	next.Symbols.Forex = []SymbolEntry{{Symbol: "USDJPY"}, {Symbol: "ABCDEF"}}
+	h.SetWatchlist(next)
+	if got := h.GetProfileName("EURUSD"); got != "stock" {
+		t.Errorf("removed Forex profile = %q", got)
+	}
+	if got := h.GetProfileName("ABCDEF"); got != "forex" {
+		t.Errorf("newly registered Forex profile = %q", got)
+	}
+	if got := h.GetProfileName("USDJPY"); got != "custom_fx" {
+		t.Errorf("manual selection after watchlist refresh = %q", got)
+	}
+}
+
+func TestForexProfileKeepsCustomDefinitionAndLegacyConfig(t *testing.T) {
+	cfg := SymbolProfilesConfig{DefaultProfile: "stock", Profiles: map[string]Profile{"stock": {CooldownHours: 9}}}
+	h := NewSymbolProfilesHolder(cfg)
+	if cfg.Profiles["forex"].CooldownHours != 0 {
+		t.Fatal("constructor mutated caller config")
+	}
+	if h.Get().Profiles["stock"].CooldownHours != 9 || h.Get().Profiles["forex"].CooldownHours != 4 {
+		t.Fatal("legacy profile defaults were not merged")
+	}
+	cfg.Profiles["forex"] = Profile{CooldownHours: 7}
+	h.Set(cfg)
+	if got := h.Get().Profiles["forex"].CooldownHours; got != 7 {
+		t.Errorf("custom Forex profile overwritten: %d", got)
 	}
 }
 

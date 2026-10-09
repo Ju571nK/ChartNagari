@@ -37,7 +37,27 @@ Yahoo fallback. Changing the effective provider purges existing FX candles and
 starts a new backfill because candle alignment differs.
 
 Read the [Forex guide](docs/FOREX.md) for supported pairs, metal proxy symbols,
-pip conventions, sessions and backtest limitations.
+pip conventions, sessions, backtest limitations and the Forex analysis/alert
+profile. Forex watchlist symbols use that profile by default unless explicitly
+overridden; older settings receive the same runtime default. Custom profiles
+and explicit selections remain in effect. The profile filters analysis rules
+and alert behavior, independently of market asset classification. Its
+configurable operational defaults are score threshold 12, cooldown 4 hours and
+at most 3 alerts per day; they are not optimized trading advice.
+
+For per-symbol Telegram wording, expand a symbol in **Symbols** and edit its
+LONG and SHORT notes separately. The supported fields are `{종목}`, `{시간봉}`,
+`{방향}`, `{진입가}`, `{TP}`, `{SL}`, `{점수}`, `{근거}` and their English aliases
+`{symbol}`, `{timeframe}`, `{direction}`, `{entry}`, `{tp}`, `{sl}`, `{score}`,
+`{reason}`. Preview uses fixed sample values and sends nothing. **Save wording**
+persists both directions; resetting a direction to empty takes effect only after
+Save. The optional note is appended to the existing Telegram signal and risk
+details, and affects only that symbol and direction. These templates live in
+SQLite separately from profile/alert overrides; existing override saves or
+resets do not erase them. The API uses `GET` and `PUT` at
+`/api/symbol-message-templates/{symbol}`, and `POST` at
+`/api/symbol-message-templates/{symbol}/preview`, subject to normal API bearer
+authentication. Each template is limited to 500 Unicode characters.
 
 Economic-calendar signal annotations use `CALENDAR_FX_ALERT_WINDOW` for FX
 pairs (default 60 minutes). The existing `CALENDAR_ALERT_WINDOW` remains

@@ -432,6 +432,7 @@
   "not_verified": "찾을 수 없음 — 직접 입력하세요",
   "profile": "시그널 프로파일",
   "profile_crypto": "암호화폐",
+  "profile_forex": "외환",
   "profile_large_cap_stock": "대형주",
   "profile_small_cap_stock": "소형주",
   "signal_profile": "시그널 프로파일",
@@ -783,5 +784,23 @@
     "environment_live": "실거래",
     "saveEffect": "FX 제공자를 변경하면 해당 소스의 FX 캔들을 다시 구성하므로 시간이 걸릴 수 있습니다.",
     "settingsRestart": "설정은 config/settings.yaml에 저장됩니다. 외환 제공자 변경은 즉시 적용되며, 다른 데이터 소스는 서버 재시작이 필요할 수 있습니다."
+  },
+  "messageTemplate": {
+    "expand": "알림 설정 및 Telegram 문구 펼치기",
+    "collapse": "알림 설정 및 Telegram 문구 접기",
+    "heading": "Telegram 알림 문구",
+    "description": "이 종목의 LONG 또는 SHORT Telegram 알림에 문구를 추가합니다. 기본 신호와 위험 정보는 유지됩니다. 비우면 기본 알림을 사용합니다. 저장 버튼을 눌러야 반영됩니다.",
+    "direction": "알림 방향",
+    "editor": "{{direction}} 메시지 문구",
+    "length": "{{count}} / 500자",
+    "tokens": "항목: {종목} 종목, {시간봉} 시간봉, {방향} 방향, {진입가} 진입가, {TP} 익절가, {SL} 손절가, {점수} 점수, {근거} 신호 근거.",
+    "aliases": "영문 별칭: {symbol}, {timeframe}, {direction}, {entry}, {tp}, {sl}, {score}, {reason}.",
+    "sample": "미리보기는 현재 시세가 아닌 고정 예시값을 사용하며 메시지를 실제로 보내지 않습니다.",
+    "omitted": "전체 Telegram 메시지가 4,096자를 넘어서 사용자 문구가 생략되었습니다.",
+    "demoUnavailable": "Telegram 문구는 연결된 서버가 필요하며 정적 데모에서는 사용할 수 없습니다.",
+    "reset": "이 방향을 기본값으로",
+    "preview": "미리보기",
+    "save": "문구 저장",
+    "saved": "문구가 저장되었습니다"
   }
 }

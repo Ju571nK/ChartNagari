@@ -432,6 +432,7 @@
   "not_verified": "見つかりません — 手動で入力してください",
   "profile": "シグナルプロファイル",
   "profile_crypto": "暗号通貨",
+  "profile_forex": "外国為替",
   "profile_large_cap_stock": "大型株",
   "profile_small_cap_stock": "小型株",
   "signal_profile": "シグナルプロファイル",
@@ -783,5 +784,23 @@
     "environment_live": "ライブ",
     "saveEffect": "FX提供元の変更後は、その取得元からFXローソク足を再構築するため時間がかかる場合があります。",
     "settingsRestart": "設定は config/settings.yaml に保存されます。FX提供元の変更はすぐに適用されますが、他のデータソースはサーバーの再起動が必要な場合があります。"
+  },
+  "messageTemplate": {
+    "expand": "通知設定とTelegram文面を開く",
+    "collapse": "通知設定とTelegram文面を閉じる",
+    "heading": "Telegram通知文",
+    "description": "この銘柄のLONGまたはSHORT通知に文章を追加します。標準のシグナルとリスク情報は維持されます。空欄なら標準通知を使います。保存ボタンを押すまで反映されません。",
+    "direction": "通知方向",
+    "editor": "{{direction}} メッセージ文",
+    "length": "{{count}} / 500文字",
+    "tokens": "項目: {종목} 銘柄、{시간봉} 時間足、{방향} 方向、{진입가} エントリー価格、{TP} 利確、{SL} 損切り、{점수} スコア、{근거} シグナル理由。",
+    "aliases": "英語の別名: {symbol}, {timeframe}, {direction}, {entry}, {tp}, {sl}, {score}, {reason}。",
+    "sample": "プレビューは現在の市場価格ではなく固定サンプル値を使い、メッセージを送信しません。",
+    "omitted": "Telegramメッセージ全体が4,096文字を超えるため、追加文は省略されました。",
+    "demoUnavailable": "Telegram通知文には接続中のサーバーが必要です。静的デモでは利用できません。",
+    "reset": "この方向を標準に戻す",
+    "preview": "プレビュー",
+    "save": "文面を保存",
+    "saved": "文面を保存しました"
   }
 }

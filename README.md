@@ -22,18 +22,17 @@ English, Korean and Japanese interfaces are available. AI interpretation is opti
 
 ## What's new
 
-**Latest release: [v2.14.0.0 — Forex analysis and a broader research workspace](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.14.0.0)**
+**Latest release: [v2.15.0.0 — Forex watchlist profiles and Telegram wording](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.15.0.0)**
 
-Keyless Forex candles, session-aware ICT context and pip-based backtests, with guided AI setup and clearer workspace controls.
+Forex watchlists now get an asset-aware alert profile, and Telegram alerts can include saved LONG/SHORT notes per symbol.
 
 **Included in this release**
 
-- Yahoo FX by default, optional eligible OANDA candles, and spread-adjusted FX backtests.
-- Read-only HTF opportunity outcomes and bucket performance; automatic calibration remains off.
-- Guided AI setup, authenticated remote server profiles and refined settings/navigation.
-- Experimental order plugin developer kit for paper adapter development.
+- Forex watchlist defaults for ICT/SMC, general TA and candlestick rules, with user profiles preserved.
+- Optional per-symbol LONG/SHORT Telegram notes with fixed-sample preview and explicit save/reset.
+- Existing alerts remain unchanged when no note matches; database setup adds a separate table without replacing existing data.
 
-Upgrading? Read the [release notes](docs/releases/v2.14.0.0.md) and [Forex guide](docs/FOREX.md) before restarting your server.
+Upgrading? Read the [release notes](docs/releases/v2.15.0.0.md) and [settings guide](SETTINGS.md) before restarting your server.
 
 ## Get started
 

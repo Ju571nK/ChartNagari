@@ -14,6 +14,38 @@ Format:
 
 ---
 
+## [2.15.0.0] - 2026-10-09
+
+### Added
+- Forex watchlist symbols receive an asset-aware default alert profile: ICT,
+  SMC, general TA and candlestick rules, a score threshold of 12, a four-hour
+  cooldown and a limit of three alerts per UTC day. Explicit profile selections,
+  custom profile definitions and spread overrides are preserved. Older profile
+  files receive the built-in Forex profile at runtime if it is missing. Forex
+  dropdowns and the sample-data demo are localized.
+- Optional per-symbol LONG and SHORT Telegram plain-text notes. Expand a symbol
+  in Symbols, choose a direction, preview a fixed sample, then explicitly save
+  or reset that direction. English and Korean placeholder aliases are supported;
+  notes are limited to 500 Unicode characters. Notes use a separate persistent
+  SQLite table that is created automatically without a destructive migration.
+
+### Changed
+- Telegram notes append to the existing core alert only for the matching symbol
+  and LONG/SHORT direction. Unset notes and other symbols or directions,
+  including NEUTRAL, retain the exact baseline alert. Escaped placeholder values
+  are supported; if the complete added note exceeds the conservative 4,096
+  UTF-16-unit source guard, only that note is omitted.
+- Preview uses fixed sample values, never current prices, and never sends a
+  Telegram message. Existing authorization applies to template reads, saves and
+  previews. Stale preview results and failures are discarded after edits,
+  direction changes, saves or symbol changes.
+
+### Docs
+- Added a settings guide for per-symbol Telegram notes and release upgrade notes
+  covering preservation of existing configs and databases.
+
+---
+
 ## [2.14.0.0] - 2026-10-09
 
 ### Added

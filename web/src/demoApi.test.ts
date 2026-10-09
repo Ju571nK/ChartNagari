@@ -239,7 +239,10 @@ describe('route: object endpoints and fallbacks', () => {
     expect(await (await window.fetch('/api/env/config')).json()).toEqual({})
     expect(await (await window.fetch('/api/status')).json()).toEqual({ phase: 'demo', running: false })
     expect(await (await window.fetch('/api/wyckoff/DEMO_BTC/1D')).json()).toEqual({ events: [] })
-    expect(await (await window.fetch('/api/profiles/DEMO_BTC')).json()).toEqual({})
+    expect((await (await window.fetch('/api/profiles/DEMO_BTC')).json()).profile).toBe('crypto')
+    expect((await (await window.fetch('/api/profiles/EURUSD')).json()).profile).toBe('forex')
+    await window.fetch('/api/profiles/EURUSD', { method: 'PUT', body: JSON.stringify({ profile: 'crypto' }) })
+    expect((await (await window.fetch('/api/profiles/EURUSD')).json()).profile).toBe('crypto')
     // Consumers dereference these shapes (ExecutionTab: config.plugins.map,
     // MyTradesTab: rollup.rows.length) — assert the crash-proof fields exist.
     const execConfig = await (await window.fetch('/api/execution/config')).json()

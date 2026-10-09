@@ -23,6 +23,39 @@ settings file when upgrading.
 The static browser demo uses bundled sample data; it does not connect to Yahoo or
 OANDA.
 
+## Forex analysis and alert profile
+
+Watchlist Forex entries use the Forex analysis/alert profile by default unless
+the symbol has an explicit profile override. This also applies at runtime to
+older settings that do not contain the new profile setting. Existing custom
+profiles and explicit profile selections are preserved. The profile filters
+analysis rules and controls alert behavior; it does not classify the market
+asset. Manually choosing a stock profile for a symbol such as `USDJPY` does not
+turn that FX market into a stock.
+
+The Forex profile supports ICT, SMC, general_ta and candlestick methods;
+Wyckoff is excluded. Its operational defaults are score threshold 12, cooldown
+4 hours and a cap of 3 alerts per day. These values are configurable defaults
+for operating the alert filter, not optimized trading advice or a promise of
+alert quality. Alerts provide analysis only; ChartNagari does not place FX
+orders.
+
+To add Forex-specific Telegram wording, expand the symbol in **Symbols** and
+edit the LONG or SHORT note, preview with fixed sample prices, then select
+**Save wording**. The note supports `{종목}` / `{symbol}`, `{진입가}` / `{entry}`,
+`{TP}` / `{tp}`, `{SL}` / `{sl}` and the other fields listed in
+[settings](../SETTINGS.md). The preview never sends a Telegram message. Empty
+text restores the standard alert after Save. Wording is independent of the
+Forex profile, alert limits and timeframes; standard signal and risk details
+remain in the alert.
+
+Read the quote direction before interpreting a pair. `USDJPY` is JPY per USD:
+for example, 150 means 1 USD is worth 150 JPY, and a rising quote means a weaker
+yen against the dollar. `JPYUSD` is USD per JPY, so a rising quote means a
+stronger yen against the dollar. Residence in Japan does not determine quote
+orientation; USDJPY is the conventional Japan broker quote, as shown in OANDA
+Japan's [instrument list](https://www.oanda.jp/lab-education/instruments/).
+
 ![Forex sample workflow](assets/forex-demo.gif)
 
 This short browser recording is a sample/demo of the Forex interface and uses

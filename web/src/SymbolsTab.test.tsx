@@ -59,3 +59,31 @@ it('ignores an old verification response after the symbol changes', async () => 
   expect(screen.queryByText(/Old SPCX/)).not.toBeInTheDocument()
   expect(await screen.findByText(/Tesla/,{}, {timeout:2000})).toBeInTheDocument()
 })
+
+it('shows Forex default and preserves manual profile selection', async () => {
+  const profiles = [
+    { name: 'forex', allowed_methodologies: ['ict', 'smc', 'general_ta', 'candlestick'], blocked_methodologies: ['wyckoff'], alert_limit_per_day: 3, cooldown_hours: 4, score_threshold: 12 },
+    { name: 'large_cap_stock', allowed_methodologies: ['general_ta'], alert_limit_per_day: 2, cooldown_hours: 8, score_threshold: 10 },
+  ]
+  let selected = 'forex'
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const path = String(input)
+    if (path.endsWith('/symbols')) return response([{ symbol: 'EURUSD', type: 'forex', exchange: 'FX', enabled: true }])
+    if (path.endsWith('/profiles')) return response(profiles)
+    if (path.endsWith('/profiles/EURUSD')) {
+      if (init?.method === 'PUT') {
+        selected = JSON.parse(String(init.body)).profile
+        return response({})
+      }
+      return response({ symbol: 'EURUSD', profile: selected, detail: profiles.find(p => p.name === selected) })
+    }
+    return response([])
+  })
+  render(<WorkspaceProvider><SymbolsTab /></WorkspaceProvider>)
+  const dropdown = await screen.findByTitle(i18n.t('profile')) as HTMLSelectElement
+  await waitFor(() => expect(dropdown.value).toBe('forex'))
+  expect(dropdown.querySelector('option[value="forex"]')).toHaveTextContent('Forex')
+  fireEvent.change(dropdown, { target: { value: 'large_cap_stock' } })
+  await waitFor(() => expect(dropdown.value).toBe('large_cap_stock'))
+  expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/profiles/EURUSD') && init?.method === 'PUT')).toBe(true)
+})

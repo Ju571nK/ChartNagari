@@ -6,6 +6,7 @@ package analyst
 
 // AnalystInput bundles the data passed to each analyst.
 type AnalystInput struct {
+	Timeframe        string // selected chart timeframe; empty retains legacy prompt behavior
 	Symbol           string
 	HistorySummary   string             // output from history.Summarizer (~600 tokens)
 	MacroContext     string             // SPY 20-year summary used as S&P 500 backdrop (empty when analyzing SPY itself)

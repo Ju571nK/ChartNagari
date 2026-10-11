@@ -75,10 +75,16 @@ func filterByProfileEffective(signals []models.Signal, profile appconfig.Profile
 }
 
 // filterByTimeframe keeps only signals whose Timeframe is in the allowed list.
-// An empty or nil allowed list means "allow all" (no filtering).
+// Empty or nil preserves the legacy timeframes; 15M requires explicit opt-in.
 func filterByTimeframe(signals []models.Signal, allowed []string) []models.Signal {
 	if len(allowed) == 0 {
-		return signals
+		out := make([]models.Signal, 0, len(signals))
+		for _, sig := range signals {
+			if sig.Timeframe != "15M" {
+				out = append(out, sig)
+			}
+		}
+		return out
 	}
 	allowSet := make(map[string]struct{}, len(allowed))
 	for _, tf := range allowed {

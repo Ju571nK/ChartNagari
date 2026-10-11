@@ -16,8 +16,8 @@ func (r *ThreeWhiteSoldiersRule) Name() string                 { return "three_w
 func (r *ThreeWhiteSoldiersRule) RequiredIndicators() []string { return nil }
 
 func (r *ThreeWhiteSoldiersRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
-	tfs := []string{"1W", "1D", "4H", "1H"}
-	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0}
+	tfs := []string{"1W", "1D", "4H", "1H", "15M"}
+	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0, "15M": 1.0}
 
 	var bestSig *models.Signal
 	var bestWeighted float64
@@ -81,8 +81,8 @@ func (r *ThreeBlackCrowsRule) Name() string                 { return "three_blac
 func (r *ThreeBlackCrowsRule) RequiredIndicators() []string { return nil }
 
 func (r *ThreeBlackCrowsRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
-	tfs := []string{"1W", "1D", "4H", "1H"}
-	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0}
+	tfs := []string{"1W", "1D", "4H", "1H", "15M"}
+	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0, "15M": 1.0}
 
 	var bestSig *models.Signal
 	var bestWeighted float64

@@ -184,10 +184,10 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 		}
 		ctx.AssetClass, ctx.VolumeQuality = assetClass, volumeQuality
 		// Calendar windows are available for every replay timeframe. Exact
-		// Asian highs/lows require hourly history; a 4H-only replay leaves the
+		// Asian highs/lows require intraday history; a 4H-only replay leaves the
 		// range invalid instead of synthesizing it from coarse candles.
 		ctx.Session = market.SessionsAt(bars[i].OpenTime)
-		if timeframe == "1H" {
+		if timeframe == "1H" || timeframe == "15M" {
 			ctx.Session = market.AsianRange(bars[:i+1], bars[i].OpenTime)
 		}
 		signals := eng.Run(ctx)
@@ -294,14 +294,14 @@ func (e *Engine) Run(symbol, timeframe, ruleFilter string, bars []models.OHLCV) 
 	result.Trades = len(result.Outcomes)
 	result.Stats = ComputeStats(result.Outcomes)
 	result.RegimeStats = computeRegimeStats(result.Outcomes, bars)
-	result.EquityCurve = computeEquityCurve(result.Outcomes)
+	result.EquityCurve = computeEquityCurve(result.Outcomes, timeframe)
 	result.FilterImpact = computeFilterImpact(result.Outcomes, e.cfg)
 	return result
 }
 
 // computeEquityCurve builds an equity curve from trade outcomes sorted by entry time.
 // Starting equity is 10000. Each trade compounds the return.
-func computeEquityCurve(outcomes []TradeOutcome) []EquityPoint {
+func computeEquityCurve(outcomes []TradeOutcome, timeframe string) []EquityPoint {
 	if len(outcomes) == 0 {
 		return nil
 	}
@@ -320,13 +320,28 @@ func computeEquityCurve(outcomes []TradeOutcome) []EquityPoint {
 	for _, o := range sorted {
 		equity *= (1.0 + o.PnLPct/100.0)
 		// Use entry time + exit_bars offset as the exit time approximation.
-		exitTime := o.EntryTime.Add(time.Duration(o.ExitBars) * time.Hour)
+		exitTime := o.EntryTime.Add(time.Duration(o.ExitBars) * barDuration(timeframe))
 		curve = append(curve, EquityPoint{
 			Time:  exitTime.Unix(),
 			Value: equity,
 		})
 	}
 	return curve
+}
+
+func barDuration(timeframe string) time.Duration {
+	switch timeframe {
+	case "15M":
+		return 15 * time.Minute
+	case "4H":
+		return 4 * time.Hour
+	case "1D":
+		return 24 * time.Hour
+	case "1W":
+		return 7 * 24 * time.Hour
+	default:
+		return time.Hour
+	}
 }
 
 // sortOutcomesByTime sorts outcomes by EntryTime ascending (in-place).

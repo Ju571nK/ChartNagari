@@ -189,3 +189,19 @@ the [official MCP configuration documentation](https://learn.chatgpt.com/docs/ex
 - The manual fixture reached its old 10-minute timeout after browser checks;
   its lifetime was shortened to 9 minutes to leave cleanup headroom. This fixture
   is opt-in and skipped in the passing normal test suite.
+
+## Forex 15M collection and alerts
+
+15M is optional and Forex-only. In Chart, Analysis or Backtest, select a registered
+Forex symbol and 15M, then enable collection. The UI calls
+`GET /api/watchlist/timeframes` and an authenticated
+`PUT /api/watchlist/timeframes` with `{ "timeframes": ["1H", "4H", "1D", "1W", "15M"] }`.
+The update preserves watchlist symbols and requires at least one standard
+collection timeframe. Existing settings are not automatically migrated or enabled.
+
+To opt into 15M Telegram signal alerts, select 15M in that symbol's alert timeframe
+settings (or explicitly include it in a profile). An empty/inherited timeframe
+list preserves the previous timeframes and excludes 15M. Choosing a new alert
+list restricts notifications to the selected frames, so keep 1H/4H if desired.
+Existing score, cooldown and daily limits still apply; collection alone does not
+turn on 15M notifications. See [Forex details](docs/FOREX.md#optional-15-minute-candles).

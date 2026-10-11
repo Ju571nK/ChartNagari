@@ -186,6 +186,9 @@ func (c *YahooFXCollector) poll(ctx context.Context, initial bool) {
 
 func (c *YahooFXCollector) Fetch(ctx context.Context, entry config.SymbolEntry, tf string) ([]models.OHLCV, error) {
 	params, ok := yahooTFParams[tf]
+	if tf == "15M" {
+		params, ok = [2]string{"15m", "60d"}, true
+	}
 	if !ok {
 		return nil, fmt.Errorf("unsupported timeframe %s", tf)
 	}

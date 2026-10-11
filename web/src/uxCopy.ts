@@ -31,6 +31,6 @@ export function readableRule(rule: string, language = 'en') {
 }
 export function signalRange(time: number, bars: { time: number }[], timeframe: string) {
   if (!bars.length) return 'unavailable' as const
-  const duration = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }[timeframe] ?? 0
+  const duration = { '15M': 900, '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }[timeframe] ?? 0
   return time >= Math.min(...bars.map(b => b.time)) && time < Math.max(...bars.map(b => b.time)) + duration ? 'inRange' as const : 'archive' as const
 }

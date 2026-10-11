@@ -802,5 +802,13 @@
     "preview": "Preview",
     "save": "Save wording",
     "saved": "Wording saved"
+  },
+  "forex15m": {
+    "demo": "15M uses synthetic Forex sample candles in demo.",
+    "enabled": "15M Forex collection enabled. Initial history may take time.",
+    "optIn": "Opt in to 15M collection for Forex watchlist symbols. Other timeframes are preserved.",
+    "enable": "Enable Forex 15M collection",
+    "enabling": "Enabling…",
+    "error": "Collection settings unavailable"
   }
 }

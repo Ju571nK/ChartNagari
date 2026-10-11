@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 import { SymbolOverrideEditor } from './SymbolOverrideEditor'
 import { SymbolMessageTemplateEditor } from './SymbolMessageTemplateEditor'
-import { WorkspaceProvider, useWorkspace } from './Workspace'
+import { WorkspaceProvider, useWorkspace, type Timeframe } from './Workspace'
+import { Forex15MCollection, useForexTimeframe } from './ForexTimeframe'
 import { WorkspaceNav, pageKeys } from './WorkspaceNav'
 import { MarketDataStatus, useMarketData } from './MarketDataStatus'
 import { chartPatterns } from './chartPatterns'
@@ -606,7 +607,7 @@ export function SymbolsTab() {
             const profileObj = profiles.find(p => p.name === profileName)
             return (
               <div style={{ padding: '8px 16px 16px' }}>
-                {profileObj && <SymbolOverrideEditor symbol={sym.symbol} profile={profileObj} />}
+                {profileObj && <SymbolOverrideEditor symbol={sym.symbol} symbolType={sym.type} profile={profileObj} />}
                 <SymbolMessageTemplateEditor key={sym.symbol} symbol={sym.symbol} />
               </div>
             )
@@ -897,7 +898,7 @@ function StatusTab() {
 // ── Chart Tab ─────────────────────────────────────────────────────────────────
 
 const TFS = ['1H', '4H', '1D', '1W'] as const
-type TF = (typeof TFS)[number]
+type TF = Timeframe
 
 const isSessionContextSignal = (signal: SignalBar) =>
   signal.timeframe === 'ALL' && signal.direction === 'NEUTRAL' && signal.rule === 'ict_kill_zone'
@@ -922,6 +923,8 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
   const { t } = useTranslation()
   const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf, navigate } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
+  const selectedIsForex = symbols.some(item => item.symbol === symbol && item.type === 'forex')
+  useForexTimeframe(symbol, tf, setTf, symbols)
   const [marketFilter, setMarketFilter] = useState('all')
   const [sessionsEnabled, setSessionsEnabled] = useState(() => localStorage.getItem('chartnagari_fx_sessions') !== 'false')
   const [chartReady, setChartReady] = useState(0)
@@ -1376,8 +1379,9 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
             marginLeft: 4,
           }}
         >⚙</button>
+        <Forex15MCollection visible={selectedIsForex && tf === '15M'} onEnabled={() => setReload(n => n + 1)} />
         <div className="tf-group">
-          {TFS.map((t) => (
+          {(selectedIsForex ? ['15M', ...TFS] as const : TFS).map((t) => (
             <button
               key={t}
               className={`tf-btn${tf === t ? ' active' : ''}`}
@@ -1600,7 +1604,7 @@ export function ChartTab({ uiMode }: { uiMode: UIMode }) {
                   style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '1.2rem' }}
                 >✕</button>
               </div>
-              <SymbolOverrideEditor symbol={symbol} profile={profileObj} />
+              <SymbolOverrideEditor symbol={symbol} symbolType={symbols.find(item => item.symbol === symbol)?.type} profile={profileObj} />
             </div>
           </div>
         )
@@ -1689,6 +1693,8 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
   const ux = useUXCopy()
   const { symbol, setSymbol, timeframe: tf, setTimeframe: setTf } = useWorkspace()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
+  const selectedIsForex = symbols.some(item => item.symbol === symbol && item.type === 'forex')
+  useForexTimeframe(symbol, tf, setTf, symbols)
   const [marketFilter, setMarketFilter] = useState('all')
   const [rules, setRules] = useState<string[]>([])
   const [ruleFilter, setRuleFilter] = useState('')
@@ -1873,7 +1879,7 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
               text: o.win ? '✓' : '✗',
             })
             // Exit marker — approximate via exit_bars * tf seconds offset
-            const tfSeconds: Record<string, number> = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
+            const tfSeconds: Record<string, number> = { '15M': 900, '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
             const exitTimeSec = (entryTimeSec + o.exit_bars * (tfSeconds[result.timeframe] ?? 3600)) as UTCTimestamp
             markers.push({
               time: exitTimeSec,
@@ -1913,7 +1919,7 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
     btChartRef.current.timeScale().scrollToPosition(0, false)
     btChartRef.current.timeScale().scrollToRealTime()
     // Set visible range to ±20 bars around the entry
-    const tfSeconds: Record<string, number> = { '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
+    const tfSeconds: Record<string, number> = { '15M': 900, '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800 }
     const pad = 20 * (tfSeconds[tf] ?? 3600)
     btChartRef.current.timeScale().setVisibleRange({
       from: (entryTimeSec - pad) as UTCTimestamp,
@@ -1953,8 +1959,9 @@ export function BacktestTab({ uiMode }: { uiMode: UIMode }) {
           {btFilteredSymbols.map((s) => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
         </select>
 
+        <Forex15MCollection visible={selectedIsForex && tf === '15M'} onEnabled={() => setPreparationRevision(n => n + 1)} />
         <div className="tf-group">
-          {TFS.map((t) => (
+          {(selectedIsForex ? ['15M', ...TFS] as const : TFS).map((t) => (
             <button
               key={t}
               className={`tf-btn${tf === t ? ' active' : ''}`}

@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AnalysisTab } from './AnalysisTab'
 import { WorkspaceProvider } from './Workspace'
 import i18n from './i18n'
@@ -53,4 +53,18 @@ describe('Analysis failures', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByText('100.0%')).toBeInTheDocument()
   })
+})
+
+
+it('offersForex15M analysis using the selected symbol inventory', async () => {
+  window.history.replaceState(null, '', '/?view=analysis&symbol=EURUSD&tf=1H')
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => ({
+    ok: true,
+    json: async () => String(input) === '/api/symbols' ? [{ symbol: 'EURUSD', type: 'forex' }] : String(input) === '/api/watchlist/timeframes' ? { timeframes: ['1H'] } : String(input) === '/api/analysis/full' ? { ...legacy, status: 'failed' } : [],
+  }) as Response)
+  render(<WorkspaceProvider><AnalysisTab /></WorkspaceProvider>)
+  expect(await screen.findByRole('option', { name: '15M' })).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('combobox', { name: 'Timeframe' }), { target: { value: '15M' } })
+  fireEvent.click(screen.getByRole('button', { name: /Run Analysis/i }))
+  await waitFor(() => expect(fetcher.mock.calls.some(([url, options]) => String(url) === '/api/analysis/full' && JSON.parse(String(options?.body)).timeframe === '15M')).toBe(true))
 })

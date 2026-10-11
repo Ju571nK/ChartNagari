@@ -44,3 +44,12 @@ describe('workspace navigation', () => {
     expect(screen.getByRole('button', { name: 'Analysis' })).toHaveAttribute('aria-current', 'page')
   })
 })
+
+it('retains Forex15M URLs across workspace navigation and defaults to1H', () => {
+  window.history.replaceState(null, '', '/?view=chart&symbol=EURUSD&tf=15M')
+  render(<WorkspaceProvider><WorkspaceNav /><Probe /></WorkspaceProvider>)
+  fireEvent.click(screen.getByRole('button', { name: 'Backtest' }))
+  expect(readSelection()).toEqual({ page: 'backtest', symbol: 'EURUSD', timeframe: '15M' })
+  window.history.replaceState(null, '', '/')
+  expect(readSelection().timeframe).toBe('1H')
+})

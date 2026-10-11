@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify'
 import { useWorkspace, timeframes } from './Workspace'
 import { MetalSourceNote, StrengthMeter } from './ForexPanels'
 import { isForexSymbol } from './forex'
+import { Forex15MCollection, useForexTimeframe, type TimeframeSymbol } from './ForexTimeframe'
 
 interface ScenarioResult {
   status?: string
@@ -139,6 +140,14 @@ function AnalystPanel({ title, text }: { title: string; text: string }) {
 export function AnalysisTab() {
   const { t } = useTranslation()
   const { symbol, setSymbol, timeframe, setTimeframe } = useWorkspace()
+  const [symbols, setSymbols] = useState<TimeframeSymbol[]>([])
+  useEffect(() => {
+    let active = true
+    getJSON<TimeframeSymbol[]>('/symbols').then(items => { if (active && Array.isArray(items)) setSymbols(items) }).catch(() => {})
+    return () => { active = false }
+  }, [])
+  const selectedIsForex = symbols.some(item => item.symbol === symbol && item.type === 'forex')
+  useForexTimeframe(symbol, timeframe, setTimeframe, symbols)
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [result, setResult] = useState<ScenarioResult | null>(null)
@@ -242,10 +251,12 @@ export function AnalysisTab() {
         <MetalSourceNote symbol={symbol} />
         {isForexSymbol(symbol) && <StrengthMeter />}
 
+        <Forex15MCollection visible={selectedIsForex && timeframe === '15M'} />
+
         {/* Input row */}
         <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
           <select aria-label={t('workspace.timeframe')} value={timeframe} disabled={loading} onChange={e => setTimeframe(e.target.value as typeof timeframe)}>
-            {timeframes.map(tf => <option key={tf}>{tf}</option>)}
+            {timeframes.filter(tf => tf !== '15M' || selectedIsForex).map(tf => <option key={tf}>{tf}</option>)}
           </select>
           <input
             aria-label={t('symbol_col')}

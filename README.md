@@ -22,17 +22,14 @@ English, Korean and Japanese interfaces are available. AI interpretation is opti
 
 ## What's new
 
-**Latest release: [v2.15.0.0 — Forex watchlist profiles and Telegram wording](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.15.0.0)**
+**Latest release: [v2.16.0.0 — Optional Forex 15-minute data](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.16.0.0)**
 
-Forex watchlists now get an asset-aware alert profile, and Telegram alerts can include saved LONG/SHORT notes per symbol.
+Forex pairs can opt into native 15-minute candles for charting, analysis, backtests and explicitly selected 15M alerts. Yahoo requests a 60-day history window (availability depends on Yahoo); OANDA can supply M15 when configured.
 
-**Included in this release**
+- Existing symbols, standard timeframes and alert defaults are preserved. Fifteen-minute alerts require an explicit timeframe choice; scores, cooldowns and daily caps are unchanged.
+- An offline USDJPY study found insufficient evidence to change alert defaults. HTF opportunity diagnostics remain 1H/4H, and automatic penalty calibration remains disabled.
 
-- Forex watchlist defaults for ICT/SMC, general TA and candlestick rules, with user profiles preserved.
-- Optional per-symbol LONG/SHORT Telegram notes with fixed-sample preview and explicit save/reset.
-- Existing alerts remain unchanged when no note matches; database setup adds a separate table without replacing existing data.
-
-Upgrading? Read the [release notes](docs/releases/v2.15.0.0.md) and [settings guide](SETTINGS.md) before restarting your server.
+Upgrading? Preserve your existing settings and database, then restart the server. Read the [release notes](docs/releases/v2.16.0.0.md) for opt-in details and provider limits.
 
 ## Get started
 

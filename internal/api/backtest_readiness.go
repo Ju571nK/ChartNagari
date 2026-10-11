@@ -20,6 +20,9 @@ func (s *Server) getBacktestReadiness(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "symbol and timeframe required", http.StatusBadRequest)
 		return
 	}
+	if !s.allowForex15M(w, symbol, tf) {
+		return
+	}
 	result, err := preparer.Prepare(symbol, tf)
 	if err != nil {
 		http.Error(w, "failed to read backtest history", http.StatusInternalServerError)

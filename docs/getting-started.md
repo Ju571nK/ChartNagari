@@ -1,10 +1,10 @@
 # Getting started / 설치 안내
 
-These instructions target **v2.15.0.0**. Older releases can have
+These instructions target **v2.16.0.0**. Older releases can have
 different configuration behavior. Existing users should read [migration notes](../SETTINGS.md)
 first and must not replace their settings or database with examples. This source
-release preserves existing configs and databases; the Telegram wording table is
-automatically created without a destructive migration.
+release preserves existing configs and databases. Optional Forex 15-minute
+collection is disabled until explicitly enabled for the Forex watchlist; see the [release notes](releases/v2.16.0.0.md).
 
 ## Try without installing
 
@@ -64,8 +64,11 @@ and data directories, not arbitrary host paths.
    with Yahoo candles and needs no API key; see the [Forex guide](FOREX.md) for
    provider, pip, volume and backtest details. Registration does not mean
    historical data is already available; check the chart's data status.
-2. Choose a timeframe in **Chart**. Start in beginner mode; use expert mode to
-   inspect additional overlays.
+2. Choose a timeframe in **Chart**. For a Forex symbol, select **15M** and
+   **Enable 15M collection** to collect that timeframe for enabled Forex symbols.
+   Select 15M separately in the symbol alert settings if you want 15M alerts.
+   Yahoo requests a `60d` history window; actual availability depends on Yahoo. Start in beginner mode; use expert mode to inspect additional
+   overlays.
 3. Connect optional data, AI and notification services in **Settings**.
 4. Restart the relevant process after changing general settings. If API-token
    authentication is enabled, use **Authorize changes** in Settings to save edits.

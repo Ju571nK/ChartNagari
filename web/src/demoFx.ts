@@ -28,16 +28,16 @@ export function ny4HBucket(time: number): number {
 }
 
 const startingPrices: Record<string, number> = { EURUSD: 1.0842, GBPUSD: 1.298, USDJPY: 149.5, USDCHF: 0.908, AUDUSD: 0.676, USDCAD: 1.367, NZDUSD: 0.612, XAUUSD: 2745 }
-function hourly(symbol: string): DemoFxBar[] {
+function hourly(symbol: string, intervalMs = hourMs): DemoFxBar[] {
   const result: DemoFxBar[] = []
   const gold = symbol === 'XAUUSD'
   let last = startingPrices[symbol] ?? 1.0842
-  for (let i = 0; i < 260; i++) {
-    const time = (start + i * hourMs) / 1000
+  for (let i = 0; i < 260 * hourMs / intervalMs; i++) {
+    const time = (start + i * intervalMs) / 1000
     const ny = nyParts(time)
     if (ny.weekday === 'Sat' || (ny.weekday === 'Sun' && ny.hour < 17) || (ny.weekday === 'Fri' && ny.hour >= 17)) continue
     const scale = gold ? 2.4 : symbol.endsWith('JPY') ? 0.065 : 0.00042
-    const step = (Math.sin(i * 0.38 + symbol.length) + Math.cos(i * 0.13) * 0.5) * scale
+    const step = (Math.sin(i * intervalMs / hourMs * 0.38 + symbol.length) + Math.cos(i * intervalMs / hourMs * 0.13) * 0.5) * scale * Math.sqrt(intervalMs / hourMs)
     const close = last + step
     result.push({ time, open: last, high: Math.max(last, close) + scale * 0.5, low: Math.min(last, close) - scale * 0.45, close, volume: 0 })
     last = close
@@ -47,7 +47,9 @@ function hourly(symbol: string): DemoFxBar[] {
 const hourlyCache: Record<string, DemoFxBar[]> = Object.fromEntries(Object.keys(startingPrices).map(symbol => [symbol, hourly(symbol)]))
 
 export function demoFxBars(symbol: string, timeframe: string): DemoFxBar[] {
+  if (timeframe === '15M') return hourly(symbol, 900_000)
   const bars = hourlyCache[symbol]
+  if (!bars) return []
   if (timeframe === '1H') return bars
   if (timeframe === '4H') {
     const grouped = new Map<number, DemoFxBar[]>()
@@ -73,11 +75,11 @@ export function demoFxBars(symbol: string, timeframe: string): DemoFxBar[] {
 
 // Mirrors the shared market session windows using New York local hours.
 // Date parts come from Intl so the same UTC hour moves with DST.
-export function demoFxSessions(symbol: string, from: number, to: number): ForexSession[] {
-  return demoSessionsFromBars(hourlyCache[symbol], from, to)
+export function demoFxSessions(symbol: string, from: number, to: number, timeframe = '1H'): ForexSession[] {
+  return demoSessionsFromBars(timeframe === '15M' ? demoFxBars(symbol, timeframe) : hourlyCache[symbol], from, to, timeframe === '15M' ? 900 : 3600)
 }
 
-export function demoSessionsFromBars(bars: DemoFxBar[], from: number, to: number): ForexSession[] {
+export function demoSessionsFromBars(bars: DemoFxBar[], from: number, to: number, intervalSeconds = 3600): ForexSession[] {
   const groups = new Map<string, ForexSession>()
   for (const bar of bars) {
     if (bar.time < from - 86400 || bar.time > to + 86400) continue
@@ -86,8 +88,8 @@ export function demoSessionsFromBars(bars: DemoFxBar[], from: number, to: number
     if (!name) continue
     const key = `${day}-${name}`
     const previous = groups.get(key)
-    if (previous) { previous.end = bar.time + 3600; previous.high = Math.max(previous.high, bar.high); previous.low = Math.min(previous.low, bar.low) }
-    else groups.set(key, { name, start: bar.time, end: bar.time + 3600, high: bar.high, low: bar.low })
+    if (previous) { previous.end = bar.time + intervalSeconds; previous.high = Math.max(previous.high, bar.high); previous.low = Math.min(previous.low, bar.low) }
+    else groups.set(key, { name, start: bar.time, end: bar.time + intervalSeconds, high: bar.high, low: bar.low })
   }
   const sessions = [...groups.values()].filter(session => session.end >= from && session.start <= to)
   for (const session of sessions) if (session.name === 'asia') {

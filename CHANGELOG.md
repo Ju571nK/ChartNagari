@@ -14,6 +14,37 @@ Format:
 
 ---
 
+## [2.16.0.0] - 2026-10-11
+
+### Added
+- Optional Forex-only native 15-minute candles, collected from Yahoo's 60-day
+  `15m` history or OANDA M15. The watchlist timeframe API and controls preserve
+  existing symbols and standard timeframes; collection is opt-in.
+- 15-minute selection across chart, analysis, backtest and alert controls.
+  Completed-quarter and weekend freshness checks keep incomplete candles out of
+  the completed-bar path. A separate FX 15M rule pass retains existing higher-
+  timeframe signals. Fifteen-minute alerts require explicit timeframe selection;
+  existing alerts retain their prior defaults.
+- Selected-timeframe context and 15M indicators in AI prompts, gated on at least
+  30 candles. Fifteen-minute backtests require 202 candles to cover warmup.
+- Offline USDJPY study tools, a 1,440-row 1H/4H comparison CSV and reproducibility
+  manifest. The analysis found insufficient evidence to optimize defaults; no
+  alert rules or thresholds were changed. See the [study](docs/backtests/20261010_usdjpy_backtest.md), comparison CSV,
+  manifest and [research tools](scripts/usdjpy-research/README.md).
+
+### Changed
+- Corrected equity chart timestamps for 15M and 4H bars. Static demo 15M candles
+  are synthetic and labelled as such.
+- HTF opportunity-bucket diagnostics remain limited to 1H and 4H. Automatic
+  penalty calibration and order execution remain disabled; score, cooldown and
+  daily alert caps are unchanged.
+
+### Docs
+- Documented Forex 15M opt-in, provider limits, upgrade preservation and the
+  USDJPY research limitations.
+
+---
+
 ## [2.15.0.0] - 2026-10-09
 
 ### Added

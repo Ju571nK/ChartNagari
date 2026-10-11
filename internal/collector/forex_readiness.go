@@ -60,14 +60,14 @@ func seriesFresh(bars []models.OHLCV, tf string, now time.Time) bool {
 			latest = bar.OpenTime
 		}
 	}
-	maxAge := map[string]time.Duration{"1H": 4 * time.Hour, "4H": 12 * time.Hour, "1D": 96 * time.Hour, "1W": 12 * 24 * time.Hour}[tf]
+	maxAge := map[string]time.Duration{"15M": time.Hour, "1H": 4 * time.Hour, "4H": 12 * time.Hour, "1D": 96 * time.Hour, "1W": 12 * 24 * time.Hour}[tf]
 	if maxAge == 0 {
 		return false
 	}
 	if latest.After(now) {
 		return false
 	}
-	if tf == "1H" || tf == "4H" {
+	if tf == "15M" || tf == "1H" || tf == "4H" {
 		expected, ok := latestExpectedFXOpen(tf, now)
 		return ok && !latest.Before(expected)
 	}
@@ -96,29 +96,33 @@ func seriesFresh(bars []models.OHLCV, tf string, now time.Time) bool {
 // stale as soon as the first Sunday candle completes.
 func latestExpectedFXOpen(tf string, now time.Time) (time.Time, bool) {
 	duration := tfDuration[tf]
-	if duration != time.Hour && duration != 4*time.Hour {
+	if duration != 15*time.Minute && duration != time.Hour && duration != 4*time.Hour {
 		return time.Time{}, false
 	}
-	candidate := now.Truncate(time.Hour)
+	candidate := now.Truncate(duration)
 	if tf == "4H" {
 		candidate = NY4HBucket(now)
 	}
-	for i := 0; i < 14*24; i++ {
+	for i := 0; i < int(14*24*time.Hour/duration); i++ {
 		if !candidate.Add(duration).After(now) && fxIntervalTraded(candidate, duration) {
 			return candidate, true
 		}
 		if tf == "4H" {
 			candidate = NY4HBucket(candidate.Add(-time.Nanosecond))
 		} else {
-			candidate = candidate.Add(-time.Hour)
+			candidate = candidate.Add(-duration)
 		}
 	}
 	return time.Time{}, false
 }
 
 func fxIntervalTraded(start time.Time, duration time.Duration) bool {
-	for step := time.Duration(0); step < duration; step += time.Hour {
-		if !market.IsForexOpen(start.Add(step + time.Hour/2)) {
+	stepSize := time.Hour
+	if duration < stepSize {
+		stepSize = duration
+	}
+	for step := time.Duration(0); step < duration; step += stepSize {
+		if !market.IsForexOpen(start.Add(step + stepSize/2)) {
 			return false
 		}
 	}
@@ -136,7 +140,7 @@ func completeFXBars(bars []models.OHLCV, tf string, now time.Time) []models.OHLC
 	out := make([]models.OHLCV, 0, len(bars))
 	for _, bar := range bars {
 		if bar.OpenTime.After(now) || bar.OpenTime.Add(duration).After(now) ||
-			(tf == "1H" || tf == "4H") && !fxIntervalTraded(bar.OpenTime, duration) ||
+			(tf == "15M" || tf == "1H" || tf == "4H") && !fxIntervalTraded(bar.OpenTime, duration) ||
 			bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 ||
 			bar.Volume < 0 ||
 			math.IsNaN(bar.Open) || math.IsNaN(bar.High) || math.IsNaN(bar.Low) || math.IsNaN(bar.Close) ||

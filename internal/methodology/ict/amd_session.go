@@ -24,8 +24,8 @@ func (r *ICTAMDSessionRule) Name() string                 { return "ict_amd_sess
 func (r *ICTAMDSessionRule) RequiredIndicators() []string { return nil }
 
 func (r *ICTAMDSessionRule) Analyze(ctx models.AnalysisContext) (*models.Signal, error) {
-	tfs := []string{"1W", "1D", "4H", "1H"}
-	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0}
+	tfs := []string{"1W", "1D", "4H", "1H", "15M"}
+	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0, "15M": 1.0}
 
 	var bestSig *models.Signal
 	var bestWeighted float64
@@ -41,7 +41,7 @@ func (r *ICTAMDSessionRule) Analyze(ctx models.AnalysisContext) (*models.Signal,
 
 		// Use only bars available before the current bar for the Asian range.
 		sessions := ctx.Session
-		if !sessions.AsianRangeValid && tf == "1H" {
+		if !sessions.AsianRangeValid && (tf == "15M" || tf == "1H") {
 			sessions = market.AsianRange(bars[:n-1], curr.OpenTime)
 		}
 		if !sessions.NewYork.Contains(curr.OpenTime) {

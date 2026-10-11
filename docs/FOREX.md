@@ -23,6 +23,41 @@ settings file when upgrading.
 The static browser demo uses bundled sample data; it does not connect to Yahoo or
 OANDA.
 
+## Optional 15-minute candles
+
+Forex supports `15M` alongside `1H`, `4H`, `1D` and `1W`. Existing collection
+and alert choices remain unchanged. Choose a Forex symbol and `15M` in Chart,
+Analysis or Backtest, then use **Enable 15M collection** if requested. This
+adds `15M` to the saved watchlist timeframes and restarts collectors through the
+normal runtime reload; existing symbols and standard timeframes are retained.
+Stock and crypto collectors continue using their existing standard timeframes.
+
+Yahoo requests native 15-minute candles with a 60-day history window; actual
+availability and gaps depend on Yahoo. OANDA uses native `M15` candles. No
+15-minute candles are fabricated from hourly bars. Only completed candles are
+persisted. Readiness follows 15-minute closes and the FX trading week, so the
+last Friday candle remains current until the first Sunday quarter completes.
+
+Collection and notification selection are separate. To receive 15M signal
+alerts, expand the Forex symbol in **Symbols**, select `15M` in its alert
+**Timeframes**, and retain any other desired alert timeframes. Without an
+explicit `15M` selection in a symbol override or profile, existing/default
+alerts exclude 15M. The score threshold, cooldown, daily cap, Telegram destination
+and saved wording remain independent of this collection toggle.
+
+The 15M analysis pass runs separately from existing higher-timeframe rule
+analysis, so its stronger signal does not replace an existing hourly signal.
+AI analysis includes the selected timeframe and available 15M indicators, and
+requires sufficient 15M history. Backtest requires at least 202 candles under
+its default 200-bar warmup and models spreads using the same FX conventions
+below. A 20-bar exit horizon means five hours of candle time on 15M, not the
+20-hour horizon of 1H. HTF opportunity/bucket diagnostics still support only
+1H and 4H; 15M does not enable automatic calibration.
+
+The static demo uses synthetic, explicitly labelled 15M sample candles, not
+live Yahoo/OANDA data. Shorter candles are not a proven improvement in signal
+quality: the earlier USDJPY 1H/4H study does not validate 15M performance.
+
 ## Forex analysis and alert profile
 
 Watchlist Forex entries use the Forex analysis/alert profile by default unless

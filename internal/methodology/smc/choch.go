@@ -32,8 +32,8 @@ func (r *SMCChoCHRule) Analyze(ctx models.AnalysisContext) (*models.Signal, erro
 	const recentExclude = 5
 	const lookbackN = 20
 
-	tfs := []string{"1W", "1D", "4H", "1H"}
-	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0}
+	tfs := []string{"1W", "1D", "4H", "1H", "15M"}
+	tfW := map[string]float64{"1W": 2.0, "1D": 1.5, "4H": 1.2, "1H": 1.0, "15M": 1.0}
 
 	var bestSig *models.Signal
 	var bestWeighted float64

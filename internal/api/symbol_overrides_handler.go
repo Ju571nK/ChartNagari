@@ -40,7 +40,7 @@ type effectiveResponse struct {
 
 // validTimeframes is the closed set of accepted timeframe values.
 var validTimeframes = map[string]struct{}{
-	"1H": {}, "4H": {}, "1D": {}, "1W": {},
+	"15M": {}, "1H": {}, "4H": {}, "1D": {}, "1W": {},
 }
 
 func writeAPIError(w http.ResponseWriter, status int, msg string) {
@@ -148,7 +148,13 @@ func (s *Server) requestToOverride(symbol string, req symbolOverrideRequest) (st
 		seen := make(map[string]struct{}, len(*req.Timeframes))
 		for _, tf := range *req.Timeframes {
 			if _, ok := validTimeframes[tf]; !ok {
-				return out, fmt.Errorf("invalid timeframe: %q (must be one of 1H,4H,1D,1W)", tf)
+				return out, fmt.Errorf("invalid timeframe: %q (must be one of 15M,1H,4H,1D,1W)", tf)
+			}
+			if tf == "15M" {
+				wl, err := s.readWatchlist()
+				if err != nil || wl.AssetClass(symbol) != "forex" {
+					return out, errors.New("15M is available only for registered Forex symbols")
+				}
 			}
 			if _, dup := seen[tf]; dup {
 				return out, fmt.Errorf("duplicate timeframe: %q", tf)

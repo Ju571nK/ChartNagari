@@ -376,3 +376,16 @@ describe('shipped demo fixtures', () => {
     }
   })
 })
+
+it('serves synthetic native15M Forex samples and rejects non-Forex15M', async () => {
+  const { realFetch } = await install({})
+  const bars: Bar[] = await (await window.fetch('/api/ohlcv/EURUSD/15M')).json()
+  expect(bars.length).toBe(200)
+  expect(bars[1].time - bars[0].time).toBe(900)
+  expect(bars.every(b => b.volume === 0 && b.low <= b.open && b.high >= b.close)).toBe(true)
+  const signals = await (await window.fetch('/api/signals?symbol=EURUSD')).json()
+  expect(signals[0]).toMatchObject({ timeframe: '15M', data_provider: 'demo', source_identity: 'demo|EURUSD|synthetic', data_proxy: false })
+  expect((await window.fetch('/api/ohlcv/DEMO_BTC/15M')).status).toBe(422)
+  expect((await window.fetch('/api/demo/scan?symbol=DEMO_BTC&timeframe=15M')).status).toBe(422)
+  expect(realFetch).not.toHaveBeenCalled()
+})

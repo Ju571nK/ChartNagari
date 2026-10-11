@@ -114,7 +114,7 @@ type getAnalysisParams struct {
 }
 
 // timeframesOrder is the canonical rendering order in output.
-var timeframesOrder = []string{"1W", "1D", "4H", "1H"}
+var timeframesOrder = []string{"1W", "1D", "4H", "1H", "15M"}
 
 // signalLookbackPerTF controls how many recent signals per TF we consider.
 const signalLookbackPerTF = 10
@@ -293,7 +293,7 @@ type getOHLCVParams struct {
 	Limit     int    `json:"limit"`
 }
 
-var allowedOHLCVTF = map[string]bool{"1W": true, "1D": true, "4H": true, "1H": true}
+var allowedOHLCVTF = map[string]bool{"1W": true, "1D": true, "4H": true, "1H": true, "15M": true}
 
 const (
 	defaultOHLCVLimit = 50

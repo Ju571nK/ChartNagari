@@ -57,6 +57,31 @@ func TestForexPipsAndSpreadBothDirections(t *testing.T) {
 	}
 }
 
+func Test15MForexReplayUsesSpreadAnd15MEquityTimestamps(t *testing.T) {
+	bars := fxFixture("LONG")
+	start := bars[0].OpenTime
+	for i := range bars {
+		bars[i].Timeframe = "15M"
+		bars[i].OpenTime = start.Add(time.Duration(i) * 15 * time.Minute)
+	}
+	cfg := Config{WarmupBars: 14, MaxExitBars: 1, TPATRMultiplier: 1, SLATRMultiplier: 1, AssetClass: models.AssetForex}
+	result := New([]rule.AnalysisRule{&alwaysLongRule{score: 1}}, engCfgFor("always_long"), cfg).Run("EURUSD", "15M", "", bars)
+	if result.Trades != 1 || math.Abs(result.Outcomes[0].Pips-9) > 1e-6 {
+		t.Fatalf("expected a spread-aware 15M FX trade with 9 net pips: %+v", result)
+	}
+	if len(result.EquityCurve) != 2 || result.EquityCurve[1].Time-result.EquityCurve[0].Time != 15*60 {
+		t.Fatalf("15M equity exit timestamp should advance by one 15M bar: %+v", result.EquityCurve)
+	}
+}
+
+func TestEquityCurveUsesFourHourBarDuration(t *testing.T) {
+	entry := time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC)
+	curve := computeEquityCurve([]TradeOutcome{{EntryTime: entry, ExitBars: 2, PnLPct: 1}}, "4H")
+	if len(curve) != 2 || curve[1].Time-curve[0].Time != int64(8*time.Hour/time.Second) {
+		t.Fatalf("4H equity exit timestamp should advance by 8 hours: %+v", curve)
+	}
+}
+
 func TestRunnerUsesWatchlistClassAndValidatesSpread(t *testing.T) {
 	cfg := Config{WarmupBars: 14, MaxExitBars: 1, TPATRMultiplier: 1, SLATRMultiplier: 1}
 	runner := NewRunner(preparationStore(fxFixture("LONG")), New([]rule.AnalysisRule{&alwaysLongRule{score: 1}}, engCfgFor("always_long"), cfg))

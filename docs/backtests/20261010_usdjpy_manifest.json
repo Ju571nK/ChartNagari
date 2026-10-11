@@ -1,0 +1,646 @@
+{
+  "start": "2025-11-27T18:00:00+00:00",
+  "end": "2026-10-06T13:00:00+00:00",
+  "cutoff": "2026-07-04T00:00:00+00:00",
+  "train_ratio": 0.7,
+  "boundary_embargo_bars": 20,
+  "diagnostics": {
+    "1H": {
+      "bars": 6112,
+      "first": "2025-10-09T23:00:00Z",
+      "last": "2026-10-09T20:00:00Z",
+      "raw_outcomes": 14250,
+      "eligible_outcomes": 12526,
+      "rules": {
+        "bearish_engulfing": {
+          "trades": 114,
+          "win_rate": 0.47368421052631576,
+          "profit_factor": 1.070125554110125,
+          "net_pips": 101.57108946642529,
+          "avg_pips": 0.8909744690037307,
+          "net_r": 14.372542063124595,
+          "max_drawdown_r": 12.230920986199017,
+          "worst_trade_pips": -87.10445391606731,
+          "max_consecutive_losses": 8
+        },
+        "bearish_harami": {
+          "trades": 46,
+          "win_rate": 0.43478260869565216,
+          "profit_factor": 1.0824195006606268,
+          "net_pips": 40.91606167240025,
+          "avg_pips": 0.8894796015739184,
+          "net_r": 2.9272827709651628,
+          "max_drawdown_r": 9.33527859110477,
+          "worst_trade_pips": -57.09734851992414,
+          "max_consecutive_losses": 8
+        },
+        "bullish_engulfing": {
+          "trades": 120,
+          "win_rate": 0.35,
+          "profit_factor": 0.7357050579468677,
+          "net_pips": -432.96889678390585,
+          "avg_pips": -3.608074139865882,
+          "net_r": -27.23760714410957,
+          "max_drawdown_r": 28.67827794873018,
+          "worst_trade_pips": -61.82028798078909,
+          "max_consecutive_losses": 13
+        },
+        "bullish_harami": {
+          "trades": 31,
+          "win_rate": 0.4838709677419355,
+          "profit_factor": 1.6110664386469078,
+          "net_pips": 190.0744148034422,
+          "avg_pips": 6.13143273559491,
+          "net_r": 3.4522297386736644,
+          "max_drawdown_r": 3.6347875515922796,
+          "worst_trade_pips": -39.77802117553131,
+          "max_consecutive_losses": 3
+        },
+        "doji": {
+          "trades": 85,
+          "win_rate": 0.4,
+          "profit_factor": 0.8096907066042975,
+          "net_pips": -199.47464891219283,
+          "avg_pips": -2.3467605754375627,
+          "net_r": -6.299013861537005,
+          "max_drawdown_r": 15.01900757274812,
+          "worst_trade_pips": -68.89073105189516,
+          "max_consecutive_losses": 7
+        },
+        "ema_cross": {
+          "trades": 74,
+          "win_rate": 0.3783783783783784,
+          "profit_factor": 0.6971304851004363,
+          "net_pips": -304.81295631039325,
+          "avg_pips": -4.119094004194503,
+          "net_r": -9.943256281720055,
+          "max_drawdown_r": 15.664379967934922,
+          "worst_trade_pips": -39.7894628697353,
+          "max_consecutive_losses": 7
+        },
+        "evening_star": {
+          "trades": 15,
+          "win_rate": 0.4,
+          "profit_factor": 0.5295146712399372,
+          "net_pips": -107.03108483315532,
+          "avg_pips": -7.135405655543688,
+          "net_r": -0.8921499000539181,
+          "max_drawdown_r": 4.41140074285517,
+          "worst_trade_pips": -39.63196729504352,
+          "max_consecutive_losses": 3
+        },
+        "fibonacci_confluence": {
+          "trades": 1462,
+          "win_rate": 0.4015047879616963,
+          "profit_factor": 0.9383103279129091,
+          "net_pips": -1102.9795561087208,
+          "avg_pips": -0.7544319809225176,
+          "net_r": -87.61288061649688,
+          "max_drawdown_r": 119.07419028249768,
+          "worst_trade_pips": -68.89599276220031,
+          "max_consecutive_losses": 27
+        },
+        "hammer": {
+          "trades": 39,
+          "win_rate": 0.41025641025641024,
+          "profit_factor": 0.9554139877660216,
+          "net_pips": -22.176406125269864,
+          "avg_pips": -0.5686257980838426,
+          "net_r": -4.656851853363884,
+          "max_drawdown_r": 9.447916595362628,
+          "worst_trade_pips": -58.405616285143424,
+          "max_consecutive_losses": 8
+        },
+        "hanging_man": {
+          "trades": 41,
+          "win_rate": 0.34146341463414637,
+          "profit_factor": 0.6020569005099873,
+          "net_pips": -228.39858584090996,
+          "avg_pips": -5.5706972156319505,
+          "net_r": -7.565505270210538,
+          "max_drawdown_r": 9.007981607909466,
+          "worst_trade_pips": -57.09734851992414,
+          "max_consecutive_losses": 5
+        },
+        "ict_amd_session": {
+          "trades": 102,
+          "win_rate": 0.38235294117647056,
+          "profit_factor": 0.7966382892467997,
+          "net_pips": -297.2421692639888,
+          "avg_pips": -2.914138914352831,
+          "net_r": -10.801357575991723,
+          "max_drawdown_r": 22.553976847649764,
+          "worst_trade_pips": -65.49305541645174,
+          "max_consecutive_losses": 11
+        },
+        "ict_breaker_block": {
+          "trades": 98,
+          "win_rate": 0.4387755102040816,
+          "profit_factor": 0.9106821751679061,
+          "net_pips": -103.41989352380483,
+          "avg_pips": -1.055305035957192,
+          "net_r": 2.1920344094488775,
+          "max_drawdown_r": 9.973549392588186,
+          "worst_trade_pips": -68.89599276220031,
+          "max_consecutive_losses": 7
+        },
+        "ict_fair_value_gap": {
+          "trades": 340,
+          "win_rate": 0.40588235294117647,
+          "profit_factor": 0.764468085067712,
+          "net_pips": -1111.990639469132,
+          "avg_pips": -3.2705607043209763,
+          "net_r": -27.259430968204725,
+          "max_drawdown_r": 44.66377794406273,
+          "worst_trade_pips": -85.16866474708513,
+          "max_consecutive_losses": 14
+        },
+        "ict_liquidity_sweep": {
+          "trades": 332,
+          "win_rate": 0.4066265060240964,
+          "profit_factor": 0.9065746172039142,
+          "net_pips": -361.41019025217884,
+          "avg_pips": -1.088584910398129,
+          "net_r": -18.10822215773521,
+          "max_drawdown_r": 47.437989166062366,
+          "worst_trade_pips": -76.79292539488449,
+          "max_consecutive_losses": 13
+        },
+        "ict_order_block": {
+          "trades": 149,
+          "win_rate": 0.47651006711409394,
+          "profit_factor": 1.2679763151288441,
+          "net_pips": 460.3125995862806,
+          "avg_pips": 3.089346305948192,
+          "net_r": 17.25039673939491,
+          "max_drawdown_r": 23.43454639393243,
+          "worst_trade_pips": -64.46191831212309,
+          "max_consecutive_losses": 18
+        },
+        "ict_ote": {
+          "trades": 184,
+          "win_rate": 0.33695652173913043,
+          "profit_factor": 0.8328651022707046,
+          "net_pips": -415.4785540966682,
+          "avg_pips": -2.258035620090588,
+          "net_r": -39.37716381707257,
+          "max_drawdown_r": 50.06069609346327,
+          "worst_trade_pips": -41.78312585253343,
+          "max_consecutive_losses": 15
+        },
+        "inverted_hammer": {
+          "trades": 31,
+          "win_rate": 0.5806451612903226,
+          "profit_factor": 1.8661755927332628,
+          "net_pips": 233.75757255032875,
+          "avg_pips": 7.540566856462218,
+          "net_r": 12.147969602957273,
+          "max_drawdown_r": 5.358404706328222,
+          "worst_trade_pips": -49.46811566139024,
+          "max_consecutive_losses": 5
+        },
+        "marubozu": {
+          "trades": 25,
+          "win_rate": 0.36,
+          "profit_factor": 0.8461492853283183,
+          "net_pips": -57.81398929872239,
+          "avg_pips": -2.3125595719488956,
+          "net_r": -3.7497199378076944,
+          "max_drawdown_r": 6.423322027535273,
+          "worst_trade_pips": -37.33729449430234,
+          "max_consecutive_losses": 6
+        },
+        "morning_star": {
+          "trades": 19,
+          "win_rate": 0.42105263157894735,
+          "profit_factor": 1.2719798197407917,
+          "net_pips": 56.01387282117946,
+          "avg_pips": 2.948098569535761,
+          "net_r": -0.15631682528173307,
+          "max_drawdown_r": 3.1211107277717893,
+          "worst_trade_pips": -26.488466977250823,
+          "max_consecutive_losses": 3
+        },
+        "rsi_divergence": {
+          "trades": 122,
+          "win_rate": 0.45901639344262296,
+          "profit_factor": 1.1660909713676078,
+          "net_pips": 252.05070589032334,
+          "avg_pips": 2.065989392543634,
+          "net_r": 11.902637283721095,
+          "max_drawdown_r": 15.93123120840625,
+          "worst_trade_pips": -55.17488968833197,
+          "max_consecutive_losses": 10
+        },
+        "rsi_overbought_oversold": {
+          "trades": 210,
+          "win_rate": 0.5428571428571428,
+          "profit_factor": 1.7514132400488285,
+          "net_pips": 1849.8695069802006,
+          "avg_pips": 8.808902414191431,
+          "net_r": 62.62035861959638,
+          "max_drawdown_r": 26.392679294471673,
+          "worst_trade_pips": -72.36486278297411,
+          "max_consecutive_losses": 17
+        },
+        "shooting_star": {
+          "trades": 30,
+          "win_rate": 0.4666666666666667,
+          "profit_factor": 1.412432757652598,
+          "net_pips": 138.87313780113686,
+          "avg_pips": 4.6291045933712285,
+          "net_r": 3.382697922157135,
+          "max_drawdown_r": 5.421078416107635,
+          "worst_trade_pips": -31.49038923932983,
+          "max_consecutive_losses": 4
+        },
+        "smc_bos": {
+          "trades": 4,
+          "win_rate": 0.25,
+          "profit_factor": 0.34227500236548686,
+          "net_pips": -115.26105377569502,
+          "avg_pips": -28.815263443923754,
+          "net_r": -1.582650094879286,
+          "max_drawdown_r": 2.0464384525276724,
+          "worst_trade_pips": -87.10445391606731,
+          "max_consecutive_losses": 2
+        },
+        "support_resistance_breakout": {
+          "trades": 80,
+          "win_rate": 0.4125,
+          "profit_factor": 1.1313301370610989,
+          "net_pips": 118.33449138187973,
+          "avg_pips": 1.4791811422734966,
+          "net_r": -3.074405378478884,
+          "max_drawdown_r": 16.752338727292894,
+          "worst_trade_pips": -67.7495081309255,
+          "max_consecutive_losses": 6
+        },
+        "three_black_crows": {
+          "trades": 1,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "net_pips": -19.29917915057422,
+          "avg_pips": -19.29917915057422,
+          "net_r": -1.0546472599547516,
+          "max_drawdown_r": 1.0546472599547516,
+          "worst_trade_pips": -19.29917915057422,
+          "max_consecutive_losses": 1
+        },
+        "three_white_soldiers": {
+          "trades": 4,
+          "win_rate": 0.5,
+          "profit_factor": 1.414555361664895,
+          "net_pips": 19.722321579188588,
+          "avg_pips": 4.930580394797147,
+          "net_r": 0.8253182277700621,
+          "max_drawdown_r": 1.0467156053058035,
+          "worst_trade_pips": -25.168515619069808,
+          "max_consecutive_losses": 1
+        }
+      }
+    },
+    "4H": {
+      "bars": 1496,
+      "first": "2025-10-10T01:00:00Z",
+      "last": "2026-10-09T17:00:00Z",
+      "raw_outcomes": 2907,
+      "eligible_outcomes": 2851,
+      "rules": {
+        "bearish_engulfing": {
+          "trades": 22,
+          "win_rate": 0.36363636363636365,
+          "profit_factor": 0.7888873986625053,
+          "net_pips": -144.07684772693312,
+          "avg_pips": -6.548947623951506,
+          "net_r": -2.5513335835262536,
+          "max_drawdown_r": 5.712521315219436,
+          "worst_trade_pips": -90.02219064178496,
+          "max_consecutive_losses": 5
+        },
+        "bearish_harami": {
+          "trades": 14,
+          "win_rate": 0.42857142857142855,
+          "profit_factor": 0.775154423561889,
+          "net_pips": -86.62058245759135,
+          "avg_pips": -6.187184461256526,
+          "net_r": 1.5775625893961513,
+          "max_drawdown_r": 2.598245799415767,
+          "worst_trade_pips": -109.72072288413506,
+          "max_consecutive_losses": 2
+        },
+        "bullish_engulfing": {
+          "trades": 23,
+          "win_rate": 0.4782608695652174,
+          "profit_factor": 1.1824069767765166,
+          "net_pips": 108.24584427918933,
+          "avg_pips": 4.706341055616927,
+          "net_r": 2.6749618310985945,
+          "max_drawdown_r": 5.1530542352401065,
+          "worst_trade_pips": -78.29931271614419,
+          "max_consecutive_losses": 5
+        },
+        "bullish_harami": {
+          "trades": 8,
+          "win_rate": 0.375,
+          "profit_factor": 0.7578180752500403,
+          "net_pips": -59.73686185567021,
+          "avg_pips": -7.467107731958777,
+          "net_r": -0.6920283411403392,
+          "max_drawdown_r": 3.0628853238202858,
+          "worst_trade_pips": -71.65281946549078,
+          "max_consecutive_losses": 3
+        },
+        "doji": {
+          "trades": 25,
+          "win_rate": 0.56,
+          "profit_factor": 1.6414354680916559,
+          "net_pips": 327.8772684644423,
+          "avg_pips": 13.115090738577692,
+          "net_r": 9.336345550766207,
+          "max_drawdown_r": 3.052568216909588,
+          "worst_trade_pips": -71.65281946549078,
+          "max_consecutive_losses": 3
+        },
+        "ema_cross": {
+          "trades": 13,
+          "win_rate": 0.6153846153846154,
+          "profit_factor": 2.2364181953050326,
+          "net_pips": 235.18090183150048,
+          "avg_pips": 18.090838602423112,
+          "net_r": 5.477594312433357,
+          "max_drawdown_r": 4.119579946753052,
+          "worst_trade_pips": -51.62312587340614,
+          "max_consecutive_losses": 4
+        },
+        "evening_star": {
+          "trades": 2,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "net_pips": -93.13846373294905,
+          "avg_pips": -46.569231866474524,
+          "net_r": -2.0439763887504476,
+          "max_drawdown_r": 2.0439763887504476,
+          "worst_trade_pips": -48.59754642083749,
+          "max_consecutive_losses": 2
+        },
+        "fibonacci_confluence": {
+          "trades": 299,
+          "win_rate": 0.3311036789297659,
+          "profit_factor": 0.6688197282425974,
+          "net_pips": -2687.4230555148038,
+          "avg_pips": -8.9880369749659,
+          "net_r": -59.179211994143614,
+          "max_drawdown_r": 79.19536354216393,
+          "worst_trade_pips": -100.10826691423438,
+          "max_consecutive_losses": 30
+        },
+        "hammer": {
+          "trades": 13,
+          "win_rate": 0.5384615384615384,
+          "profit_factor": 2.0303541968071377,
+          "net_pips": 240.50902349465514,
+          "avg_pips": 18.500694114973474,
+          "net_r": 3.866410835627801,
+          "max_drawdown_r": 2.0889438788126924,
+          "worst_trade_pips": -54.206583798217366,
+          "max_consecutive_losses": 2
+        },
+        "hanging_man": {
+          "trades": 8,
+          "win_rate": 0.5,
+          "profit_factor": 1.3924534947485927,
+          "net_pips": 76.63861459721898,
+          "avg_pips": 9.579826824652372,
+          "net_r": 2.773111003346318,
+          "max_drawdown_r": 2.1040014531963687,
+          "worst_trade_pips": -76.91234192996694,
+          "max_consecutive_losses": 3
+        },
+        "ict_breaker_block": {
+          "trades": 29,
+          "win_rate": 0.3103448275862069,
+          "profit_factor": 0.5655061140143177,
+          "net_pips": -346.58125736308216,
+          "avg_pips": -11.951077840106281,
+          "net_r": -7.321693175763601,
+          "max_drawdown_r": 11.729216419436788,
+          "worst_trade_pips": -59.71265130867869,
+          "max_consecutive_losses": 9
+        },
+        "ict_fair_value_gap": {
+          "trades": 111,
+          "win_rate": 0.5135135135135135,
+          "profit_factor": 1.253920900925533,
+          "net_pips": 721.0326552700209,
+          "avg_pips": 6.4957896871173055,
+          "net_r": 26.089845681169955,
+          "max_drawdown_r": 16.491464377058946,
+          "worst_trade_pips": -113.69918368892604,
+          "max_consecutive_losses": 13
+        },
+        "ict_liquidity_sweep": {
+          "trades": 94,
+          "win_rate": 0.3723404255319149,
+          "profit_factor": 0.9067415721817019,
+          "net_pips": -198.66367316057585,
+          "avg_pips": -2.1134433314954877,
+          "net_r": -9.335863391224795,
+          "max_drawdown_r": 28.34157262276635,
+          "worst_trade_pips": -69.21158149316204,
+          "max_consecutive_losses": 17
+        },
+        "ict_order_block": {
+          "trades": 50,
+          "win_rate": 0.46,
+          "profit_factor": 1.3440388049727845,
+          "net_pips": 420.4622669443296,
+          "avg_pips": 8.409245338886592,
+          "net_r": 5.369247152764016,
+          "max_drawdown_r": 17.338136790890857,
+          "worst_trade_pips": -61.44596544646765,
+          "max_consecutive_losses": 17
+        },
+        "ict_ote": {
+          "trades": 25,
+          "win_rate": 0.44,
+          "profit_factor": 1.5275330728697187,
+          "net_pips": 239.99276580704532,
+          "avg_pips": 9.599710632281813,
+          "net_r": 3.1423021898689005,
+          "max_drawdown_r": 6.1788107683436255,
+          "worst_trade_pips": -45.43079775465151,
+          "max_consecutive_losses": 6
+        },
+        "inverted_hammer": {
+          "trades": 5,
+          "win_rate": 0.6,
+          "profit_factor": 2.7259352743674583,
+          "net_pips": 90.14904948988772,
+          "avg_pips": 18.029809897977543,
+          "net_r": 1.4008663589081611,
+          "max_drawdown_r": 2.0812244552478925,
+          "worst_trade_pips": -29.634381083335825,
+          "max_consecutive_losses": 2
+        },
+        "marubozu": {
+          "trades": 9,
+          "win_rate": 0.6666666666666666,
+          "profit_factor": 3.0236063201694443,
+          "net_pips": 280.91272949213567,
+          "avg_pips": 31.212525499126187,
+          "net_r": 5.803682340981089,
+          "max_drawdown_r": 1.0258854009465086,
+          "worst_trade_pips": -53.895200148302024,
+          "max_consecutive_losses": 1
+        },
+        "morning_star": {
+          "trades": 5,
+          "win_rate": 0.6,
+          "profit_factor": 1.6188029728193192,
+          "net_pips": 60.064495894753804,
+          "avg_pips": 12.01289917895076,
+          "net_r": 2.3584834539070307,
+          "max_drawdown_r": 2.042087281589856,
+          "worst_trade_pips": -49.30416039531826,
+          "max_consecutive_losses": 2
+        },
+        "rsi_divergence": {
+          "trades": 56,
+          "win_rate": 0.4642857142857143,
+          "profit_factor": 1.4062029547794952,
+          "net_pips": 566.0349811180228,
+          "avg_pips": 10.107767519964693,
+          "net_r": 7.150802715644499,
+          "max_drawdown_r": 13.523839727462263,
+          "worst_trade_pips": -109.86478091254901,
+          "max_consecutive_losses": 13
+        },
+        "rsi_overbought_oversold": {
+          "trades": 49,
+          "win_rate": 0.6122448979591837,
+          "profit_factor": 2.0016572941190898,
+          "net_pips": 1114.947370597458,
+          "avg_pips": 22.754027971376697,
+          "net_r": 24.388665401037887,
+          "max_drawdown_r": 7.105293251127577,
+          "worst_trade_pips": -109.86478091254901,
+          "max_consecutive_losses": 7
+        },
+        "shooting_star": {
+          "trades": 5,
+          "win_rate": 0.6,
+          "profit_factor": 2.6590094660136225,
+          "net_pips": 111.17402077953614,
+          "avg_pips": 22.234804155907227,
+          "net_r": 2.3537905832353117,
+          "max_drawdown_r": 2.0615280800794884,
+          "worst_trade_pips": -33.65267860417964,
+          "max_consecutive_losses": 2
+        },
+        "smc_bos": {
+          "trades": 6,
+          "win_rate": 0.3333333333333333,
+          "profit_factor": 0.8615047396565298,
+          "net_pips": -43.17228474311014,
+          "avg_pips": -7.195380790518357,
+          "net_r": -1.0790144179085452,
+          "max_drawdown_r": 2.56982871072557,
+          "worst_trade_pips": -117.25301869474356,
+          "max_consecutive_losses": 2
+        },
+        "support_resistance_breakout": {
+          "trades": 23,
+          "win_rate": 0.5217391304347826,
+          "profit_factor": 1.6510286390518853,
+          "net_pips": 295.45216315950324,
+          "avg_pips": 12.845746224326229,
+          "net_r": 4.776259009421665,
+          "max_drawdown_r": 4.123412928174919,
+          "worst_trade_pips": -58.54440592407093,
+          "max_consecutive_losses": 4
+        },
+        "three_black_crows": {
+          "trades": 2,
+          "win_rate": 0.5,
+          "profit_factor": 1.4106621143812446,
+          "net_pips": 19.11046283524729,
+          "avg_pips": 9.555231417623645,
+          "net_r": 0.4555323143372736,
+          "max_drawdown_r": 1.0219607749040347,
+          "worst_trade_pips": -46.53573379672855,
+          "max_consecutive_losses": 1
+        },
+        "three_white_soldiers": {
+          "trades": 2,
+          "win_rate": 0.0,
+          "profit_factor": 0.0,
+          "net_pips": -114.28044571828661,
+          "avg_pips": -57.14022285914331,
+          "net_r": -2.035647382365225,
+          "max_drawdown_r": 2.035647382365225,
+          "worst_trade_pips": -58.54440592407093,
+          "max_consecutive_losses": 2
+        }
+      }
+    }
+  },
+  "uncertainty": {
+    "1H": {
+      "baseline": {
+        "group": "forex_default",
+        "threshold": 12,
+        "weeks": 15,
+        "samples": 10000,
+        "seed": 571,
+        "net_r_95_interval": [
+          -9.061127959274707,
+          10.263176070743729
+        ]
+      },
+      "train_selected": {
+        "group": "ict_smc",
+        "threshold": 0,
+        "weeks": 15,
+        "samples": 10000,
+        "seed": 571,
+        "net_r_95_interval": [
+          -33.941861188029755,
+          21.01553950079655
+        ]
+      }
+    },
+    "4H": {
+      "baseline": {
+        "group": "forex_default",
+        "threshold": 12,
+        "weeks": 15,
+        "samples": 10000,
+        "seed": 571,
+        "net_r_95_interval": [
+          -4.190959036151617,
+          6.097743485812098
+        ]
+      },
+      "train_selected": {
+        "group": "general_ta",
+        "threshold": 0,
+        "weeks": 15,
+        "samples": 10000,
+        "seed": 571,
+        "net_r_95_interval": [
+          -14.339444958194033,
+          20.921148481321175
+        ]
+      }
+    }
+  },
+  "replay_sha256": "deac3e05d4fe3f52b13b56badf808503020580efb258ac289cb10e43d4ecb630",
+  "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/USDJPY=X?interval=1h&range=1y",
+  "base_commit": "aefb53721ef0b0b081f46d6cd7772e7dbf4a82e0",
+  "source_sha256": "8854c8979958384af9d4ac00dd643bcb56ededfa8753b8fc40f226d177df02d9",
+  "rules_sha256": "54f28774bd3b61ed16b066b9c7a4b94ec6b4aadfbb5cbcf2eac2d756e995cb03",
+  "provider_symbol": "JPY=X",
+  "provider_name": "USD/JPY",
+  "quote_currency": "JPY"
+}

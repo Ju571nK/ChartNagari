@@ -7,7 +7,7 @@ import "time"
 type Signal struct {
 	ID               int64   `json:"id"`                // populated after SaveSignal; 0 means unsaved
 	Symbol           string  `json:"symbol"`            // 종목 심볼 (예: "BTCUSDT", "AAPL")
-	Timeframe        string  `json:"timeframe"`         // 타임프레임 (예: "1H", "4H", "1D", "1W")
+	Timeframe        string  `json:"timeframe"`         // 타임프레임 (예: "15M", "1H", "4H", "1D", "1W")
 	Rule             string  `json:"rule"`              // 신호를 생성한 룰 이름
 	Direction        string  `json:"direction"`         // "LONG" | "SHORT" | "NEUTRAL"
 	Score            float64 `json:"score"`             // 룰 강도 × TF 가중치
@@ -70,6 +70,6 @@ type AnalysisContext struct {
 	AssetClass    AssetClass
 	VolumeQuality VolumeQuality
 	Session       SessionContext
-	Timeframes    map[string][]OHLCV // key: "1H" | "4H" | "1D" | "1W"
+	Timeframes    map[string][]OHLCV // key: "15M" | "1H" | "4H" | "1D" | "1W"
 	Indicators    map[string]float64 // key: "RSI_14", "EMA_200", ...
 }

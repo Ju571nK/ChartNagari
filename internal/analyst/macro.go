@@ -52,6 +52,9 @@ func (a *MacroAnalyst) Analyze(ctx context.Context, input AnalystInput) AnalystO
 func buildMacroPrompt(input AnalystInput) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("## %s Macro Analysis\n\n", input.Symbol))
+	if input.Timeframe != "" {
+		sb.WriteString(fmt.Sprintf("Selected chart timeframe: %s. Distinguish this timeframe from longer-term context.\n\n", input.Timeframe))
+	}
 	if input.MacroContext != "" {
 		sb.WriteString("### S&P 500 (SPY) Macro Backdrop\n")
 		sb.WriteString(input.MacroContext)
@@ -60,7 +63,7 @@ func buildMacroPrompt(input AnalystInput) string {
 	sb.WriteString(fmt.Sprintf("### %s Price History Summary\n", input.Symbol))
 	sb.WriteString(input.HistorySummary)
 	sb.WriteString("\n### Current Indicators\n")
-	for _, k := range []string{"1W:RSI_14", "1D:RSI_14", "1W:EMA_50", "1D:EMA_50", "1D:EMA_200", "1W:MACD_hist", "1D:MACD_hist"} {
+	for _, k := range []string{"15M:RSI_14", "15M:EMA_50", "15M:MACD_hist", "15M:ATR_14", "1W:RSI_14", "1D:RSI_14", "1W:EMA_50", "1D:EMA_50", "1D:EMA_200", "1W:MACD_hist", "1D:MACD_hist"} {
 		if v, ok := input.RecentIndicators[k]; ok {
 			sb.WriteString(fmt.Sprintf("- %s: %.4f\n", k, v))
 		}

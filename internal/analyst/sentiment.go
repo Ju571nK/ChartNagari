@@ -52,6 +52,9 @@ func (a *SentimentAnalyst) Analyze(ctx context.Context, input AnalystInput) Anal
 func buildSentimentPrompt(input AnalystInput) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("## %s Market Sentiment Analysis\n\n", input.Symbol))
+	if input.Timeframe != "" {
+		sb.WriteString(fmt.Sprintf("Selected chart timeframe: %s. Distinguish this timeframe from longer-term context.\n\n", input.Timeframe))
+	}
 	if input.MacroContext != "" {
 		sb.WriteString("### S&P 500 (SPY) Market Backdrop — Risk-On/Off Context\n")
 		sb.WriteString(input.MacroContext)
@@ -60,7 +63,7 @@ func buildSentimentPrompt(input AnalystInput) string {
 	sb.WriteString(fmt.Sprintf("### %s Price History Summary\n", input.Symbol))
 	sb.WriteString(input.HistorySummary)
 	sb.WriteString("\n### Current Technical Indicators\n")
-	for _, k := range []string{"1H:RSI_14", "4H:RSI_14", "1D:RSI_14", "1H:MACD_hist", "4H:MACD_hist", "1D:MACD_hist", "1H:ATR_14", "4H:ATR_14", "1D:ATR_14", "1D:VOLUME_MA_20", "1H:VOLUME_MA_20", "1D:BB_width", "1D:BB_pct", "4H:OBV", "1D:OBV"} {
+	for _, k := range []string{"15M:RSI_14", "15M:EMA_50", "15M:MACD_hist", "15M:ATR_14", "1H:RSI_14", "4H:RSI_14", "1D:RSI_14", "1H:MACD_hist", "4H:MACD_hist", "1D:MACD_hist", "1H:ATR_14", "4H:ATR_14", "1D:ATR_14", "1D:VOLUME_MA_20", "1H:VOLUME_MA_20", "1D:BB_width", "1D:BB_pct", "4H:OBV", "1D:OBV"} {
 		if v, ok := input.RecentIndicators[k]; ok {
 			sb.WriteString(fmt.Sprintf("- %s: %.4f\n", k, v))
 		}

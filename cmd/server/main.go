@@ -308,21 +308,22 @@ func main() {
 			calFetcher.SetForexSymbols(forexSymbols)
 			indexSymbols := generation.EnabledIndexSymbols()
 			timeframes := wl.Timeframes
+			legacyTimeframes := collector.LegacyTimeframes(timeframes)
 			var workers sync.WaitGroup
 			start := func(run func(context.Context)) { workers.Add(1); go func() { defer workers.Done(); run(workerCtx) }() }
 			if len(indexSymbols) > 0 {
 				start(collector.NewYahooCollector(db, indexSymbols, []string{"1D"}, cfg.Yahoo.PollInterval).Start)
 			}
 			if len(cryptoSymbols) > 0 {
-				start(collector.NewBinanceCollector(db, cryptoSymbols, timeframes).Start)
+				start(collector.NewBinanceCollector(db, cryptoSymbols, legacyTimeframes).Start)
 			}
 			if len(stockSymbols) > 0 {
 				if cfg.Tiingo.APIKey != "" {
-					stocks := collector.NewTiingoCollector(cfg.Tiingo.APIKey, db, stockSymbols, timeframes, cfg.Tiingo.PollInterval)
+					stocks := collector.NewTiingoCollector(cfg.Tiingo.APIKey, db, stockSymbols, legacyTimeframes, cfg.Tiingo.PollInterval)
 					stocks.SetStateFile(filepath.Join(filepath.Dir(cfg.DBPath), "tiingo_state.json"))
 					start(stocks.Start)
 				} else {
-					start(collector.NewYahooCollector(db, stockSymbols, timeframes, cfg.Yahoo.PollInterval).Start)
+					start(collector.NewYahooCollector(db, stockSymbols, legacyTimeframes, cfg.Yahoo.PollInterval).Start)
 				}
 			}
 			forexSettings, settingsErr := appconfig.LoadSettings("config/settings.yaml")

@@ -547,6 +547,10 @@ func (s *Server) Handler() http.Handler {
 	// Wyckoff phase overlay
 	mux.HandleFunc("GET /api/wyckoff/{symbol}/{timeframe}", s.getWyckoffAnalysis)
 
+	// Forex-only short timeframe collection (explicit opt-in).
+	mux.HandleFunc("GET /api/watchlist/timeframes", s.getWatchlistTimeframes)
+	mux.HandleFunc("PUT /api/watchlist/timeframes", s.putWatchlistTimeframes)
+
 	// Backtest engine
 	mux.HandleFunc("POST /api/backtest", s.runBacktest)
 	mux.HandleFunc("GET /api/backtest/readiness", s.getBacktestReadiness)
@@ -977,6 +981,9 @@ func (s *Server) getChartOHLCV(w http.ResponseWriter, r *http.Request) {
 	}
 	symbol := r.PathValue("symbol")
 	timeframe := r.PathValue("timeframe")
+	if !s.allowForex15M(w, symbol, timeframe) {
+		return
+	}
 	limit := 200
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -1198,6 +1205,9 @@ func (s *Server) runBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.allowForex15M(w, req.Symbol, req.Timeframe) {
+		return
+	}
 	spread := req.SpreadPips
 	if spread == nil && s.profileHolder != nil {
 		spread = s.profileHolder.SpreadOverride(req.Symbol)
@@ -1231,6 +1241,9 @@ func (s *Server) runPerRuleBacktest(w http.ResponseWriter, r *http.Request) {
 	}
 	symbol := r.URL.Query().Get("symbol")
 	timeframe := r.URL.Query().Get("timeframe")
+	if !s.allowForex15M(w, symbol, timeframe) {
+		return
+	}
 	if symbol == "" || timeframe == "" {
 		http.Error(w, "symbol and timeframe are required", http.StatusBadRequest)
 		return
@@ -1293,6 +1306,11 @@ func (s *Server) getPerformanceRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	symbols := strings.Split(symbolsParam, ",")
+	for _, symbol := range symbols {
+		if strings.TrimSpace(symbol) != "" && !s.allowForex15M(w, strings.TrimSpace(symbol), timeframe) {
+			return
+		}
+	}
 	var tpMult, slMult float64
 	if v := r.URL.Query().Get("tp_mult"); v != "" {
 		tpMult, _ = strconv.ParseFloat(v, 64)
@@ -2136,6 +2154,10 @@ func (s *Server) runFullAnalysis(w http.ResponseWriter, r *http.Request) {
 		req.Timeframe = "1D"
 	}
 
+	if !s.allowForex15M(w, req.Symbol, req.Timeframe) {
+		return
+	}
+
 	// Fetch full daily OHLCV history for history summary
 	bars, err := s.fullStore.GetOHLCVAll(req.Symbol, "1D")
 	if err != nil {
@@ -2148,7 +2170,7 @@ func (s *Server) runFullAnalysis(w http.ResponseWriter, r *http.Request) {
 	historySummary := summarizer.Summarize(req.Symbol, bars)
 
 	// Fetch recent bars for each timeframe and compute indicators
-	tfList := []string{"1H", "4H", "1D", "1W"}
+	tfList := []string{"15M", "1H", "4H", "1D", "1W"}
 	tfBars := make(map[string][]models.OHLCV, len(tfList))
 	for _, tf := range tfList {
 		tfData, err := s.fullStore.GetOHLCV(req.Symbol, tf, 200)
@@ -2160,6 +2182,10 @@ func (s *Server) runFullAnalysis(w http.ResponseWriter, r *http.Request) {
 			tfData[i], tfData[j] = tfData[j], tfData[i]
 		}
 		tfBars[tf] = tfData
+	}
+	if req.Timeframe == "15M" && len(tfBars["15M"]) < 30 {
+		http.Error(w, "15M candles are not ready for analysis", http.StatusUnprocessableEntity)
+		return
 	}
 	recentIndicators := indicator.Compute(tfBars)
 
@@ -2187,6 +2213,7 @@ func (s *Server) runFullAnalysis(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := analyst.AnalystInput{
+		Timeframe:        req.Timeframe,
 		Symbol:           req.Symbol,
 		HistorySummary:   historySummary,
 		MacroContext:     macroContext,
@@ -2682,6 +2709,8 @@ func generateDemoBars(symbol, timeframe string, count int) []models.OHLCV {
 
 	var tfDuration time.Duration
 	switch timeframe {
+	case "15M":
+		tfDuration = 15 * time.Minute
 	case "1H":
 		tfDuration = time.Hour
 	case "4H":

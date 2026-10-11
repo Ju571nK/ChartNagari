@@ -34,7 +34,7 @@ const SchemaGetOHLCV = `{
   "type": "object",
   "properties": {
     "symbol":    {"type": "string"},
-    "timeframe": {"type": "string", "enum": ["1W","1D","4H","1H"]},
+    "timeframe": {"type": "string", "enum": ["1W","1D","4H","1H","15M"]},
     "limit":     {"type": "integer", "minimum": 1, "maximum": 500, "default": 50}
   },
   "required": ["symbol","timeframe"],

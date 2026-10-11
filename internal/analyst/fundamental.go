@@ -52,6 +52,9 @@ func (a *FundamentalAnalyst) Analyze(ctx context.Context, input AnalystInput) An
 func buildFundamentalPrompt(input AnalystInput) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("## %s Fundamental Analysis\n\n", input.Symbol))
+	if input.Timeframe != "" {
+		sb.WriteString(fmt.Sprintf("Selected chart timeframe: %s. Distinguish this timeframe from longer-term context.\n\n", input.Timeframe))
+	}
 	if input.MacroContext != "" {
 		sb.WriteString("### S&P 500 (SPY) Market Backdrop\n")
 		sb.WriteString(input.MacroContext)
@@ -60,7 +63,7 @@ func buildFundamentalPrompt(input AnalystInput) string {
 	sb.WriteString(fmt.Sprintf("### %s Price History Summary\n", input.Symbol))
 	sb.WriteString(input.HistorySummary)
 	sb.WriteString("\n### Current Price Structure Indicators\n")
-	for _, k := range []string{"1D:EMA_20", "1D:EMA_50", "1D:EMA_200", "1D:BB_upper", "1D:BB_middle", "1D:BB_lower", "1D:BB_pct", "1W:EMA_50", "1W:EMA_200", "1D:SWING_HIGH", "1D:SWING_LOW"} {
+	for _, k := range []string{"15M:RSI_14", "15M:EMA_50", "15M:MACD_hist", "15M:ATR_14", "1D:EMA_20", "1D:EMA_50", "1D:EMA_200", "1D:BB_upper", "1D:BB_middle", "1D:BB_lower", "1D:BB_pct", "1W:EMA_50", "1W:EMA_200", "1D:SWING_HIGH", "1D:SWING_LOW"} {
 		if v, ok := input.RecentIndicators[k]; ok {
 			sb.WriteString(fmt.Sprintf("- %s: %.4f\n", k, v))
 		}

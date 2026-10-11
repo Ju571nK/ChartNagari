@@ -283,3 +283,15 @@ func TestEffectiveScoreThreshold_FilteredAtPipeline(t *testing.T) {
 		t.Errorf("wrong signals kept: %v", kept)
 	}
 }
+
+func Test15MAlertTimeframeRequiresExplicitSelection(t *testing.T) {
+	signals := []models.Signal{{Timeframe: "15M"}, {Timeframe: "1H"}, {Timeframe: "4H"}, {Timeframe: "ALL", Direction: "NEUTRAL"}}
+	legacy := filterByTimeframe(signals, nil)
+	if len(legacy) != 3 || legacy[0].Timeframe != "1H" || legacy[2].Timeframe != "ALL" {
+		t.Fatalf("legacy/default changed: %+v", legacy)
+	}
+	selected := filterByTimeframe(signals, []string{"15M", "1H"})
+	if len(selected) != 2 || selected[0].Timeframe != "15M" {
+		t.Fatalf("explicit15Mselection: %+v", selected)
+	}
+}

@@ -9,10 +9,11 @@ import (
 
 // tfDuration maps timeframe string to its duration.
 var tfDuration = map[string]time.Duration{
-	"1H": time.Hour,
-	"4H": 4 * time.Hour,
-	"1D": 24 * time.Hour,
-	"1W": 7 * 24 * time.Hour,
+	"15M": 15 * time.Minute,
+	"1H":  time.Hour,
+	"4H":  4 * time.Hour,
+	"1D":  24 * time.Hour,
+	"1W":  7 * 24 * time.Hour,
 }
 
 // RebuildHigherTF aggregates 1H bars into 4H, 1D, 1W bars.
@@ -98,4 +99,15 @@ var BinanceTFMap = map[string]string{
 	"4H": "4h",
 	"1D": "1d",
 	"1W": "1w",
+}
+
+// LegacyTimeframes keeps the FX-only 15M opt-in away from stock/crypto collectors.
+func LegacyTimeframes(timeframes []string) []string {
+	out := make([]string, 0, len(timeframes))
+	for _, tf := range timeframes {
+		if tf != "15M" {
+			out = append(out, tf)
+		}
+	}
+	return out
 }

@@ -20,7 +20,7 @@ func (s *Server) getForexStrength(w http.ResponseWriter, r *http.Request) {
 	if tf == "" {
 		tf = "4H"
 	}
-	if tf != "1H" && tf != "4H" && tf != "1D" && tf != "1W" {
+	if tf != "15M" && tf != "1H" && tf != "4H" && tf != "1D" && tf != "1W" {
 		http.Error(w, "invalid timeframe", http.StatusBadRequest)
 		return
 	}
@@ -122,7 +122,7 @@ func (s *Server) getForexSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	symbol := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("symbol")))
 	tf := r.URL.Query().Get("tf")
-	if symbol == "" || (tf != "1H" && tf != "4H" && tf != "1D" && tf != "1W") {
+	if symbol == "" || (tf != "15M" && tf != "1H" && tf != "4H" && tf != "1D" && tf != "1W") {
 		http.Error(w, "symbol and valid tf required", 400)
 		return
 	}
@@ -148,7 +148,11 @@ func (s *Server) getForexSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	// Session boundaries can cut through a 4H candle; derive observed range
 	// from 1H candles regardless of the requested intraday chart timeframe.
-	bars, err := s.chartStore.GetOHLCV(symbol, "1H", 10000)
+	rangeTF := "1H"
+	if tf == "15M" {
+		rangeTF = "15M"
+	}
+	bars, err := s.chartStore.GetOHLCV(symbol, rangeTF, 10000)
 	if err != nil {
 		http.Error(w, "candles unavailable", 500)
 		return

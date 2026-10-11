@@ -139,6 +139,11 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
   // /demo/scan?symbol=&timeframe= → full captured scan (onboarding reads .signals)
   if (path === '/demo/scan') {
     const tf = search.get('timeframe') || '1D'
+    if (tf === '15M') {
+      const symbol = search.get('symbol') || DEMO_SYMBOL
+      if (!DEMO_FX.some(item => item === symbol)) return new Response('15M demo is available for Forex only', { status: 422 })
+      return jsonResponse({ symbol, timeframe: tf, bars: demoFxBars(symbol, tf), signals: [] })
+    }
     const scan = await loadScan(tf, realFetch)
     return jsonResponse(scan)
   }
@@ -149,6 +154,7 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
     const sym = decodeURIComponent(ohlcv[1])
     const tf = ohlcv[2]
     if (sym === DEMO_SYMBOL) {
+      if (tf === '15M') return new Response('15M demo is available for Forex only', { status: 422 })
       const scan = await loadScan(tf, realFetch)
       currentTf = tf
       return jsonResponse(scan.bars)
@@ -168,7 +174,7 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
       const bars = demoFxBars(sym, currentTf)
       const sample = bars[Math.floor(bars.length * 0.7)]
       const providerSymbol = sym === 'XAUUSD' ? 'GC=F' : `${sym}=X`
-      return jsonResponse(sample ? [{ symbol: sym, timeframe: currentTf, time: sample.time, direction: 'LONG', rule: 'ict_liquidity_sweep', score: 7.2, message: 'Demo sample', message_key: 'forex.demoSignal', ai_interpretation: '', zone_low: sample.low, zone_high: sample.high, entry_price: sample.close, tp: sample.close + 30 * instrument(sym).pip, sl: sample.close - 15 * instrument(sym).pip, tp_pips: 30, sl_pips: 15, data_provider: 'yahoo', provider_symbol: providerSymbol, source_identity: `yahoo|${providerSymbol}|${sym === 'XAUUSD' ? 'proxy' : 'spot'}`, data_proxy: sym === 'XAUUSD', volume_unconfirmed: true }] : [])
+      return jsonResponse(sample ? [{ symbol: sym, timeframe: currentTf, time: sample.time, direction: 'LONG', rule: 'ict_liquidity_sweep', score: 7.2, message: 'Demo sample', message_key: 'forex.demoSignal', ai_interpretation: '', zone_low: sample.low, zone_high: sample.high, entry_price: sample.close, tp: sample.close + 30 * instrument(sym).pip, sl: sample.close - 15 * instrument(sym).pip, tp_pips: 30, sl_pips: 15, data_provider: currentTf === '15M' ? 'demo' : 'yahoo', provider_symbol: currentTf === '15M' ? sym : providerSymbol, source_identity: currentTf === '15M' ? `demo|${sym}|synthetic` : `yahoo|${providerSymbol}|${sym === 'XAUUSD' ? 'proxy' : 'spot'}`, data_proxy: currentTf !== '15M' && sym === 'XAUUSD', volume_unconfirmed: true }] : [])
     }
     if (search.get('symbol') === DEMO_SYMBOL) {
       const scan = await loadScan(currentTf, realFetch)
@@ -204,7 +210,7 @@ async function route(path: string, search: URLSearchParams, realFetch: typeof fe
   }
   if (path === '/forex/sessions') {
     const sym = search.get('symbol')
-    if (sym && DEMO_FX.some(item => item === sym)) return jsonResponse({ sessions: demoFxSessions(sym, Number(search.get('from')), Number(search.get('to'))) })
+    if (sym && DEMO_FX.some(item => item === sym)) return jsonResponse({ sessions: demoFxSessions(sym, Number(search.get('from')), Number(search.get('to')), search.get('tf') || '1H') })
     if (sym === DEMO_SYMBOL) {
       const scan = await loadScan(search.get('tf') || '1H', realFetch)
       return jsonResponse({ sessions: demoSessionsFromBars(scan.bars, Number(search.get('from')), Number(search.get('to'))) })

@@ -9,6 +9,7 @@ package pipeline
 import (
 	"context"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -348,10 +349,14 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		return
 	}
 
-	// Check price alerts for this symbol using the latest 1D (or any available) close.
+	// Check price alerts using the latest available close, preferring 15M for FX.
 	if p.priceAlertWatcher != nil {
 		var latestClose float64
-		for _, tf := range []string{"1H", "4H", "1D", "1W"} {
+		tfs := []string{"1H", "4H", "1D", "1W"}
+		if p.assetClass(sym) == models.AssetForex {
+			tfs = append([]string{"15M"}, tfs...)
+		}
+		for _, tf := range tfs {
 			if bars, ok := allBars[tf]; ok && len(bars) > 0 {
 				latestClose = bars[0].Close
 				break
@@ -397,10 +402,26 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	if analysisCtx.AssetClass == models.AssetForex {
 		analysisCtx.VolumeQuality = p.forexVolume
 	}
-	if bars := allBars["1H"]; len(bars) > 0 {
+	if bars := sessionBars(allBars); len(bars) > 0 {
 		analysisCtx.Session = market.AsianRange(bars, bars[0].OpenTime)
 	}
-	signals := p.eng.Run(analysisCtx)
+	primaryCtx := analysisCtx
+	if analysisCtx.AssetClass == models.AssetForex && len(ruleBars["15M"]) > 0 {
+		primaryCtx = primaryFXContext(analysisCtx)
+	}
+	signals := p.eng.Run(primaryCtx)
+	// The normal multi-timeframe scan intentionally keeps higher-timeframe
+	// priority. For FX, also scan 15M by itself so an available 15M setup can
+	// still be surfaced alongside an unrelated 1H/4H/D/W setup.
+	if analysisCtx.AssetClass == models.AssetForex && len(ruleBars["15M"]) > 0 {
+		seen := make(map[string]struct{}, len(signals))
+		for _, sig := range signals {
+			seen[signalIdentity(sig)] = struct{}{}
+		}
+		for _, sig := range supplemental15MSignals(p.eng, analysisCtx, seen) {
+			signals = append(signals, sig)
+		}
+	}
 
 	// Detect Wyckoff phase early so it can inform the HTF context filter.
 	// During accumulation/markup, even if EMA trend is bearish, we want to allow
@@ -450,13 +471,12 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		}
 	}
 
-	// Timeframe filter (override-driven; empty list = allow all).
-	if len(effCfg.Timeframes) > 0 {
-		beforeTF := len(signals)
-		signals = filterByTimeframe(signals, effCfg.Timeframes)
-		if filtered := beforeTF - len(signals); filtered > 0 {
-			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Strs("allowed_tf", effCfg.Timeframes).Msg("timeframe filter removed signals")
-		}
+	// Empty timeframe lists preserve legacy timeframes while requiring explicit
+	// opt-in for 15M signals.
+	beforeTF := len(signals)
+	signals = filterByTimeframe(signals, effCfg.Timeframes)
+	if filtered := beforeTF - len(signals); filtered > 0 {
+		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Strs("allowed_tf", effCfg.Timeframes).Msg("timeframe filter removed signals")
 	}
 
 	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
@@ -724,6 +744,69 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	}
 }
 
+func signalIdentity(sig models.Signal) string {
+	return sig.Rule + "\x00" + sig.Timeframe + "\x00" + sig.Direction
+}
+
+func primaryFXContext(ctx models.AnalysisContext) models.AnalysisContext {
+	if ctx.AssetClass != models.AssetForex || len(ctx.Timeframes["15M"]) == 0 {
+		return ctx
+	}
+	primary := ctx
+	primary.Timeframes = make(map[string][]models.OHLCV, len(ctx.Timeframes)-1)
+	for timeframe, bars := range ctx.Timeframes {
+		if timeframe != "15M" {
+			primary.Timeframes[timeframe] = bars
+		}
+	}
+	primary.Indicators = make(map[string]float64, len(ctx.Indicators))
+	for key, value := range ctx.Indicators {
+		if !strings.HasPrefix(key, "15M:") {
+			primary.Indicators[key] = value
+		}
+	}
+	return primary
+}
+
+func supplemental15MSignals(eng *engine.RuleEngine, ctx models.AnalysisContext, seen map[string]struct{}) []models.Signal {
+	bars := ctx.Timeframes["15M"]
+	if eng == nil || ctx.AssetClass != models.AssetForex || len(bars) == 0 {
+		return nil
+	}
+	fineCtx := ctx
+	fineCtx.Timeframes = map[string][]models.OHLCV{"15M": bars}
+	fineCtx.Indicators = make(map[string]float64)
+	for key, value := range ctx.Indicators {
+		if strings.HasPrefix(key, "15M:") {
+			fineCtx.Indicators[key] = value
+		} else if !strings.Contains(key, ":") {
+			fineCtx.Indicators[key] = value
+		}
+	}
+	var additional []models.Signal
+	for _, sig := range eng.Run(fineCtx) {
+		if sig.Timeframe != "15M" {
+			continue
+		}
+		key := signalIdentity(sig)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		additional = append(additional, sig)
+	}
+	return additional
+}
+
+// sessionBars uses the finest available intraday data for Asian session ranges.
+// 15M candles are preferred when present; 1H remains the compatibility fallback.
+func sessionBars(allBars map[string][]models.OHLCV) []models.OHLCV {
+	if bars := allBars["15M"]; len(bars) > 0 {
+		return bars
+	}
+	return allBars["1H"]
+}
+
 // filterMTFConsensus returns only signals whose direction has signals
 // from at least minTFs distinct timeframes. NEUTRAL signals are always kept.
 func filterMTFConsensus(signals []models.Signal, minTFs int) []models.Signal {
@@ -783,7 +866,7 @@ func htfContext(indicators map[string]float64, tf string, bars map[string][]mode
 	return "" // ranging
 }
 
-// penalizeHTFContext penalizes (or removes) lower-timeframe (1H, 4H) signals
+// penalizeHTFContext penalizes (or removes) lower-timeframe (15M, 1H, 4H) signals
 // that contradict the higher-timeframe (1D, 1W) trend direction.
 //
 // penaltyPct controls behavior:

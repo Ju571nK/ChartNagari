@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { ChartTab } from './App'
+import { ChartTab, BacktestTab } from './App'
 import { WorkspaceProvider } from './Workspace'
 import i18n from './i18n'
 
@@ -163,4 +163,37 @@ it.each([
   fireEvent.click(screen.getByRole('button', { name: 'ICT' }))
   expect(screen.getByRole('button', { name: 'ICT' })).toHaveAttribute('aria-pressed', 'false')
   expect(chartMocks.setMarkers.mock.calls.at(-1)?.[0]).toHaveLength(0)
+})
+
+it('shows15M forForex only and preserves1H until the user selects15M', async () => {
+  const symbols = [{ symbol: 'EURUSD', type: 'forex', exchange: 'FX', enabled: true }, { symbol: 'SPCX', type: 'stock', exchange: 'NASDAQ', enabled: true }]
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const path = String(input)
+    return response(path === '/api/symbols' ? symbols : path === '/api/watchlist/timeframes' ? { timeframes: ['1H', '4H', '1D', '1W'] } : path.includes('/ohlcv/') ? [bar] : [])
+  })
+  render(<WorkspaceProvider><ChartTab uiMode="beginner" /></WorkspaceProvider>)
+  await screen.findByRole('option', { name: 'EURUSD' })
+  expect(screen.queryByRole('button', { name: '15M' })).toBeNull()
+  fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'EURUSD' } })
+  expect(await screen.findByRole('button', { name: '15M' })).toBeInTheDocument()
+  expect(window.location.search).toContain('tf=1H')
+  fireEvent.click(screen.getByRole('button', { name: '15M' }))
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).includes('/ohlcv/EURUSD/15M'))).toBe(true))
+  expect(window.location.search).toContain('tf=15M')
+  expect(fetcher.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false)
+  fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'SPCX' } })
+  await waitFor(() => expect(window.location.search).toContain('tf=1H'))
+  expect(screen.queryByRole('button', { name: '15M' })).toBeNull()
+})
+
+
+it('offersForex15M in backtests and requests readiness for that interval', async () => {
+  window.history.replaceState(null, '', '/?view=backtest&symbol=EURUSD&tf=1H')
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const path = String(input)
+    return response(path === '/api/symbols' ? [{ symbol: 'EURUSD', type: 'forex', exchange: 'FX', enabled: true }] : path === '/api/watchlist/timeframes' ? { timeframes: ['1H'] } : [])
+  })
+  render(<WorkspaceProvider><BacktestTab uiMode="beginner" /></WorkspaceProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '15M' }))
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).includes('/backtest/readiness?symbol=EURUSD&timeframe=15M'))).toBe(true))
 })

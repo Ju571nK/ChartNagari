@@ -179,6 +179,9 @@ func (t *Trader) CheckPositions(sym string, allBars map[string][]models.OHLCV) {
 		if !ok || len(bars) == 0 {
 			// Fall back to 1H as the most granular available TF.
 			bars = allBars["1H"]
+			if pos.AssetClass == models.AssetForex && len(allBars["15M"]) > 0 {
+				bars = allBars["15M"]
+			}
 		}
 		if len(bars) == 0 {
 			continue

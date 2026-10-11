@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 export const pages = ['chart', 'analysis', 'history', 'calendar', 'backtest', 'performance', 'paper', 'my-trades', 'execution', 'symbols', 'rules', 'alert', 'price-alerts', 'report', 'status', 'settings'] as const
 export type Page = typeof pages[number]
-export const timeframes = ['1W', '1D', '4H', '1H'] as const
+export const timeframes = ['1W', '1D', '4H', '1H', '15M'] as const
 export type Timeframe = typeof timeframes[number]
 type Selection = { page: Page; symbol: string; timeframe: Timeframe }
 

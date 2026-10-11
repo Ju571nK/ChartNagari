@@ -105,3 +105,17 @@ describe('SymbolOverrideEditor', () => {
     expect(lastCall[0]).toBe('/api/symbol-overrides/TSLA')
   })
 })
+
+it('offers15M only forForex and saves an explicit per-symbol opt-in', async () => {
+  const view = render(wrap(<SymbolOverrideEditor symbol="TSLA" symbolType="stock" profile={profile} />))
+  await vi.runAllTimersAsync()
+  expect(screen.queryByRole('button', { name: '15M' })).toBeNull()
+  view.unmount()
+  render(wrap(<SymbolOverrideEditor symbol="EURUSD" symbolType="forex" profile={profile} />))
+  await vi.runAllTimersAsync()
+  fireEvent.click(screen.getByRole('button', { name: '15M' }))
+  await vi.runAllTimersAsync()
+  const put = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'PUT')
+  expect(put?.[0]).toBe('/api/symbol-overrides/EURUSD')
+  expect(JSON.parse(String(put?.[1]?.body)).timeframes).toEqual(['15M'])
+})

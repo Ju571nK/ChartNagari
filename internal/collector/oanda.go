@@ -21,7 +21,7 @@ import (
 var ErrOANDATokenRejected = errors.New("OANDA token rejected")
 var ErrOANDARateLimited = errors.New("OANDA rate limited")
 
-var oandaTF = map[string]string{"1H": "H1", "4H": "H4", "1D": "D", "1W": "W"}
+var oandaTF = map[string]string{"15M": "M15", "1H": "H1", "4H": "H4", "1D": "D", "1W": "W"}
 
 type OANDACollector struct {
 	db         *storage.DB

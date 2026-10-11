@@ -55,6 +55,7 @@ export function MetalSourceNote({ symbol }: { symbol: string }) {
   const { t } = useTranslation()
   const state = useForexData<ForexStatus>(isMetal(symbol) ? 'status' : null)
   if (!isMetal(symbol)) return null
+  if (DEMO_STATIC) return <p className="forex-proxy">{t('forex.demoSample')}</p>
   if (state.error) return <p className="forex-proxy" role="alert">{t('forex.providerStatusError')}: {state.error}</p>
   if (!state.data) return <p role="status">{t('forex.providerLoading')}</p>
   return state.data.provider === 'yahoo' ? <p className="forex-proxy">{t('forex.metalProxy')}</p> : null

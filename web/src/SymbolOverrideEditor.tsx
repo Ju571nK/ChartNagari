@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { Timeframe } from './Workspace'
+
 const TIMEFRAMES = ['1H', '4H', '1D', '1W'] as const
-type Timeframe = typeof TIMEFRAMES[number]
 
 interface ProfileInfo {
   name: string
@@ -39,6 +40,7 @@ interface OverrideState {
 interface Props {
   symbol: string
   profile: ProfileInfo
+  symbolType?: string
   apiToken?: string
 }
 
@@ -55,7 +57,7 @@ async function apiFetch<T>(path: string, init?: RequestInit, token?: string): Pr
   return res.json() as Promise<T>
 }
 
-export function SymbolOverrideEditor({ symbol, profile, apiToken }: Props) {
+export function SymbolOverrideEditor({ symbol, profile, apiToken, symbolType }: Props) {
   const { t } = useTranslation()
   const [state, setState] = useState<OverrideState>({
     score_threshold: null,
@@ -207,7 +209,7 @@ export function SymbolOverrideEditor({ symbol, profile, apiToken }: Props) {
           {t('override.timeframes')}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {TIMEFRAMES.map(tf => {
+          {(symbolType === 'forex' ? ['15M', ...TIMEFRAMES] as const : TIMEFRAMES).map(tf => {
             const on = active.has(tf)
             return (
               <button

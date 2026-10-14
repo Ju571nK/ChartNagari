@@ -34,55 +34,22 @@ type yahooResult struct {
 }
 
 func main() {
-	input := flag.String("input", "tmp/usdjpy-research/yahoo-1y.json", "Yahoo hourly JSON snapshot")
-	output := flag.String("output", "tmp/usdjpy-research/replay.json", "Replay JSON output")
+	input := flag.String("input", "", "legacy Yahoo hourly JSON input")
+	input15m := flag.String("input-15m", "tmp/usdjpy-15m-research/yahoo-15m.json", "Yahoo native 15-minute JSON snapshot")
+	input1h := flag.String("input-1h", "tmp/usdjpy-15m-research/yahoo-1y.json", "Yahoo hourly JSON snapshot")
+	output := flag.String("output", "tmp/usdjpy-15m-research/replay.json", "Replay JSON output")
 	rulesPath := flag.String("rules", "config/rules.yaml", "Rules configuration (no secrets)")
 	flag.Parse()
-	blob, err := os.ReadFile(*input)
-	must(err)
-	var raw struct {
-		Chart struct {
-			Result []yahooResult
-			Error  interface{}
-		}
-	}
-	must(json.Unmarshal(blob, &raw))
-	if len(raw.Chart.Result) != 1 || raw.Chart.Error != nil {
-		panic("Yahoo returned no usable result")
-	}
-	y := raw.Chart.Result[0]
-	if (y.Meta.Symbol != "USDJPY=X" && y.Meta.Symbol != "JPY=X") || y.Meta.Currency != "JPY" {
-		panic("expected USDJPY=X quoted in JPY")
-	}
-	if len(y.Indicators.Quote) != 1 {
-		panic("missing OHLC")
-	}
-	q := y.Indicators.Quote[0]
 	now := time.Now().UTC()
-	var hourly []models.OHLCV
-	for i, ts := range y.Timestamp {
-		if i >= len(q.Open) || i >= len(q.High) || i >= len(q.Low) || i >= len(q.Close) {
-			panic("mismatched OHLC arrays")
-		}
-		if q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil {
-			continue
-		}
-		t := time.Unix(ts, 0).UTC()
-		if t.Add(time.Hour).After(now) {
-			continue
-		}
-		o, h, l, c := *q.Open[i], *q.High[i], *q.Low[i], *q.Close[i]
-		if o <= 0 || c <= 0 || l <= 0 || h < l || h < o || h < c || l > o || l > c {
-			panic("invalid OHLC")
-		}
-		if len(hourly) > 0 && !t.After(hourly[len(hourly)-1].OpenTime) {
-			panic("timestamps not strictly ascending")
-		}
-		hourly = append(hourly, models.OHLCV{Symbol: "USDJPY", Timeframe: "1H", OpenTime: t, Open: o, High: h, Low: l, Close: c, VolumeQuality: models.VolumeNone})
+	inputs := map[string]string{"15M": *input15m, "1H": *input1h}
+	if *input != "" {
+		inputs["1H"] = *input
 	}
-	if len(hourly) < 1000 {
-		panic("not enough history for train/holdout research")
+	bars := map[string][]models.OHLCV{}
+	for _, tf := range []string{"15M", "1H"} {
+		bars[tf] = readYahooBars(inputs[tf], tf, now)
 	}
+	bars["4H"] = collector.RebuildFX4H("USDJPY", bars["1H"])
 	rb, err := os.ReadFile(*rulesPath)
 	must(err)
 	var rc appconfig.RulesConfig
@@ -139,22 +106,75 @@ func main() {
 		&candlestick.ThreeBlackCrowsRule{},
 	}
 	results := map[string]backtest.BacktestResult{}
-	bars := map[string][]models.OHLCV{"1H": hourly, "4H": collector.RebuildFX4H("USDJPY", hourly)}
-	for _, tf := range []string{"1H", "4H"} {
+	horizons := map[string]int{"15M": 20, "1H": 5, "4H": 2} // five hours, rounded up to whole bars
+	for _, tf := range []string{"15M", "1H", "4H"} {
 		bc := backtest.DefaultConfig()
 		bc.AssetClass = models.AssetForex
 		bc.VolumeQuality = models.VolumeNone
 		bc.TPATRMultiplier = 1.5
 		bc.SLATRMultiplier = 1
 		bc.SpreadPips = 1
+		bc.MaxExitBars = horizons[tf]
 		results[tf] = backtest.New(allRules, cfg, bc).Run("USDJPY", tf, "", bars[tf])
 		fmt.Fprintf(os.Stderr, "%s: %d bars, %d raw outcomes\n", tf, len(bars[tf]), results[tf].Trades)
 	}
-	out := map[string]interface{}{"generated_at": now, "bars": bars, "results": results, "rules_config": rc, "warmup_bars": 200, "max_exit_bars": 20, "tp_atr": 1.5, "sl_atr": 1, "spread_pips": 1}
+	out := map[string]interface{}{"generated_at": now, "bars": bars, "results": results, "rules_config": rc, "warmup_bars": 200, "max_exit_bars": horizons, "max_exit_hours": 5, "tp_atr": 1.5, "sl_atr": 1, "spread_pips": 1}
 	b, err := json.Marshal(out)
 	must(err)
 	must(os.WriteFile(*output, b, 0644))
 }
+func readYahooBars(path, tf string, now time.Time) []models.OHLCV {
+	blob, err := os.ReadFile(path)
+	must(err)
+	var raw struct {
+		Chart struct {
+			Result []yahooResult
+			Error  interface{}
+		}
+	}
+	must(json.Unmarshal(blob, &raw))
+	if len(raw.Chart.Result) != 1 || raw.Chart.Error != nil {
+		panic("Yahoo returned no usable result for " + tf)
+	}
+	y := raw.Chart.Result[0]
+	if (y.Meta.Symbol != "USDJPY=X" && y.Meta.Symbol != "JPY=X") || y.Meta.Currency != "JPY" {
+		panic("expected USDJPY=X quoted in JPY")
+	}
+	if len(y.Indicators.Quote) != 1 {
+		panic("missing OHLC for " + tf)
+	}
+	q := y.Indicators.Quote[0]
+	duration := time.Hour
+	if tf == "15M" {
+		duration = 15 * time.Minute
+	}
+	bars := make([]models.OHLCV, 0, len(y.Timestamp))
+	for i, ts := range y.Timestamp {
+		if i >= len(q.Open) || i >= len(q.High) || i >= len(q.Low) || i >= len(q.Close) {
+			panic("mismatched OHLC arrays")
+		}
+		if q.Open[i] == nil || q.High[i] == nil || q.Low[i] == nil || q.Close[i] == nil {
+			continue
+		}
+		t := time.Unix(ts, 0).UTC()
+		if t.Add(duration).After(now) {
+			continue
+		}
+		o, h, l, c := *q.Open[i], *q.High[i], *q.Low[i], *q.Close[i]
+		if o <= 0 || c <= 0 || l <= 0 || h < l || h < o || h < c || l > o || l > c {
+			panic("invalid OHLC")
+		}
+		if len(bars) > 0 && !t.After(bars[len(bars)-1].OpenTime) {
+			panic("timestamps not strictly ascending")
+		}
+		bars = append(bars, models.OHLCV{Symbol: "USDJPY", Timeframe: tf, OpenTime: t, Open: o, High: h, Low: l, Close: c, VolumeQuality: models.VolumeNone})
+	}
+	if len(bars) < 1000 {
+		panic("not enough history for train/holdout research: " + tf)
+	}
+	return bars
+}
+
 func must(err error) {
 	if err != nil {
 		panic(err)

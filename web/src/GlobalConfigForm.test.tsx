@@ -7,10 +7,9 @@ vi.mock('react-i18next', () => ({
 		t: (k: string) => {
 			const map: Record<string, string> = {
 				'execution.max_dispatched': 'Max dispatched',
-				'execution.dedup_window': 'Dedup window (e.g. 5m)',
+				'execution.dedup_window': 'Dedup window (seconds)',
 				'execution.symbol_map': 'Symbol map (advanced)',
 				'execution.add_row': 'Add row',
-				'execution.add_broker': 'Add broker',
 				'execution.remove_row': 'Remove row',
 				'common.discard': 'Discard',
 				'common.save': 'Save',
@@ -22,8 +21,8 @@ vi.mock('react-i18next', () => ({
 
 const base = {
 	max_dispatched: 3,
-	dedup_window: '5m',
-	symbol_map: { BTCUSDT: { alpaca: 'BTC/USD', binance: 'BTCUSDT' } },
+	dedup_window_sec: 300,
+	symbol_map: { BTCUSDT: 'BTC/USD' },
 };
 
 describe('GlobalConfigForm', () => {
@@ -36,11 +35,6 @@ describe('GlobalConfigForm', () => {
 		render(<GlobalConfigForm config={base} onSave={vi.fn()} onServerError={null} />);
 		fireEvent.change(screen.getByLabelText(/max dispatched/i), { target: { value: '5' } });
 		expect(screen.getByRole('button', { name: /save/i })).toBeEnabled();
-	});
-
-	it('shows inline server error for dedup_window', () => {
-		render(<GlobalConfigForm config={base} onSave={vi.fn()} onServerError={{ dedup_window: 'invalid duration' }} />);
-		expect(screen.getByText(/invalid duration/i)).toBeInTheDocument();
 	});
 
 	it('Add row appends a blank symbol row', () => {
@@ -64,5 +58,11 @@ describe('GlobalConfigForm', () => {
 		fireEvent.change(screen.getByLabelText(/max dispatched/i), { target: { value: '5' } });
 		fireEvent.click(screen.getByRole('button', { name: /discard/i }));
 		expect((screen.getByLabelText(/max dispatched/i) as HTMLInputElement).value).toBe('3');
+	});
+
+	it('renders with undefined symbol_map without crashing', () => {
+		const configNoMap = { max_dispatched: 0, dedup_window_sec: 300, symbol_map: undefined };
+		render(<GlobalConfigForm config={configNoMap} onSave={vi.fn()} onServerError={null} />);
+		expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
 	});
 });

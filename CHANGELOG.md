@@ -14,6 +14,7 @@ Format:
 
 ---
 
+<<<<<<< HEAD
 ## [Unreleased]
 
 ### Docs
@@ -23,6 +24,15 @@ Format:
   `deploy/aws-personal/`.
 
 ---
+=======
+## [Unreleased] - 2026-10-18
+
+### Fixed
+- Execution tab now matches the server's execution config contract: plugins are
+  keyed by `id`, the dedup window is `dedup_window_sec` (seconds), and
+  `symbol_map` is an optional flat symbol→ticker map. Previously plugin
+  edit/delete/toggle and dedup window saves did not reach the server correctly.
+>>>>>>> origin/main
 
 ## [2.16.0.0] - 2026-10-11
 

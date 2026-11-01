@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 export type PluginCardProps = {
 	plugin: {
-		name: string;
+		id: string;
 		url: string;
 		enabled: boolean;
 		symbols: string[];
@@ -49,7 +49,7 @@ export default function PluginCard({ plugin, stats, onEdit, onDelete, onToggleEn
 					onChange={e => { void onToggleEnabled(e.target.checked); }}
 				/>
 			</label>
-			<span className="plugin-name">{plugin.name}</span>
+			<span className="plugin-name">{plugin.id}</span>
 			<span className="plugin-url">{plugin.url}</span>
 			<span className="plugin-stats">
 				{stats
@@ -65,7 +65,7 @@ export default function PluginCard({ plugin, stats, onEdit, onDelete, onToggleEn
 			{confirming && (
 				<div role="dialog" className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
 					<div className="modal" style={{ background: 'var(--bg)', padding: 24, borderRadius: 8, minWidth: 320 }}>
-						<p>{t('execution.confirm_delete_plugin', { name: plugin.name })}</p>
+						<p>{t('execution.confirm_delete_plugin', { name: plugin.id })}</p>
 						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
 							<button onClick={() => setConfirming(false)}>{t('common.cancel')}</button>
 							<button onClick={() => void confirmDelete()} disabled={deleting}>{t('common.confirm')}</button>

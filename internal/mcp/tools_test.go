@@ -96,6 +96,18 @@ func (f *fakeSignalSource) LatestClose(symbol string) (float64, error) {
 	return f.price, nil
 }
 
+func TestGetAnalysis_DescriptionListsSupportedTimeframes(t *testing.T) {
+	desc := NewGetAnalysis(nil, nil).Description()
+	for _, tf := range []string{"1W", "1D", "4H", "1H", "15M"} {
+		if !strings.Contains(desc, tf) {
+			t.Errorf("description missing %s: %s", tf, desc)
+		}
+	}
+	if strings.Contains(desc, "all 4 timeframes") {
+		t.Errorf("description still says four timeframes: %s", desc)
+	}
+}
+
 func TestGetAnalysis_RendersFourTimeframes(t *testing.T) {
 	now := time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC)
 	src := &fakeSignalSource{
@@ -124,7 +136,7 @@ func TestGetAnalysis_RendersFourTimeframes(t *testing.T) {
 		t.Fatalf("call: %v", err)
 	}
 	text := res.Content[0].Text
-	for _, tf := range []string{"1W", "1D", "4H", "1H"} {
+	for _, tf := range []string{"1W", "1D", "4H", "1H", "15M"} {
 		if !strings.Contains(text, "| "+tf+" |") {
 			t.Errorf("missing TF row %s in: %q", tf, text)
 		}
@@ -254,6 +266,16 @@ func TestGetOHLCV_InvalidTimeframe(t *testing.T) {
 	var mcpErr *Error
 	if !errors.As(err, &mcpErr) || mcpErr.Code != ErrCodeInvalidParams {
 		t.Fatalf("want InvalidParams, got %v", err)
+	}
+	if !strings.Contains(mcpErr.Message, "15M") {
+		t.Fatalf("invalid timeframe error omits 15M: %q", mcpErr.Message)
+	}
+}
+
+func TestGetOHLCV_Accepts15M(t *testing.T) {
+	tool := NewGetOHLCV(&fakeOHLCVSource{})
+	if _, err := tool.Call(context.Background(), json.RawMessage(`{"symbol":"BTCUSDT","timeframe":"15M"}`)); err != nil {
+		t.Fatalf("15M is a supported timeframe: %v", err)
 	}
 }
 

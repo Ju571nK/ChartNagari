@@ -209,24 +209,7 @@ func (t *Trader) CheckPositions(sym string, allBars map[string][]models.OHLCV) {
 			if !hit {
 				continue
 			}
-			var pnlPct, pnlPips float64
-			if pos.Direction == "LONG" {
-				pnlPct = (exitPrice - pos.EntryPrice) / pos.EntryPrice * 100
-			} else {
-				pnlPct = (pos.EntryPrice - exitPrice) / pos.EntryPrice * 100
-			}
-			if pos.PipSize > 0 {
-				pos.ExitExecutionPrice = exitPrice - pos.SpreadPips*pos.PipSize/2
-				if pos.Direction == "SHORT" {
-					pos.ExitExecutionPrice = exitPrice + pos.SpreadPips*pos.PipSize/2
-				}
-				pnlPips = pnlPct/100*pos.EntryPrice/pos.PipSize - pos.SpreadPips
-				entryExecution := pos.EntryPrice + pos.SpreadPips*pos.PipSize/2
-				if pos.Direction == "SHORT" {
-					entryExecution = pos.EntryPrice - pos.SpreadPips*pos.PipSize/2
-				}
-				pnlPct = pnlPips * pos.PipSize / entryExecution * 100
-			}
+			pnlPct, pnlPips := PositionPnL(pos, exitPrice)
 			var closeErr error
 			if store, ok := t.store.(interface {
 				ClosePaperPositionWithPips(int64, float64, string, float64, float64) error
@@ -268,6 +251,26 @@ func checkLevel(pos PaperPosition, bar models.OHLCV) (status string, exitPrice f
 		}
 	}
 	return "", 0, false
+}
+
+// PositionPnL is the percent and pip result of leaving pos at exitPrice.
+// Pip adjustment matches an automatic TP or SL close when PipSize is set.
+func PositionPnL(pos PaperPosition, exitPrice float64) (pnlPct, pnlPips float64) {
+	if pos.Direction == "LONG" {
+		pnlPct = (exitPrice - pos.EntryPrice) / pos.EntryPrice * 100
+	} else {
+		pnlPct = (pos.EntryPrice - exitPrice) / pos.EntryPrice * 100
+	}
+	if pos.PipSize <= 0 {
+		return pnlPct, 0
+	}
+	pnlPips = pnlPct/100*pos.EntryPrice/pos.PipSize - pos.SpreadPips
+	entryExecution := pos.EntryPrice + pos.SpreadPips*pos.PipSize/2
+	if pos.Direction == "SHORT" {
+		entryExecution = pos.EntryPrice - pos.SpreadPips*pos.PipSize/2
+	}
+	pnlPct = pnlPips * pos.PipSize / entryExecution * 100
+	return pnlPct, pnlPips
 }
 
 // Summary computes aggregated stats from all closed positions.

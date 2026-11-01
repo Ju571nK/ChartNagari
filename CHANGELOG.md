@@ -17,6 +17,11 @@ Format:
 ## [Unreleased]
 
 ### Added
+- Discord alerts include a Took / Skipped link to My Trades Pending when
+  `CHARTNAGARI_URL` is a usable origin. The link uses the existing mark
+  buttons. Pending now includes Telegram `PENDING` stubs as well as signals
+  with no mark row. The Paper tab can close an open position as
+  `CLOSED_MANUAL`, at a request price or the latest bar close.
 - The status tab lists why an alert did not fire. Each hard drop is one coalesced
   row, keyed by symbol, rule, timeframe, direction, reason, and sender, and
   `GET /api/alert-drops` returns the newest rows. A repeated cooldown updates

@@ -17,8 +17,11 @@
 # timestamp_skew_sec: allowed clock skew for inbound feedback HMAC verification.
 #   Defaults to 300s.
 #
-# allowed_origins: origins permitted to open the /ws/execution WebSocket (in
-#   addition to HMAC subprotocol auth).
+# allowed_origins: kept in this file. There is no /ws/execution route.
+#   Browser and execution clients both open GET /ws. Execution clients
+#   authenticate with the chartnagari.v1 HMAC subprotocol on that route.
+#   This list is not applied to the upgrade. Remote browser origins come
+#   from settings.yaml server.allowed_origins.
 #
 # plugins[]: each plugin has a unique id, an https:// URL (http:// allowed for
 #   local dev only), a shared HMAC secret, and optional filters (symbols,

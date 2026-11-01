@@ -1,0 +1,23 @@
+# Merge these keys into config/settings.yaml on the always-on host.
+# Do not replace an existing settings file with settings.example.yaml.
+# Generate the token with: openssl rand -hex 32
+# Restart the server process after changing these values.
+
+server:
+  env: production
+  host: "0.0.0.0"           # listen inside the container; host publish stays 127.0.0.1:8080
+  port: "8080"
+  api_token: "REPLACE_WITH_OPENSSL_RAND_HEX_32"
+  remote_access: "true"     # requires api_token length >= 32
+  allowed_origins: "https://charts.example.com"  # exact origin; no path, *, or credentials
+  log_level: info
+
+database:
+  path: ./data/chart_analyzer.db
+
+# Checklist (also in docs/aws-personal-always-on.md):
+# [ ] api_token is unique, >= 32 chars, mode 600 on settings.yaml
+# [ ] allowed_origins matches the public HTTPS origin browsers use
+# [ ] remote_access is "true"
+# [ ] execution adapters remain disabled for phase 1
+# [ ] Ollama is not required on this small instance

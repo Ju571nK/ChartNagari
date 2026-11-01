@@ -59,6 +59,12 @@ resets do not erase them. The API uses `GET` and `PUT` at
 `/api/symbol-message-templates/{symbol}/preview`, subject to normal API bearer
 authentication. Each template is limited to 500 Unicode characters.
 
+Discord alerts use the same `clients.CHARTNAGARI_URL` value as the MCP bridge.
+That origin becomes the Took / Skipped link in the Discord embed. The default
+`http://localhost:8080` only works on the ChartNagari machine. Set a URL your
+phone or another browser can open, then restart the main server. Saving Settings
+alone does not reload the Discord sender.
+
 Economic-calendar signal annotations use `CALENDAR_FX_ALERT_WINDOW` for FX
 pairs (default 60 minutes). The existing `CALENDAR_ALERT_WINDOW` remains
 independent and defaults to 30 minutes for its legacy behavior. Each is clamped

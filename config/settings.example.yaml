@@ -78,6 +78,8 @@ ollama:
 
 # 별도 실행되는 MCP/Alpaca 프로세스도 동일한 YAML을 읽습니다.
 # 웹에서 저장해도 주문 실행기가 시작되거나 활성화되지는 않습니다.
+# CHARTNAGARI_URL is also the Discord Took/Skipped review origin. Use a URL the
+# operator's browser (or phone) can open. Restart the main server after changing it.
 clients:
   CHARTNAGARI_URL: http://localhost:8080
   CHARTNAGARI_TOKEN: ""

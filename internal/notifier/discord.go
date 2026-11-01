@@ -103,7 +103,7 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 		desc += "\nVolume unconfirmed"
 	}
 	// A webhook cannot host Took or Skipped buttons. The link opens the same mark actions on the web.
-	if link := reviewPendingURL(s.publicURL); link != "" {
+	if link := ReviewPendingURL(s.publicURL); link != "" {
 		desc += "\n\n[Took / Skipped](" + link + ")"
 	}
 	embed["description"] = desc
@@ -135,7 +135,9 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 	return nil
 }
 
-func reviewPendingURL(base string) string {
+// ReviewPendingURL builds the My Trades Pending deep link for Discord embeds.
+// Empty or unparseable bases return "" so the embed omits the link.
+func ReviewPendingURL(base string) string {
 	base = strings.TrimSpace(base)
 	if base == "" {
 		return ""
@@ -149,4 +151,19 @@ func reviewPendingURL(base string) string {
 	q.Set("marks", "pending")
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// PublicURLIsLoopback reports whether base is a usable origin whose host is
+// loopback (localhost / 127.0.0.1 / ::1). Phones opening Discord cannot use it.
+func PublicURLIsLoopback(base string) bool {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return false
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }

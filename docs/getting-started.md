@@ -70,8 +70,12 @@ and data directories, not arbitrary host paths.
    Yahoo requests a `60d` history window; actual availability depends on Yahoo. Start in beginner mode; use expert mode to inspect additional
    overlays.
 3. Connect optional data, AI and notification services in **Settings**.
-4. Restart the relevant process after changing general settings. If API-token
-   authentication is enabled, use **Authorize changes** in Settings to save edits.
+   If Discord is enabled, set `clients.CHARTNAGARI_URL` to an origin your phone
+   or browser can open (not only `localhost`) so Took / Skipped links work.
+4. Restart the relevant process after changing general settings. Changing
+   `CHARTNAGARI_URL` needs a main-server restart before Discord embeds pick it up.
+   If API-token authentication is enabled, use **Authorize changes** in Settings
+   to save edits.
 
 Do not expose an unauthenticated server publicly. Review execution configuration
 separately; nothing in these instructions enables an execution adapter.

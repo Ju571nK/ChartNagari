@@ -402,6 +402,24 @@ func TestDiscordSender_AppendsPendingReviewLink(t *testing.T) {
 	}
 }
 
+func TestPublicURLIsLoopback(t *testing.T) {
+	if !PublicURLIsLoopback("http://localhost:8080") {
+		t.Fatal("localhost should be loopback")
+	}
+	if !PublicURLIsLoopback("https://127.0.0.1/") {
+		t.Fatal("127.0.0.1 should be loopback")
+	}
+	if PublicURLIsLoopback("https://chart.example.com") {
+		t.Fatal("public host should not be loopback")
+	}
+	if PublicURLIsLoopback("") {
+		t.Fatal("empty is not loopback (link is simply omitted)")
+	}
+	if ReviewPendingURL("not a url") != "" {
+		t.Fatal("invalid base should yield empty review URL")
+	}
+}
+
 func reviewLink(desc string) string {
 	const open = "[Took / Skipped]("
 	start := strings.Index(desc, open)

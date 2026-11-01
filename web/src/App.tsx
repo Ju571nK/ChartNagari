@@ -2414,13 +2414,14 @@ interface PaperSummary {
   avg_pips?: number
 }
 
-function PaperTab() {
+export function PaperTab() {
   const { t } = useTranslation()
   const [summary, setSummary] = useState<PaperSummary | null>(null)
   const [positions, setPositions] = useState<PaperPosition[]>([])
   const [history, setHistory] = useState<PaperPosition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [closingID, setClosingID] = useState<number | null>(null)
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -2440,6 +2441,19 @@ function PaperTab() {
   }, [])
 
   useEffect(() => { reload() }, [reload])
+
+  const closePosition = (id: number) => {
+    setClosingID(id)
+    setError('')
+    apiFetch<null>(`/paper/positions/${id}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+      .then(() => reload())
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setClosingID(null))
+  }
 
   if (loading) return <p className="loading">{t('loading')}</p>
 
@@ -2494,7 +2508,7 @@ function PaperTab() {
           <div className="backtest-table-wrap">
             <table className="backtest-table">
               <thead>
-                <tr><th>{t('symbol')}</th><th>{t('forex.source')}</th><th>{t('direction')}</th><th>{t('rule')}</th><th>{t('entry_price')}</th><th>{t('tp')}</th><th>{t('sl')}</th><th>{t('entry_time')}</th></tr>
+                <tr><th>{t('symbol')}</th><th>{t('forex.source')}</th><th>{t('direction')}</th><th>{t('rule')}</th><th>{t('entry_price')}</th><th>{t('tp')}</th><th>{t('sl')}</th><th>{t('entry_time')}</th><th><span className="sr-only">{t('paper_close')}</span></th></tr>
               </thead>
               <tbody>
                 {positions.map((p) => (
@@ -2508,6 +2522,24 @@ function PaperTab() {
                     <td className="pnl-loss">{formatPrice(p.symbol, p.sl)}{isForexSymbol(p.symbol) && <small> ({formatPips(-Math.abs(pipDistance(p.symbol, p.entry_price, p.sl)))} {t('forex.pips')})</small>}</td>
                     <td style={{ color: 'var(--muted)', fontSize: '0.72rem' }}>
                       {new Date(p.entry_time).toLocaleString()}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => closePosition(p.id)}
+                        disabled={closingID === p.id}
+                        style={{
+                          padding: '6px 12px',
+                          border: '1px solid var(--green)',
+                          borderRadius: 4,
+                          background: 'var(--bg)',
+                          color: 'var(--text)',
+                          cursor: 'pointer',
+                          opacity: closingID === p.id ? 0.4 : 1,
+                        }}
+                      >
+                        {closingID === p.id ? t('paper_closing') : t('paper_close')}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -2537,8 +2569,8 @@ function PaperTab() {
                     <td className={p.direction === 'LONG' ? 'dir-long' : 'dir-short'}>{p.direction}</td>
                     <td>{formatPrice(p.symbol, p.entry_price)}{p.price_basis === 'mid' && <small> · {t('forex.midQuote')}</small>}{p.entry_execution_price != null && <small> · {t('forex.execution')}: {formatPrice(p.symbol, p.entry_execution_price)}</small>}</td>
                     <td>{formatPrice(p.symbol, p.exit_price)}{p.price_basis === 'mid' && <small> · {t('forex.midQuote')}</small>}{p.exit_execution_price != null && <small> · {t('forex.execution')}: {formatPrice(p.symbol, p.exit_execution_price)}</small>}</td>
-                    <td style={{ fontSize: '0.72rem', color: p.status === 'CLOSED_TP' ? 'var(--mint)' : 'var(--muted)' }}>
-                      {p.status === 'CLOSED_TP' ? 'TP ✓' : 'SL ✗'}
+                    <td style={{ fontSize: '0.72rem', color: p.status === 'CLOSED_TP' ? 'var(--mint)' : p.status === 'CLOSED_MANUAL' ? 'var(--text)' : 'var(--muted)' }}>
+                      {p.status === 'CLOSED_TP' ? 'TP ✓' : p.status === 'CLOSED_MANUAL' ? t('paper_closed_manual') : 'SL ✗'}
                     </td>
                     <td className={p.pnl_pct > 0 ? 'pnl-win' : 'pnl-loss'}>
                       {p.pnl_pct >= 0 ? '+' : ''}{p.pnl_pct.toFixed(2)}%{isForexSymbol(p.symbol) && p.pnl_pips != null && <small> · {formatPips(p.pnl_pips)} {t('forex.pips')}</small>}

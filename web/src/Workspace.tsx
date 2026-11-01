@@ -39,6 +39,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (next.symbol) url.searchParams.set('symbol', next.symbol)
     else url.searchParams.delete('symbol')
     url.searchParams.set('tf', next.timeframe)
+    if (next.page !== 'my-trades') url.searchParams.delete('marks')
     if (push) window.history.pushState(null, '', url)
     else window.history.replaceState(null, '', url)
     setSelection(next)

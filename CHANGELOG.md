@@ -38,6 +38,19 @@ Format:
   keyed by `id`, the dedup window is `dedup_window_sec` (seconds), and
   `symbol_map` is an optional flat symbol→ticker map. Previously plugin
   edit/delete/toggle and dedup window saves did not reach the server correctly.
+- MCP `initialize` reports `serverInfo.version` from the repo `VERSION` file.
+  The runtime image copies that file next to the server binary.
+- `get_analysis` and the `get_ohlcv` invalid-timeframe error list 1W, 1D, 4H,
+  1H, and 15M.
+
+### Docs
+- Restored the personal AWS runbook and its deploy files. Restore starts the
+  stack with `deploy/aws-personal/docker-compose.yml`.
+- `SECURITY.md` notes that `config/settings.yaml` stores the API token and what
+  `server.remote_access` requires.
+- `config/execution.yaml` says execution clients use `GET /ws` with the
+  `chartnagari.v1` HMAC subprotocol. `allowed_origins` in that file is not
+  applied to the upgrade.
 
 ## [2.16.0.0] - 2026-10-11
 

@@ -8,6 +8,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Ju571nK/Chatter/internal/alertdrop"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/internal/engine"
 	"github.com/Ju571nK/Chatter/internal/indicator"
@@ -127,6 +129,7 @@ type Pipeline struct {
 
 	forwardReturnDB    ForwardReturnDB          // optional; set via SetForwardReturnStore
 	forwardReturnOHLCV ForwardReturnOHLCVReader // optional; set via SetForwardReturnStore
+	drops              alertdrop.Store          // optional; set via WithDropStore. nil behaves as Nop
 
 	sigCooldownMu sync.Mutex
 	sigLastSaved  map[string]time.Time // key: symbol+":"+rule
@@ -154,7 +157,18 @@ func New(
 		log:          log,
 		seqTracker:   sequence.New(),
 		sigLastSaved: make(map[string]time.Time),
+		drops:        alertdrop.Nop{},
 	}
+}
+
+// WithDropStore wires drop recording. A nil store installs Nop.
+// Returns p for chaining.
+func (p *Pipeline) WithDropStore(s alertdrop.Store) *Pipeline {
+	if s == nil {
+		s = alertdrop.Nop{}
+	}
+	p.drops = s
+	return p
 }
 
 // SetSignalSaver wires an optional signal persistence store.
@@ -445,39 +459,23 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 	// Uses the merged effective config so that an override can widen the
 	// profile's allowed_rules list (not just narrow it).
 	if p.profileHolder != nil {
-		beforeProfile := len(signals)
 		profile := p.profileHolder.GetProfile(sym)
-		signals = filterByProfileEffective(signals, profile, effCfg)
-		if filtered := beforeProfile - len(signals); filtered > 0 {
-			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Msg("profile/override filter removed disallowed signals")
-		}
+		signals = p.gate(sym, alertdrop.Profile, signals, func(s []models.Signal) []models.Signal {
+			return filterByProfileEffective(s, profile, effCfg)
+		}, "")
 	}
 
 	// Score threshold gate (per-symbol effective; 0 = no minimum).
-	// Note: this filters at pipeline level. The Notifier currently also has
-	// a global ScoreThreshold check; the per-symbol value here can be
-	// stricter than the global, but the global remains a floor.
-	if effCfg.ScoreThreshold > 0 {
-		beforeScore := len(signals)
-		kept := signals[:0]
-		for _, sig := range signals {
-			if sig.Score >= effCfg.ScoreThreshold {
-				kept = append(kept, sig)
-			}
-		}
-		signals = kept
-		if filtered := beforeScore - len(signals); filtered > 0 {
-			p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Float64("threshold", effCfg.ScoreThreshold).Msg("override score threshold filter removed signals")
-		}
-	}
+	// The Notifier still applies the global score floor to the post-boost score.
+	signals = p.gate(sym, alertdrop.Score, signals, func(s []models.Signal) []models.Signal {
+		return filterMinScore(s, effCfg.ScoreThreshold)
+	}, fmt.Sprintf("threshold=%.1f", effCfg.ScoreThreshold))
 
 	// Empty timeframe lists preserve legacy timeframes while requiring explicit
 	// opt-in for 15M signals.
-	beforeTF := len(signals)
-	signals = filterByTimeframe(signals, effCfg.Timeframes)
-	if filtered := beforeTF - len(signals); filtered > 0 {
-		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Strs("allowed_tf", effCfg.Timeframes).Msg("timeframe filter removed signals")
-	}
+	signals = p.gate(sym, alertdrop.Timeframe, signals, func(s []models.Signal) []models.Signal {
+		return filterByTimeframe(s, effCfg.Timeframes)
+	}, strings.Join(effCfg.Timeframes, ","))
 
 	// Enrich each signal with ATR-based entry/TP/SL levels (used in notifications).
 	// Determine TP/SL multipliers (crypto vs stock)
@@ -533,9 +531,12 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 		mtfMin = p.alertHolder.Get().MTFConsensusMin
 	}
 	if mtfMin > 1 {
-		signals = filterMTFConsensus(signals, mtfMin)
-		if len(signals) == 0 {
-			p.log.Debug().Str("symbol", sym).Int("mtf_min", mtfMin).Msg("MTF consensus not met — signals filtered")
+		beforeMTF := len(signals)
+		signals = p.gate(sym, alertdrop.MTF, signals, func(s []models.Signal) []models.Signal {
+			return filterMTFConsensus(s, mtfMin)
+		}, fmt.Sprintf("mtf_min=%d", mtfMin))
+		// An already empty batch is not an MTF result. Halt only when this gate removes the last signal.
+		if mtfHalted(beforeMTF, len(signals)) {
 			return
 		}
 	}
@@ -586,11 +587,9 @@ func (p *Pipeline) analyzeSymbol(ctx context.Context, sym string) {
 			}
 		}
 	}
-	beforeHTF := len(signals)
-	signals = penalizeHTFContext(signals, indicators, allBars, wyckoffPhase, htfPenaltyPct)
-	if filtered := beforeHTF - len(signals); filtered > 0 {
-		p.log.Debug().Str("symbol", sym).Int("filtered", filtered).Str("wyckoff_phase", string(wyckoffPhase)).Msg("HTF context filter removed counter-trend signals")
-	}
+	signals = p.gate(sym, alertdrop.HTF, signals, func(s []models.Signal) []models.Signal {
+		return penalizeHTFContext(s, indicators, allBars, wyckoffPhase, htfPenaltyPct)
+	}, fmt.Sprintf("phase=%s penalty=%d", wyckoffPhase, htfPenaltyPct))
 
 	// Signal sequence tracking: record each signal and apply bonus for completed sequences
 	for i := range signals {
@@ -805,6 +804,120 @@ func sessionBars(allBars map[string][]models.OHLCV) []models.OHLCV {
 		return bars
 	}
 	return allBars["1H"]
+}
+
+// gate runs a batch filter and records one Event per removed signal.
+// Score is not part of identity, so an HTF penalty that keeps the signal is not a drop.
+func (p *Pipeline) gate(
+	sym string,
+	r alertdrop.Reason,
+	in []models.Signal,
+	filter func([]models.Signal) []models.Signal,
+	detail string,
+) []models.Signal {
+	before := append([]models.Signal(nil), in...)
+	out := filter(in)
+	dropped := removed(before, out)
+	if len(dropped) == 0 {
+		return out
+	}
+	store := p.drops
+	if store == nil {
+		store = alertdrop.Nop{}
+	}
+	for _, sig := range dropped {
+		ev := alertdrop.Of(r, sig)
+		if ev.Symbol == "" {
+			ev.Symbol = sym
+		}
+		if detail != "" {
+			ev = ev.WithDetail(detail)
+		}
+		store.Record(ev)
+	}
+	p.log.Debug().
+		Str("symbol", sym).
+		Int("filtered", len(dropped)).
+		Str("reason", r.Code()).
+		Str("detail", detail).
+		Msg("alert gate removed signals")
+	return out
+}
+
+// mtfHalted reports whether the MTF gate emptied a batch that still had signals.
+func mtfHalted(before, after int) bool {
+	return before > 0 && after == 0
+}
+
+// removed returns signals present in before but not in after.
+// Identity is rule, timeframe, and direction. When a kept signal's score changed,
+// it still counts as kept. Extra copies of the same identity are the drops, and
+// a copy whose score is still present in after is preferred as the kept one.
+func removed(before, after []models.Signal) []models.Signal {
+	type key struct{ rule, tf, dir string }
+	groupedBefore := map[key][]models.Signal{}
+	groupedAfter := map[key][]models.Signal{}
+	var keys []key
+	seen := map[key]bool{}
+	for _, sig := range before {
+		k := key{sig.Rule, sig.Timeframe, sig.Direction}
+		if !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+		groupedBefore[k] = append(groupedBefore[k], sig)
+	}
+	for _, sig := range after {
+		k := key{sig.Rule, sig.Timeframe, sig.Direction}
+		groupedAfter[k] = append(groupedAfter[k], sig)
+	}
+	var out []models.Signal
+	for _, k := range keys {
+		b := groupedBefore[k]
+		a := groupedAfter[k]
+		if len(b) <= len(a) {
+			continue
+		}
+		used := make([]bool, len(b))
+		matched := 0
+		for _, kept := range a {
+			for i := range b {
+				if used[i] || b[i].Score != kept.Score {
+					continue
+				}
+				used[i] = true
+				matched++
+				break
+			}
+		}
+		rewrites := len(a) - matched
+		for i := range b {
+			if used[i] {
+				continue
+			}
+			if rewrites > 0 {
+				rewrites--
+				continue
+			}
+			out = append(out, b[i])
+		}
+	}
+	return out
+}
+
+// filterMinScore keeps signals at or above threshold.
+// threshold <= 0 keeps every signal.
+func filterMinScore(signals []models.Signal, threshold float64) []models.Signal {
+	if threshold <= 0 {
+		return signals
+	}
+	kept := signals[:0]
+	for _, sig := range signals {
+		if sig.Score >= threshold {
+			kept = append(kept, sig)
+		}
+	}
+	return kept
 }
 
 // filterMTFConsensus returns only signals whose direction has signals

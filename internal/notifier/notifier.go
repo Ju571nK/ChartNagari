@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Ju571nK/Chatter/internal/alertdrop"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
 	"github.com/Ju571nK/Chatter/pkg/models"
 )
@@ -94,6 +95,7 @@ type Notifier struct {
 	macroStore    MacroEventLookup                // optional; nil disables macro annotations
 	macroWindow   time.Duration                   // stock/crypto event proximity
 	fxMacroWindow time.Duration                   // forex event proximity
+	drops         alertdrop.Store                 // set via WithDropStore; Nop when unset
 }
 
 // New creates a Notifier from the given config and logger.
@@ -104,6 +106,7 @@ func New(cfg Config, log zerolog.Logger) *Notifier {
 		dailyLimit:    NewDailyLimit(),
 		log:           log,
 		fxMacroWindow: time.Hour,
+		drops:         alertdrop.Nop{},
 	}
 }
 
@@ -136,6 +139,16 @@ func (n *Notifier) WithOverrideStore(s appconfig.OverrideGetter) *Notifier {
 // Returns n for chaining.
 func (n *Notifier) WithMarkStore(s MarkStoreSet) *Notifier {
 	n.markStore = s
+	return n
+}
+
+// WithDropStore wires drop recording. A nil store installs Nop.
+// Returns n for chaining.
+func (n *Notifier) WithDropStore(s alertdrop.Store) *Notifier {
+	if s == nil {
+		s = alertdrop.Nop{}
+	}
+	n.drops = s
 	return n
 }
 
@@ -270,6 +283,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 				Float64("score", sig.Score).
 				Float64("threshold", threshold).
 				Msg("signal score below threshold — skipping")
+			n.drops.Record(alertdrop.Of(alertdrop.ScoreFloor, sig).WithThreshold(threshold))
 			continue
 		}
 
@@ -289,6 +303,11 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 				Str("symbol", sig.Symbol).
 				Str("rule", sig.Rule).
 				Msg("notification cooldown active — skipping")
+			applied := cooldownDur
+			if applied <= 0 {
+				applied = n.cfg.CooldownDur
+			}
+			n.drops.Record(alertdrop.Of(alertdrop.Cooldown, sig).WithDetail(applied.String()))
 			continue
 		}
 
@@ -297,6 +316,7 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 				Str("symbol", sig.Symbol).
 				Int("limit", dailyLimit).
 				Msg("daily alert limit reached — skipping")
+			n.drops.Record(alertdrop.Of(alertdrop.DailyLimit, sig).WithThreshold(float64(dailyLimit)))
 			continue
 		}
 
@@ -314,30 +334,35 @@ func (n *Notifier) Notify(ctx context.Context, signals []models.Signal) {
 			Msg("dispatching signal")
 
 		for _, sender := range n.senders {
-			if as, ok := sender.(AlertSender); ok {
-				msgID, err := as.SendAlert(ctx, sig)
-				if err != nil {
-					n.log.Error().
-						Err(err).
-						Str("sender", sender.Name()).
-						Str("symbol", sig.Symbol).
-						Msg("failed to send notification")
-					continue
-				}
-				if n.markStore != nil && msgID != 0 {
-					if err := n.markStore.SetMessageID(sig.ID, msgID); err != nil {
-						n.log.Warn().Err(err).Int64("signal_id", sig.ID).Msg("set message_id failed")
-					}
-				}
-			} else {
-				if err := sender.Send(ctx, sig); err != nil {
-					n.log.Error().
-						Err(err).
-						Str("sender", sender.Name()).
-						Str("symbol", sig.Symbol).
-						Msg("failed to send notification")
-				}
+			if err := n.send(ctx, sender, sig); err != nil {
+				n.log.Error().
+					Err(err).
+					Str("sender", sender.Name()).
+					Str("symbol", sig.Symbol).
+					Msg("failed to send notification")
+				n.drops.Record(alertdrop.Of(alertdrop.DeliveryFail, sig).
+					WithSender(sender.Name()).
+					WithDetail(alertdrop.DeliveryFailDetail))
 			}
 		}
 	}
+}
+
+// send dispatches one signal and, for AlertSender, stores the platform message id.
+// A message-id write failure is logged and is not a delivery failure.
+func (n *Notifier) send(ctx context.Context, sender Sender, sig models.Signal) error {
+	as, ok := sender.(AlertSender)
+	if !ok {
+		return sender.Send(ctx, sig)
+	}
+	msgID, err := as.SendAlert(ctx, sig)
+	if err != nil {
+		return err
+	}
+	if n.markStore != nil && msgID != 0 {
+		if err := n.markStore.SetMessageID(sig.ID, msgID); err != nil {
+			n.log.Warn().Err(err).Int64("signal_id", sig.ID).Msg("set message_id failed")
+		}
+	}
+	return nil
 }

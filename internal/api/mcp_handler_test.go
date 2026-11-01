@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -68,6 +70,38 @@ func TestMCP_InitializeReturnsCapabilitiesAndSession(t *testing.T) {
 	caps, _ := result["capabilities"].(map[string]any)
 	if _, ok := caps["tools"]; !ok {
 		t.Errorf("capabilities.tools missing: %+v", caps)
+	}
+}
+
+func TestMCP_InitializeReportsVersionFile(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "VERSION"))
+	if err != nil {
+		t.Fatalf("read VERSION: %v", err)
+	}
+	want := strings.TrimSpace(string(raw))
+	if want == "" {
+		t.Fatal("VERSION file is empty")
+	}
+
+	reg := mcp.NewRegistry()
+	srv := newMCPTestServer(t, reg, "")
+	defer srv.Close()
+
+	resp := postMCP(t, srv.URL, `{"jsonrpc":"2.0","id":1,"method":"initialize"}`, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	result, _ := out["result"].(map[string]any)
+	info, _ := result["serverInfo"].(map[string]any)
+	got, _ := info["version"].(string)
+	if got != want {
+		t.Fatalf("serverInfo.version = %q, VERSION file = %q", got, want)
 	}
 }
 

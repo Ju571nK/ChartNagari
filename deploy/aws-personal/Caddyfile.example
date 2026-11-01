@@ -1,0 +1,15 @@
+# Copy to deploy/aws-personal/Caddyfile and replace the hostname.
+# Caddy obtains and renews a Let's Encrypt certificate automatically.
+#
+# DNS: point charts.example.com A/AAAA records at this instance before starting.
+# ChartNagari (service name "server") must be on the same Compose network.
+
+charts.example.com {
+	encode gzip
+
+	reverse_proxy server:8080 {
+		header_up Host {host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

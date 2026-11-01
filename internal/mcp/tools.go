@@ -104,7 +104,7 @@ func NewGetAnalysis(w WatchlistSource, s SignalSource) *GetAnalysisTool {
 func (*GetAnalysisTool) Name() string { return "get_analysis" }
 
 func (*GetAnalysisTool) Description() string {
-	return "Get current multi-timeframe analysis for a symbol: fired rules, MTF score, direction, key support/resistance. Returns all 4 timeframes (1W/1D/4H/1H). Prefer this over get_ohlcv for pattern questions — it is pre-computed and much more token-efficient."
+	return "Get current multi-timeframe analysis for a symbol: fired rules, MTF score, direction, key support/resistance. Returns " + strings.Join(timeframesOrder, ", ") + ". Prefer this over get_ohlcv for pattern questions. The result is pre-computed and uses fewer tokens."
 }
 
 func (*GetAnalysisTool) InputSchema() string { return SchemaGetAnalysis }
@@ -113,8 +113,17 @@ type getAnalysisParams struct {
 	Symbol string `json:"symbol"`
 }
 
-// timeframesOrder is the canonical rendering order in output.
+// timeframesOrder is the supported timeframe list for analysis output and OHLCV.
 var timeframesOrder = []string{"1W", "1D", "4H", "1H", "15M"}
+
+func timeframeSupported(tf string) bool {
+	for _, allowed := range timeframesOrder {
+		if tf == allowed {
+			return true
+		}
+	}
+	return false
+}
 
 // signalLookbackPerTF controls how many recent signals per TF we consider.
 const signalLookbackPerTF = 10
@@ -293,8 +302,6 @@ type getOHLCVParams struct {
 	Limit     int    `json:"limit"`
 }
 
-var allowedOHLCVTF = map[string]bool{"1W": true, "1D": true, "4H": true, "1H": true, "15M": true}
-
 const (
 	defaultOHLCVLimit = 50
 	maxOHLCVLimit     = 500
@@ -323,9 +330,9 @@ func (t *GetOHLCVTool) Call(_ context.Context, raw json.RawMessage) (ToolResult,
 	if p.Symbol == "" {
 		return ToolResult{}, NewInvalidParams("symbol required", "")
 	}
-	if !allowedOHLCVTF[p.Timeframe] {
+	if !timeframeSupported(p.Timeframe) {
 		return ToolResult{}, NewInvalidParams(
-			"invalid timeframe — must be 1W, 1D, 4H, or 1H",
+			"invalid timeframe, must be "+strings.Join(timeframesOrder, ", "),
 			"Call list_watchlist to see the configured timeframes.",
 		)
 	}

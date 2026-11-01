@@ -20,6 +20,7 @@ FROM alpine:3.19
 RUN apk --no-cache add tzdata ca-certificates
 WORKDIR /app
 COPY --from=builder /chart-analyzer .
+COPY --from=builder /app/VERSION ./VERSION
 COPY config/ ./config/
 COPY --from=frontend-builder /web/dist ./web/dist/
 RUN mkdir -p /app/data

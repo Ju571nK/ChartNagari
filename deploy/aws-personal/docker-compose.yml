@@ -1,0 +1,53 @@
+# Personal always-on AWS stack (phase 1).
+#
+# From the repository root on the instance:
+#   cp deploy/aws-personal/Caddyfile.example deploy/aws-personal/Caddyfile
+#   # edit the hostname in deploy/aws-personal/Caddyfile
+#   docker compose -f deploy/aws-personal/docker-compose.yml up -d --build
+#
+# This file is standalone (not an override) so the host web/dist bind-mount from
+# the local-dev compose file is omitted; the image serves its baked UI.
+# Do not commit a customized Caddyfile with your real domain if you prefer to
+# keep ops details private; the example hostname is fine to leave as a template.
+
+services:
+  server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: chart-analyzer
+    restart: unless-stopped
+    # Loopback publish is optional when only Caddy talks to server:8080 on the
+    # Compose network; kept for host-side curl health checks and debugging.
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ../../data:/app/data
+      - ../../config:/app/config
+    # config/settings.yaml: server.host=0.0.0.0, server.port="8080"
+    # database.path=./data/chart_analyzer.db (container cwd=/app)
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: chart-caddy
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

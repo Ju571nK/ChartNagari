@@ -133,7 +133,7 @@ func (s *Server) dispatchMCP(ctx context.Context, req mcp.RPCRequest) mcp.RPCRes
 	case "initialize":
 		return mcp.NewSuccessResponse(req.ID, mcp.InitializeResult{
 			ProtocolVersion: "2024-11-05",
-			ServerInfo:      mcp.ServerInfo{Name: "chartnagari", Version: "2.7.0.0"},
+			ServerInfo:      mcp.ServerInfo{Name: "chartnagari", Version: productVersion()},
 			Capabilities:    mcp.ServerCapabilities{Tools: &mcp.ToolsCapability{}},
 		})
 	case "tools/list":

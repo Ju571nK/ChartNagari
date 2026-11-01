@@ -1,4 +1,32 @@
 {
+  "alertDrops": {
+    "title": "通知の見送り",
+    "empty": "この銘柄で見送った通知はありません。",
+    "disabled": "通知見送りの記録はオフです。",
+    "loading": "通知の見送りを読み込み中…",
+    "error": "通知の見送りを読み込めませんでした。",
+    "col": {
+      "reason": "理由",
+      "rule": "ルール",
+      "timeframe": "時間足",
+      "direction": "方向",
+      "score": "スコア",
+      "count": "回数",
+      "lastSeen": "最終",
+      "detail": "詳細"
+    },
+    "reason": {
+      "profile": "プロファイルフィルタ",
+      "score": "スコア基準",
+      "timeframe": "時間足フィルタ",
+      "mtf": "複数時間足の一致",
+      "htf": "上位時間足フィルタ",
+      "score_floor": "通知スコア下限",
+      "cooldown": "再通知の待機",
+      "daily_limit": "1日の上限",
+      "delivery_fail": "送信失敗"
+    }
+  },
   "patternOverlay": {
     "filters": "ICT / Wyckoff / SMC / TAは保存済みシグナルの表示フィルターです。新しい分析は実行しません。",
     "count": "有効な候補ゾーン{{count}}件を表示（最新最大5件）。",

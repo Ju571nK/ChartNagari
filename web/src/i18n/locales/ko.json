@@ -1,4 +1,32 @@
 {
+  "alertDrops": {
+    "title": "알림 탈락",
+    "empty": "이 종목에서 탈락한 알림이 없습니다.",
+    "disabled": "알림 탈락 기록이 꺼져 있습니다.",
+    "loading": "알림 탈락을 불러오는 중…",
+    "error": "알림 탈락을 불러오지 못했습니다.",
+    "col": {
+      "reason": "이유",
+      "rule": "규칙",
+      "timeframe": "시간봉",
+      "direction": "방향",
+      "score": "점수",
+      "count": "횟수",
+      "lastSeen": "마지막",
+      "detail": "상세"
+    },
+    "reason": {
+      "profile": "프로필 필터",
+      "score": "점수 기준",
+      "timeframe": "시간봉 필터",
+      "mtf": "멀티 타임프레임 합의",
+      "htf": "상위 타임프레임 필터",
+      "score_floor": "알림 점수 하한",
+      "cooldown": "재알림 대기",
+      "daily_limit": "일일 한도",
+      "delivery_fail": "전송 실패"
+    }
+  },
   "patternOverlay": {
     "filters": "ICT / Wyckoff / SMC / TA는 저장된 신호 마커 필터입니다. 새 분석을 실행하지 않습니다.",
     "count": "유효 후보 영역 {{count}}개 표시 (최근 최대 5개).",

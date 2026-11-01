@@ -1,4 +1,32 @@
 {
+  "alertDrops": {
+    "title": "Alert drops",
+    "empty": "No dropped alerts for this symbol.",
+    "disabled": "Alert drop recording is off.",
+    "loading": "Loading alert drops…",
+    "error": "Could not load alert drops.",
+    "col": {
+      "reason": "Reason",
+      "rule": "Rule",
+      "timeframe": "Timeframe",
+      "direction": "Direction",
+      "score": "Score",
+      "count": "Count",
+      "lastSeen": "Last seen",
+      "detail": "Detail"
+    },
+    "reason": {
+      "profile": "Profile filter",
+      "score": "Score threshold",
+      "timeframe": "Timeframe filter",
+      "mtf": "Multi-timeframe consensus",
+      "htf": "Higher-timeframe filter",
+      "score_floor": "Notifier score floor",
+      "cooldown": "Cooldown",
+      "daily_limit": "Daily limit",
+      "delivery_fail": "Delivery failed"
+    }
+  },
   "patternOverlay": {
     "filters": "ICT / Wyckoff / SMC / TA filter stored signal markers; they do not run a new analysis.",
     "count": "{{count}} active candidate ranges shown (latest 5 maximum).",

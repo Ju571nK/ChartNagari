@@ -283,6 +283,27 @@ func (db *DB) migrate() error {
 		FOREIGN KEY (signal_id) REFERENCES signals(id)
 	);
 	CREATE INDEX IF NOT EXISTS idx_signal_marks_status ON signal_marks(status);
+
+	-- Coalesced reasons a signal did not become an alert.
+	-- signal_id is NULL when the signal was never saved.
+	CREATE TABLE IF NOT EXISTS alert_drops (
+		symbol     TEXT NOT NULL,
+		rule       TEXT NOT NULL,
+		timeframe  TEXT NOT NULL,
+		direction  TEXT NOT NULL,
+		reason     TEXT NOT NULL,
+		sender     TEXT NOT NULL DEFAULT '',
+		score      REAL NOT NULL,
+		threshold  REAL NOT NULL DEFAULT 0,
+		signal_id  INTEGER,
+		detail     TEXT NOT NULL DEFAULT '',
+		count      INTEGER NOT NULL DEFAULT 1,
+		first_seen DATETIME NOT NULL,
+		last_seen  DATETIME NOT NULL,
+		PRIMARY KEY (symbol, rule, timeframe, direction, reason, sender)
+	);
+	CREATE INDEX IF NOT EXISTS idx_alert_drops_last_seen ON alert_drops(last_seen DESC);
+	CREATE INDEX IF NOT EXISTS idx_alert_drops_symbol_last ON alert_drops(symbol, last_seen DESC);
 	`
 	if _, err := db.conn.Exec(schema); err != nil {
 		return err

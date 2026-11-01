@@ -34,6 +34,9 @@ Format:
   `cd web && npm run test:ci` for a non-watch Vitest run (same as CI).
 
 ### Fixed
+- Server startup log `version` now reads the `VERSION` file via
+  `api.ProductVersion()`, matching MCP `serverInfo.version`. It no longer
+  hardcodes `0.8.0`.
 - Execution tab now matches the server's execution config contract: plugins are
   keyed by `id`, the dedup window is `dedup_window_sec` (seconds), and
   `symbol_map` is an optional flat symbol→ticker map. Previously plugin

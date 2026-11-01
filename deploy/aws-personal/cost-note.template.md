@@ -1,7 +1,7 @@
 # Personal always-on cost note
 
-Fill this after the first full calendar month on AWS. The measured total is the
-price floor if you later clone one instance per person.
+Fill this after the first full calendar month on AWS. Use it to see whether a
+personal always-on box is worth the invoice versus leaving a PC on.
 
 ## Hypothesis
 
@@ -47,14 +47,7 @@ Monthly AWS cost + ops effort < cost of leaving a PC on, or of missed alerts.
 | Did alerts keep firing with the PC offline? | yes / no |
 | Any unplanned downtime hours? | |
 | Is total cost acceptable for personal use? | yes / no |
-| Would you charge others at least this total + margin per instance? | yes / no / n/a |
-
-## Decision for later hosting
-
-- [ ] Stay personal-only
-- [ ] Clone instances for a few trusted people (same runbook)
-- [ ] Consider Marketplace (buyer-hosted) instead of paying infra yourself
-- [ ] Do not pursue multi-tenant SaaS yet
+| Keep running this always-on box next month? | yes / no |
 
 ## Notes
 

@@ -1,8 +1,8 @@
 # Personal always-on ChartNagari on AWS (phase 1)
 
 Run **one** ChartNagari box that stays up when your PC is off. This is a
-single-tenant always-on host for you — not multi-user SaaS, not Marketplace, and
-not a shared database.
+personal always-on host for you — not a shared multi-user service and not a
+shared database.
 
 Related reading: [Getting started](getting-started.md),
 [Local and remote connections](remote-connections.md),
@@ -16,8 +16,7 @@ Related reading: [Getting started](getting-started.md),
 
 ## What you deliberately skip
 
-- Per-user provisioning portals, Cognito, RDS, shared ECS services
-- AWS Marketplace listing
+- Shared multi-user control planes (provisioning portals, Cognito, RDS, shared ECS)
 - Local Ollama on the small always-on box (use a cloud LLM only if needed)
 - Enabling execution adapters on the public host in phase 1
 
@@ -200,9 +199,8 @@ Hypothesis to validate:
 
 > Monthly AWS cost + ops effort &lt; cost of leaving a PC on, or of missed alerts.
 
-Record actual Lightsail/EC2, disk, snapshots, transfer, and domain line items.
-That measured number is the floor if you later host copies for other people
-(cost scales nearly linearly per instance).
+Record actual Lightsail/EC2, disk, snapshots, transfer, and domain line items so
+you can judge whether the personal box is worth keeping.
 
 ## 7. Operations cheat sheet
 
@@ -217,11 +215,13 @@ Use `-f deploy/aws-personal/docker-compose.yml` from the repo root (or set
 | Health | `curl -fsS http://127.0.0.1:8080/health` |
 | Rotate token | New ≥32-char token in settings → restart → reconnect clients |
 
-## Later forks (out of phase 1)
+## Out of scope for this runbook
 
-- **Clone hosting:** repeat this runbook per person (ops up, app change low).
-- **Marketplace AMI/container:** buyer runs the box in their account.
-- **Multi-tenant SaaS:** deferred; farthest from the current architecture.
+- Turning this personal box into a shared multi-user service
+- Changing the single-process SQLite layout for tenancy
+
+Anyone else who wants ChartNagari can self-host with the same open-source
+runbook; this guide does not define a hosted product.
 
 ## Security reminders
 

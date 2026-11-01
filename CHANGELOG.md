@@ -18,8 +18,9 @@ Format:
 
 ### Docs
 - Added a personal always-on AWS runbook (Lightsail/EC2, Docker, HTTPS,
-  remote_access), Compose/Caddy examples, S3 backup scripts, and a monthly cost
-  note template under `docs/aws-personal-always-on.md` and `deploy/aws-personal/`.
+  remote_access), Compose/Caddy examples, S3 backup scripts, and a monthly
+  personal-cost note template under `docs/aws-personal-always-on.md` and
+  `deploy/aws-personal/`.
 
 ---
 

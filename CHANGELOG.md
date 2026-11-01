@@ -14,7 +14,12 @@ Format:
 
 ---
 
-## [Unreleased] - 2026-10-18
+## [Unreleased]
+
+### Changed
+- PR CI now runs `vitest run` on the frontend job and `go test -race ./...` on
+  the Go job. Local `make test` matches the race detector. Use
+  `cd web && npm run test:ci` for a non-watch Vitest run (same as CI).
 
 ### Fixed
 - Execution tab now matches the server's execution config contract: plugins are

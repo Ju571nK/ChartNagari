@@ -286,7 +286,7 @@ The CI will run the same commands automatically when you open a PR that touches
 - Do **not** mock the database in integration tests — use an in-memory SQLite instance
 
 **Frontend (Vitest):**
-- All frontend tests must pass: `cd web && npm test`
+- All frontend tests must pass: `cd web && npm run test:ci`
 - New React components require Vitest tests using `@testing-library/react`
 - Mock `fetch` via `globalThis.fetch = vi.fn()` — do not use `msw` or other interceptors
 - Reference `web/src/OnboardingModal.test.tsx` for patterns (mock queue ordering, async `waitFor`, `act`)
@@ -328,7 +328,7 @@ cd web && npm run build:demo
 Before opening a pull request, verify:
 
 - [ ] `go test ./...` passes locally
-- [ ] `cd web && npm test` passes locally (frontend Vitest suite)
+- [ ] `cd web && npm run test:ci` passes locally (frontend Vitest suite)
 - [ ] `go vet ./...` produces no warnings
 - [ ] `var _ rule.AnalysisRule = (*MyRule)(nil)` added to rule file (if adding a rule)
 - [ ] Rule registered in `config/rules.yaml` (if adding a rule)

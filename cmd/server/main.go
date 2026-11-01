@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/Ju571nK/Chatter/internal/alertdrop"
 	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/api"
 	"github.com/Ju571nK/Chatter/internal/backtest"
@@ -97,6 +98,22 @@ func main() {
 	// Signal performance tracking (v2.9).
 	markStore := storage.NewSignalMarkStore(db)
 	markAggregator := marks.NewAggregator(db, markStore)
+
+	// A nil *AlertDropStore must not be stored in the interface. Nop stays the default.
+	drops := alertdrop.Store(alertdrop.Nop{})
+	if db != nil {
+		if ds := storage.NewAlertDropStore(db, storage.AlertDropOptions{Log: log.Logger}); ds != nil {
+			drops = ds
+			defer func() {
+				// ctx is already cancelled when this runs, so the drain uses its own timeout.
+				closeCtx, cancelClose := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancelClose()
+				if err := ds.Close(closeCtx); err != nil {
+					log.Warn().Err(err).Msg("alert drop writer did not drain")
+				}
+			}()
+		}
+	}
 
 	// ── 컨텍스트 (SIGINT/SIGTERM 감지) ───────────────────────────────
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -253,6 +270,7 @@ func main() {
 	notif.WithProfileHolder(profileHolder)
 	notif.WithOverrideStore(overrideStore)
 	notif.WithMarkStore(markStore)
+	notif.WithDropStore(drops)
 
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
 		notif.Register(notifier.NewTelegramSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID).WithTemplateStore(messageTemplateStore))
@@ -446,6 +464,7 @@ func main() {
 				})
 				pipe.SetIndexSymbols(indexSymbols)
 				pipe.SetExecutionDispatcher(dispatcher)
+				pipe.WithDropStore(drops)
 				start(pipe.Run)
 				log.Info().
 					Strs("symbols", allSymbols).
@@ -556,6 +575,7 @@ func main() {
 	apiSrv.WithExecutionState(execState)
 	apiSrv.WithMarkStore(markStore)
 	apiSrv.WithAggregator(markAggregator)
+	apiSrv.WithAlertDropStore(drops)
 
 	// ── MCP 레지스트리 (로컬 LLM 통합) ────────────────────────────────────
 	mcpReg := mcp.NewRegistry()

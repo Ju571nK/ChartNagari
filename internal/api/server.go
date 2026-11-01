@@ -24,6 +24,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver for integrity_check
 
+	"github.com/Ju571nK/Chatter/internal/alertdrop"
 	"github.com/Ju571nK/Chatter/internal/analyst"
 	"github.com/Ju571nK/Chatter/internal/backtest"
 	appconfig "github.com/Ju571nK/Chatter/internal/config"
@@ -240,6 +241,7 @@ type Server struct {
 	execState            *execution.StateStore               // optional; set via WithExecutionState for config versioning
 	markStore            *storage.SignalMarkStore            // optional; set via WithMarkStore
 	aggregator           *marks.Aggregator                   // optional; set via WithAggregator
+	drops                alertdrop.Store                     // optional; set via WithAlertDropStore. nil behaves as Nop
 	mcpRegistry          *mcp.Registry                       // optional; set via WithMCPRegistry
 	mcpSessions          *mcpSessionStore                    // in-memory session store; lazy-init or set via WithMCPRegistry
 	ollamaDetector       OllamaStatusProvider                // optional; set via WithOllamaDetector
@@ -468,6 +470,15 @@ func (s *Server) WithAggregator(a *marks.Aggregator) *Server {
 	return s
 }
 
+// WithAlertDropStore wires GET /api/alert-drops. A nil store installs Nop.
+func (s *Server) WithAlertDropStore(st alertdrop.Store) *Server {
+	if st == nil {
+		st = alertdrop.Nop{}
+	}
+	s.drops = st
+	return s
+}
+
 // WithOverrideStore wires the per-symbol alert override store.
 func (s *Server) WithOverrideStore(store *storage.SymbolOverrideStore) {
 	s.overrideStore = store
@@ -630,6 +641,7 @@ func (s *Server) Handler() http.Handler {
 	if s.aggregator != nil {
 		mux.HandleFunc("GET /api/marks/rollup", s.getRollup)
 	}
+	mux.HandleFunc("GET /api/alert-drops", s.getAlertDrops)
 
 	// Demo scan (no DB required — runs rule engine on sample data)
 	if s.demoEngine != nil {

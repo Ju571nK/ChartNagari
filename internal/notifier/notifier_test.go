@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -352,6 +353,67 @@ func TestDiscordSender_SendsEmbedPayload(t *testing.T) {
 	if color, ok := embed["color"].(float64); !ok || int(color) != discordColor("LONG") {
 		t.Errorf("embed color mismatch: got %v, want %d", embed["color"], discordColor("LONG"))
 	}
+	desc, _ := embed["description"].(string)
+	if strings.Contains(desc, "my-trades") {
+		t.Errorf("embed should omit the review link when no public URL is set: %q", desc)
+	}
+}
+
+func TestDiscordSender_AppendsPendingReviewLink(t *testing.T) {
+	var received []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var buf bytes.Buffer
+		buf.ReadFrom(r.Body)
+		received = buf.Bytes()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	s := NewDiscordSender(srv.URL).WithPublicURL("http://localhost:8080/")
+	if err := s.Send(context.Background(), makeSig("ETHUSDT", "ict_order_block", "LONG", 12.0)); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(received, &payload); err != nil {
+		t.Fatal(err)
+	}
+	embed := payload["embeds"].([]interface{})[0].(map[string]interface{})
+	desc, _ := embed["description"].(string)
+	link := reviewLink(desc)
+	parsed, err := url.Parse(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Scheme != "http" || parsed.Host != "localhost:8080" || parsed.Query().Get("view") != "my-trades" || parsed.Query().Get("marks") != "pending" {
+		t.Fatalf("review link = %q", link)
+	}
+
+	plain := NewDiscordSender(srv.URL).WithPublicURL("not a url")
+	if err := plain.Send(context.Background(), makeSig("ETHUSDT", "ict_order_block", "LONG", 12.0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(received, &payload); err != nil {
+		t.Fatal(err)
+	}
+	embed = payload["embeds"].([]interface{})[0].(map[string]interface{})
+	desc, _ = embed["description"].(string)
+	if strings.Contains(desc, "Took / Skipped") {
+		t.Fatalf("unusable public URL should omit the link: %q", desc)
+	}
+}
+
+func reviewLink(desc string) string {
+	const open = "[Took / Skipped]("
+	start := strings.Index(desc, open)
+	if start < 0 {
+		return ""
+	}
+	rest := desc[start+len(open):]
+	end := strings.Index(rest, ")")
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
 }
 
 // Test 19: AllowWithDuration uses the per-call duration, not the global one.

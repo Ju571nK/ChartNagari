@@ -1,5 +1,20 @@
 {
   "alertDrops": {
+    "title": "Alert drops",
+    "empty": "No dropped alerts for this symbol.",
+    "disabled": "Alert drop recording is off.",
+    "loading": "Loading alert drops…",
+    "error": "Could not load alert drops.",
+    "col": {
+      "reason": "Reason",
+      "rule": "Rule",
+      "timeframe": "Timeframe",
+      "direction": "Direction",
+      "score": "Score",
+      "count": "Count",
+      "lastSeen": "Last seen",
+      "detail": "Detail"
+    },
     "reason": {
       "profile": "Profile filter",
       "score": "Score threshold",

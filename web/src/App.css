@@ -623,6 +623,42 @@ input:checked + .slider::before {
   font-size: 0.75rem;
 }
 
+.alert-drop-scroll {
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+
+.alert-drops {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.alert-drops th,
+.alert-drops td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(91, 146, 121, 0.18);
+}
+
+.alert-drops th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.alert-drops td {
+  color: var(--text);
+}
+
+.alert-drops .dir-long { color: var(--mint); }
+.alert-drops .dir-short { color: var(--danger); }
+
+.alert-drop-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0 0 12px;
+}
+
 /* ── backtest tab ────────────────────────────────────────────────────────── */
 .backtest-controls {
   display: flex;

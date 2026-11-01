@@ -1,5 +1,20 @@
 {
   "alertDrops": {
+    "title": "通知の見送り",
+    "empty": "この銘柄で見送った通知はありません。",
+    "disabled": "通知見送りの記録はオフです。",
+    "loading": "通知の見送りを読み込み中…",
+    "error": "通知の見送りを読み込めませんでした。",
+    "col": {
+      "reason": "理由",
+      "rule": "ルール",
+      "timeframe": "時間足",
+      "direction": "方向",
+      "score": "スコア",
+      "count": "回数",
+      "lastSeen": "最終",
+      "detail": "詳細"
+    },
     "reason": {
       "profile": "プロファイルフィルタ",
       "score": "スコア基準",

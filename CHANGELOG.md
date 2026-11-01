@@ -16,6 +16,13 @@ Format:
 
 ## [Unreleased]
 
+### Added
+- The status tab lists why an alert did not fire. Each hard drop is one coalesced
+  row, keyed by symbol, rule, timeframe, direction, reason, and sender, and
+  `GET /api/alert-drops` returns the newest rows. A repeated cooldown updates
+  that row. A send failure stores the sender name and the fixed phrase
+  "delivery failed". The raw error stays in the log.
+
 ### Changed
 - PR CI now runs `vitest run` on the frontend job and `go test -race ./...` on
   the Go job. Local `make test` matches the race detector. Use

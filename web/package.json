@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "build:demo": "tsc && BASE_PATH=/ChartNagari/ VITE_DEMO_STATIC=true vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "test:ci": "vitest run"
   },
   "dependencies": {
     "dompurify": "^3.3.3",

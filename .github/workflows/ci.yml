@@ -19,8 +19,8 @@ jobs:
         run: go mod download
       - name: Vet
         run: go vet ./...
-      - name: Test
-        run: go test ./...
+      - name: Test with race detector
+        run: go test -race ./...
 
   check-docs:
     name: Docs Drift Check
@@ -58,5 +58,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install dependencies
         run: cd web && npm ci
+      - name: Test
+        run: cd web && npm run test:ci
       - name: Build
         run: cd web && npm run build

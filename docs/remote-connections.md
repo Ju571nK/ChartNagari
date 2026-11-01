@@ -13,6 +13,10 @@ workspace shows the current server. Expand it to choose the web server again,
 enter a token if configured, and verify the connection. A configured token is
 checked even when local read APIs otherwise retain their legacy anonymous access.
 
+To keep one personal instance running when your PC is off (AWS Lightsail/EC2,
+Docker, HTTPS, backups, cost note), follow
+[Personal always-on on AWS](aws-personal-always-on.md).
+
 ## Enable a remote server
 
 On the target server, use Settings → Advanced to set:

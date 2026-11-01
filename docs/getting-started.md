@@ -76,4 +76,8 @@ and data directories, not arbitrary host paths.
 Do not expose an unauthenticated server publicly. Review execution configuration
 separately; nothing in these instructions enables an execution adapter.
 
+For a personal always-on host (AWS Lightsail/EC2, HTTPS, remote token), see
+[Personal always-on on AWS](aws-personal-always-on.md). For connecting a browser
+to a remote backend, see [Local and remote connections](remote-connections.md).
+
 [Forex quick start](FOREX.md) · [Detailed settings](../SETTINGS.md) · [Development setup](../CONTRIBUTING.md)

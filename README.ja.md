@@ -58,6 +58,6 @@ DBと設定はローカルに保存されます。有効にした相場データ
 
 ## 詳しく知る
 
-[設定・アップグレード](SETTINGS.md) · [アーキテクチャ](docs/architecture.md) · [開発・貢献ガイド](CONTRIBUTING.md) · [問題の報告](https://github.com/Ju571nK/ChartNagari/issues)
+[設定・アップグレード](SETTINGS.md) · [アーキテクチャ](docs/architecture.md) · [個人常時稼働 AWS](docs/aws-personal-always-on.md) · [開発・貢献ガイド](CONTRIBUTING.md) · [問題の報告](https://github.com/Ju571nK/ChartNagari/issues)
 
 Justinによるオープンソースプロジェクト。[MIT License](LICENSE)。

@@ -58,6 +58,6 @@ DB와 설정은 로컬에 저장됩니다. 활성화한 시세·클라우드 AI�
 
 ## 더 알아보기
 
-[설정·업그레이드](SETTINGS.md) · [아키텍처](docs/architecture.md) · [개발·기여 안내](CONTRIBUTING.md) · [문제 제보](https://github.com/Ju571nK/ChartNagari/issues)
+[설정·업그레이드](SETTINGS.md) · [아키텍처](docs/architecture.md) · [개인 상시 AWS 배포](docs/aws-personal-always-on.md) · [개발·기여 안내](CONTRIBUTING.md) · [문제 제보](https://github.com/Ju571nK/ChartNagari/issues)
 
 Justin이 만드는 오픈소스 프로젝트입니다. [MIT License](LICENSE).

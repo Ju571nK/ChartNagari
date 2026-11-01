@@ -1,4 +1,17 @@
 {
+  "alertDrops": {
+    "reason": {
+      "profile": "Profile filter",
+      "score": "Score threshold",
+      "timeframe": "Timeframe filter",
+      "mtf": "Multi-timeframe consensus",
+      "htf": "Higher-timeframe filter",
+      "score_floor": "Notifier score floor",
+      "cooldown": "Cooldown",
+      "daily_limit": "Daily limit",
+      "delivery_fail": "Delivery failed"
+    }
+  },
   "patternOverlay": {
     "filters": "ICT / Wyckoff / SMC / TA filter stored signal markers; they do not run a new analysis.",
     "count": "{{count}} active candidate ranges shown (latest 5 maximum).",

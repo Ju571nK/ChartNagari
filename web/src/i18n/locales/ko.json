@@ -1,4 +1,17 @@
 {
+  "alertDrops": {
+    "reason": {
+      "profile": "프로필 필터",
+      "score": "점수 기준",
+      "timeframe": "시간봉 필터",
+      "mtf": "멀티 타임프레임 합의",
+      "htf": "상위 타임프레임 필터",
+      "score_floor": "알림 점수 하한",
+      "cooldown": "재알림 대기",
+      "daily_limit": "일일 한도",
+      "delivery_fail": "전송 실패"
+    }
+  },
   "patternOverlay": {
     "filters": "ICT / Wyckoff / SMC / TA는 저장된 신호 마커 필터입니다. 새 분석을 실행하지 않습니다.",
     "count": "유효 후보 영역 {{count}}개 표시 (최근 최대 5개).",

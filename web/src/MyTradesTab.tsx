@@ -34,9 +34,20 @@ type GroupBy = 'rule' | 'symbol' | 'methodology' | 'timeframe'
 
 const PERIODS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365, all: 36500 }
 
+function initialSubtab(): Subtab {
+  return new URLSearchParams(window.location.search).get('marks') === 'pending' ? 'pending' : 'rollup'
+}
+
+function writeMarksQuery(subtab: Subtab) {
+  const url = new URL(window.location.href)
+  if (subtab === 'pending') url.searchParams.set('marks', 'pending')
+  else url.searchParams.delete('marks')
+  window.history.replaceState(null, '', url)
+}
+
 export function MyTradesTab() {
   const { t } = useTranslation()
-  const [subtab, setSubtab] = useState<Subtab>('rollup')
+  const [subtab, setSubtab] = useState<Subtab>(initialSubtab)
   const [groupBy, setGroupBy] = useState<GroupBy>('rule')
   const [period, setPeriod] = useState<keyof typeof PERIODS>('30d')
   const [rollup, setRollup] = useState<RollupResponse | null>(null)
@@ -87,7 +98,7 @@ export function MyTradesTab() {
         {(['rollup', 'pending', 'history'] as Subtab[]).map(s => (
           <button
             key={s}
-            onClick={() => setSubtab(s)}
+            onClick={() => { setSubtab(s); writeMarksQuery(s) }}
             style={{
               padding: '6px 12px',
               border: '1px solid var(--mint)',

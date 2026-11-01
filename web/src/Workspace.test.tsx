@@ -45,6 +45,17 @@ describe('workspace navigation', () => {
   })
 })
 
+it('keeps the pending mark query on My Trades and drops it on another page', () => {
+  window.history.replaceState(null, '', '/?view=my-trades&marks=pending&tf=1H')
+  render(<WorkspaceProvider><WorkspaceNav /><Probe /></WorkspaceProvider>)
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+  expect(window.location.search).toContain('marks=pending')
+  expect(window.location.search).toContain('symbol=BTCUSDT')
+  fireEvent.click(screen.getByRole('button', { name: 'Backtest' }))
+  expect(window.location.search).not.toContain('marks=')
+  expect(readSelection().page).toBe('backtest')
+})
+
 it('retains Forex15M URLs across workspace navigation and defaults to1H', () => {
   window.history.replaceState(null, '', '/?view=chart&symbol=EURUSD&tf=15M')
   render(<WorkspaceProvider><WorkspaceNav /><Probe /></WorkspaceProvider>)

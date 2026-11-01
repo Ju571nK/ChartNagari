@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Ju571nK/Chatter/pkg/models"
@@ -14,6 +16,7 @@ import (
 // DiscordSender dispatches signals to a Discord channel via an incoming Webhook.
 type DiscordSender struct {
 	webhookURL string
+	publicURL  string
 	client     *http.Client
 }
 
@@ -23,6 +26,13 @@ func NewDiscordSender(webhookURL string) *DiscordSender {
 		webhookURL: webhookURL,
 		client:     &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+// WithPublicURL sets the browser origin used for the My Trades review link.
+// An empty or unusable value leaves the embed without a link.
+func (s *DiscordSender) WithPublicURL(base string) *DiscordSender {
+	s.publicURL = strings.TrimSpace(base)
+	return s
 }
 
 func (s *DiscordSender) Name() string { return "discord" }
@@ -92,6 +102,10 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 	if sig.VolumeUnconfirmed {
 		desc += "\nVolume unconfirmed"
 	}
+	// A webhook cannot host Took or Skipped buttons. The link opens the same mark actions on the web.
+	if link := reviewPendingURL(s.publicURL); link != "" {
+		desc += "\n\n[Took / Skipped](" + link + ")"
+	}
 	embed["description"] = desc
 
 	payload := map[string]interface{}{
@@ -119,4 +133,20 @@ func (s *DiscordSender) Send(ctx context.Context, sig models.Signal) error {
 		return fmt.Errorf("discord: 비정상 응답 HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func reviewPendingURL(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	q := u.Query()
+	q.Set("view", "my-trades")
+	q.Set("marks", "pending")
+	u.RawQuery = q.Encode()
+	return u.String()
 }

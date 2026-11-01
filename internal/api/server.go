@@ -178,6 +178,7 @@ type BacktestRunner interface {
 type PaperStore interface {
 	GetAllOpenPositions() ([]paper.PaperPosition, error)
 	GetClosedPositions(limit int) ([]paper.PaperPosition, error)
+	ClosePaperPosition(id int64, exitPrice float64, status string, pnlPct float64) error
 }
 
 // ReportScheduler is implemented by *report.Scheduler.
@@ -573,6 +574,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Paper trading
 	mux.HandleFunc("GET /api/paper/positions", s.getPaperPositions)
+	mux.HandleFunc("POST /api/paper/positions/{id}/close", s.closePaperPosition)
 	mux.HandleFunc("GET /api/paper/history", s.getPaperHistory)
 	mux.HandleFunc("GET /api/paper/summary", s.getPaperSummary)
 

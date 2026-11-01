@@ -179,11 +179,12 @@ func (s *SignalMarkStore) directSetStatus(signalID int64, status string) error {
 // Used by My Trades tab Pending / History sections.
 type SignalMarkRow struct {
 	Signal models.Signal `json:"signal"` // ID, Symbol, Timeframe, Rule, Direction, Score, Message, CreatedAt populated
-	Mark   *SignalMark   `json:"mark"`   // nil for pending rows (no signal_marks row yet)
+	Mark   *SignalMark   `json:"mark"`   // nil when the signal has no signal_marks row
 }
 
-// ListPending returns signals with NO mark row, created at or after `since`.
-// Pass time.Time{} (zero) to disable the date filter.
+// ListPending returns signals the user has not taken or skipped, created at or after `since`.
+// That is a missing mark row, or a PENDING stub written when Telegram stores a message id.
+// A TOOK, SKIPPED, WIN, LOSS, or BE row stays out. Pass time.Time{} to disable the date filter.
 // limit <= 0 or > 200 falls back to 50.
 func (s *SignalMarkStore) ListPending(since time.Time, limit int) ([]SignalMarkRow, error) {
 	if limit <= 0 || limit > 200 {
@@ -194,10 +195,11 @@ func (s *SignalMarkStore) ListPending(since time.Time, limit int) ([]SignalMarkR
 		sinceUnix = since.Unix()
 	}
 	rows, err := s.db.conn.Query(`
-		SELECT s.id, s.symbol, s.timeframe, s.rule, s.direction, s.score, s.message, s.created_at
+		SELECT s.id, s.symbol, s.timeframe, s.rule, s.direction, s.score, s.message, s.created_at,
+		       m.status, m.took_at, m.outcome_at, m.tg_message_id, m.updated_at
 		FROM signals s
 		LEFT JOIN signal_marks m ON m.signal_id = s.id
-		WHERE m.signal_id IS NULL AND s.created_at >= ?
+		WHERE (m.signal_id IS NULL OR m.status = 'PENDING') AND s.created_at >= ?
 		ORDER BY s.created_at DESC
 		LIMIT ?`, sinceUnix, limit)
 	if err != nil {
@@ -208,11 +210,36 @@ func (s *SignalMarkStore) ListPending(since time.Time, limit int) ([]SignalMarkR
 	for rows.Next() {
 		var sig models.Signal
 		var createdUnix int64
-		if err := rows.Scan(&sig.ID, &sig.Symbol, &sig.Timeframe, &sig.Rule, &sig.Direction, &sig.Score, &sig.Message, &createdUnix); err != nil {
+		var status sql.NullString
+		var took, outc, msg, updated sql.NullInt64
+		if err := rows.Scan(
+			&sig.ID, &sig.Symbol, &sig.Timeframe, &sig.Rule, &sig.Direction, &sig.Score, &sig.Message, &createdUnix,
+			&status, &took, &outc, &msg, &updated,
+		); err != nil {
 			return nil, err
 		}
 		sig.CreatedAt = time.Unix(createdUnix, 0).UTC()
-		out = append(out, SignalMarkRow{Signal: sig, Mark: nil})
+		row := SignalMarkRow{Signal: sig}
+		if status.Valid {
+			mark := SignalMark{SignalID: sig.ID, Status: status.String}
+			if took.Valid {
+				v := took.Int64
+				mark.TookAt = &v
+			}
+			if outc.Valid {
+				v := outc.Int64
+				mark.OutcomeAt = &v
+			}
+			if msg.Valid {
+				v := msg.Int64
+				mark.TgMessageID = &v
+			}
+			if updated.Valid {
+				mark.UpdatedAt = updated.Int64
+			}
+			row.Mark = &mark
+		}
+		out = append(out, row)
 	}
 	return out, rows.Err()
 }

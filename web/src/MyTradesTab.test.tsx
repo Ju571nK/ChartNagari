@@ -18,6 +18,7 @@ const wrap = (ui: React.ReactElement) => (
 )
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/')
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
     const u = String(url)
     if (u.includes('/api/marks/rollup')) {
@@ -71,6 +72,15 @@ describe('MyTradesTab', () => {
       const urls = calls.map(c => String(c[0]))
       expect(urls.some(u => u.includes('/api/marks/pending'))).toBe(true)
     })
+  })
+
+  it('opens Pending when the alert link asks for it', async () => {
+    window.history.replaceState(null, '', '/?view=my-trades&marks=pending')
+    render(wrap(<MyTradesTab />))
+    expect(await screen.findByText(/all caught up|대기 중인 시그널 없음|保留中のシグナルなし/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Rollup|통계|集計/ }))
+    expect(await screen.findByText('ict_liquidity_sweep')).toBeInTheDocument()
+    expect(window.location.search).not.toContain('marks=')
   })
 
   it('shows empty pending message', async () => {

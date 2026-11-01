@@ -277,7 +277,7 @@ func main() {
 		log.Info().Msg("Telegram notifications enabled")
 	}
 	if cfg.Discord.WebhookURL != "" {
-		notif.Register(notifier.NewDiscordSender(cfg.Discord.WebhookURL))
+		notif.Register(notifier.NewDiscordSender(cfg.Discord.WebhookURL).WithPublicURL(cfg.StartupSettings["CHARTNAGARI_URL"]))
 		log.Info().Msg("Discord notifications enabled")
 	}
 

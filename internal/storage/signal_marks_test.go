@@ -280,6 +280,42 @@ func TestSignalMarkStore_ListMarked(t *testing.T) {
 	}
 }
 
+func TestSignalMarkStore_ListPendingIncludesTelegramStub(t *testing.T) {
+	db := newTestDB(t)
+	store := NewSignalMarkStore(db)
+	tookID := seedSignal(t, db)
+	plainID := seedSignal(t, db)
+	stubID := seedSignal(t, db)
+	if _, err := store.Mark(tookID, "took"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetMessageID(tookID, 7); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetMessageID(stubID, 42); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := store.ListPending(time.Time{}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int64]*SignalMark{}
+	for _, row := range rows {
+		got[row.Signal.ID] = row.Mark
+	}
+	if _, ok := got[tookID]; ok {
+		t.Fatalf("TOOK signal %d is still pending", tookID)
+	}
+	if mark, ok := got[plainID]; !ok || mark != nil {
+		t.Fatalf("unmarked signal: present=%v mark=%#v", ok, mark)
+	}
+	mark, ok := got[stubID]
+	if !ok || mark == nil || mark.Status != "PENDING" || mark.TgMessageID == nil || *mark.TgMessageID != 42 {
+		t.Fatalf("PENDING stub: present=%v mark=%#v", ok, mark)
+	}
+}
+
 func TestSignalMarkStore_ListPending_LimitClamp(t *testing.T) {
 	db := newTestDB(t)
 	store := NewSignalMarkStore(db)

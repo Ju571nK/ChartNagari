@@ -20,6 +20,7 @@ Use [GitHub Private Vulnerability Reporting](https://docs.github.com/en/code-sec
 
 ## Data Handling Notes
 
-- **No API keys are stored server-side.** All credentials are read from `.env` at startup and held in process memory only.
+- `config/settings.yaml` stores `server.api_token` and provider credentials on disk. `.gitignore` excludes that file. A person who can read the file can use the token.
+- Set `server.remote_access` to `"true"` only with a token of at least 32 characters. The server refuses to start otherwise. In that mode every `/api/` request except `OPTIONS` must send `Authorization: Bearer` and the token. The token is an administrator credential. Terminate HTTPS in front of the server.
+- When `remote_access` is off and `api_token` is empty, local read APIs stay open. Do not expose that server on the public internet.
 - **Local SQLite only.** The database stores OHLCV bars and signal metadata. No personal data is collected.
-- The server is designed for local or private-network deployment. Exposing it to the public internet without additional authentication is not recommended.

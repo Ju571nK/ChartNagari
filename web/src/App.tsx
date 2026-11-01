@@ -8,6 +8,7 @@ import { WorkspaceProvider, useWorkspace, type Timeframe } from './Workspace'
 import { Forex15MCollection, useForexTimeframe } from './ForexTimeframe'
 import { WorkspaceNav, pageKeys } from './WorkspaceNav'
 import { MarketDataStatus, useMarketData } from './MarketDataStatus'
+import { AlertDropsPanel } from './AlertDropsPanel'
 import { chartPatterns } from './chartPatterns'
 import { ChartGuide, ExperienceMode, loadUIMode, UI_MODE_KEY, type UIMode } from './ExperienceMode'
 import { BacktestPreparation, useBacktestPreparation } from './BacktestPreparation'
@@ -891,6 +892,7 @@ function StatusTab() {
       </div>
 
       <p className="phase-info" style={{ marginTop: 16 }}>{status.phase}</p>
+      <AlertDropsPanel symbol={symbol} refreshToken={tick} />
     </>
   )
 }

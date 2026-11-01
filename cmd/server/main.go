@@ -80,7 +80,7 @@ func main() {
 	}
 
 	log.Info().
-		Str("version", "0.8.0").
+		Str("version", api.ProductVersion()).
 		Str("env", cfg.Env).
 		Msg("Chart Nagari server starting")
 

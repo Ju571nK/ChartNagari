@@ -6,9 +6,13 @@ import (
 	"strings"
 )
 
-// productVersion is the trimmed contents of the repo VERSION file.
+// ProductVersion is the trimmed contents of the repo VERSION file.
 // go test uses the package directory as cwd, and the server uses the repo
 // or image root, so the search walks parents and the executable directory.
+func ProductVersion() string {
+	return productVersion()
+}
+
 func productVersion() string {
 	starts := make([]string, 0, 2)
 	if wd, err := os.Getwd(); err == nil {

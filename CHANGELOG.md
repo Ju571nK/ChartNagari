@@ -47,6 +47,10 @@ Format:
   1H, and 15M.
 
 ### Docs
+- Documented that `clients.CHARTNAGARI_URL` is also the Discord Took / Skipped
+  review origin. Loopback defaults warn at Discord startup. Settings label,
+  getting-started, SETTINGS.md, and `settings.example.yaml` spell out the
+  phone-reachable URL and main-server restart requirement.
 - Restored the personal AWS runbook and its deploy files. Restore starts the
   stack with `deploy/aws-personal/docker-compose.yml`.
 - `SECURITY.md` notes that `config/settings.yaml` stores the API token and what

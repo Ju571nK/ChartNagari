@@ -3701,7 +3701,7 @@ const ENV_GROUPS: EnvGroup[] = [
   },
   {
     tab: 'mcp', label: 'MCP bridge — restart the bridge after saving', fields: [
-      { key: 'CHARTNAGARI_URL', label: 'ChartNagari server URL', type: 'text' },
+      { key: 'CHARTNAGARI_URL', label: 'ChartNagari server URL (also Discord Took/Skipped link; restart main server)', type: 'text' },
       { key: 'CHARTNAGARI_TOKEN', label: 'Bridge API token', type: 'password' },
     ],
   },

@@ -277,8 +277,14 @@ func main() {
 		log.Info().Msg("Telegram notifications enabled")
 	}
 	if cfg.Discord.WebhookURL != "" {
-		notif.Register(notifier.NewDiscordSender(cfg.Discord.WebhookURL).WithPublicURL(cfg.StartupSettings["CHARTNAGARI_URL"]))
-		log.Info().Msg("Discord notifications enabled")
+		publicURL := cfg.StartupSettings["CHARTNAGARI_URL"]
+		notif.Register(notifier.NewDiscordSender(cfg.Discord.WebhookURL).WithPublicURL(publicURL))
+		log.Info().Str("chartnagari_url", publicURL).Msg("Discord notifications enabled")
+		if notifier.ReviewPendingURL(publicURL) == "" {
+			log.Warn().Msg("Discord Took/Skipped link omitted: set clients.CHARTNAGARI_URL to a reachable origin and restart the server")
+		} else if notifier.PublicURLIsLoopback(publicURL) {
+			log.Warn().Str("chartnagari_url", publicURL).Msg("Discord Took/Skipped link uses a loopback host; phones opening Discord will not reach it")
+		}
 	}
 
 	// ── AI 해석 레이어 ────────────────────────────────────────────────

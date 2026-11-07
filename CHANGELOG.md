@@ -17,6 +17,16 @@ Format:
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Docs
+
+## [2.17.0.0] - 2026-11-07
+
+### Added
 - Discord alerts include a Took / Skipped link to My Trades Pending when
   `CHARTNAGARI_URL` is a usable origin. The link uses the existing mark
   buttons. Pending now includes Telegram `PENDING` stubs as well as signals

@@ -29,6 +29,8 @@ Format:
   "delivery failed". The raw error stays in the log.
 
 ### Changed
+- Closing a paper position asks for confirmation first. Cancel leaves the
+  position open. Confirm still marks it `CLOSED_MANUAL`.
 - PR CI now runs `vitest run` on the frontend job and `go test -race ./...` on
   the Go job. Local `make test` matches the race detector. Use
   `cd web && npm run test:ci` for a non-watch Vitest run (same as CI).

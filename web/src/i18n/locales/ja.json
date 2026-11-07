@@ -325,6 +325,7 @@
   "no_open_positions": "オープンポジションなし — シグナル発生時に自動でポジションが作成されます。",
   "close_history": "決済履歴",
   "paper_close": "決済",
+  "paper_close_confirm": "{{symbol}}を今すぐ決済しますか？手動決済になり、再開できません。",
   "paper_closing": "決済中...",
   "paper_closed_manual": "手動",
   "result": "結果",

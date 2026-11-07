@@ -325,6 +325,7 @@
   "no_open_positions": "No open positions — positions are created automatically when signals occur.",
   "close_history": "Close History",
   "paper_close": "Close",
+  "paper_close_confirm": "Close {{symbol}} now? It will be marked manual and cannot be reopened.",
   "paper_closing": "Closing...",
   "paper_closed_manual": "Manual",
   "result": "Result",

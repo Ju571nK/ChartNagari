@@ -41,7 +41,9 @@ function jsonResponse(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as Response
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('en')
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
     const u = String(url)
     if (init?.method === 'POST' && u.includes('/api/paper/positions/7/close')) {
@@ -65,9 +67,25 @@ describe('PaperTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Close$|^청산$|^決済$/ }))
     await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith(
+        'Close BTCUSDT now? It will be marked manual and cannot be reopened.',
+      )
       const post = vi.mocked(globalThis.fetch).mock.calls.find(c => (c[1] as RequestInit | undefined)?.method === 'POST')
       expect(String(post?.[0])).toContain('/api/paper/positions/7/close')
       expect((post?.[1] as RequestInit).body).toBe('{}')
+    })
+  })
+
+  it('does not close an open position when confirmation is cancelled', async () => {
+    vi.mocked(window.confirm).mockReturnValue(false)
+    render(<I18nextProvider i18n={i18n}><PaperTab /></I18nextProvider>)
+    fireEvent.click(await screen.findByRole('button', { name: /^Close$|^청산$|^決済$/ }))
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith(
+        'Close BTCUSDT now? It will be marked manual and cannot be reopened.',
+      )
+      const post = vi.mocked(globalThis.fetch).mock.calls.find(c => (c[1] as RequestInit | undefined)?.method === 'POST')
+      expect(post).toBeUndefined()
     })
   })
 })

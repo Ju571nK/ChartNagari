@@ -2442,7 +2442,8 @@ export function PaperTab() {
 
   useEffect(() => { reload() }, [reload])
 
-  const closePosition = (id: number) => {
+  const closePosition = (id: number, symbol: string) => {
+    if (!window.confirm(t('paper_close_confirm', { symbol }))) return
     setClosingID(id)
     setError('')
     apiFetch<null>(`/paper/positions/${id}/close`, {
@@ -2526,7 +2527,7 @@ export function PaperTab() {
                     <td>
                       <button
                         type="button"
-                        onClick={() => closePosition(p.id)}
+                        onClick={() => closePosition(p.id, p.symbol)}
                         disabled={closingID === p.id}
                         style={{
                           padding: '6px 12px',

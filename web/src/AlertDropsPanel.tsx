@@ -66,7 +66,10 @@ export function AlertDropsPanel({ symbol, refreshToken }: { symbol: string; refr
       {phase === 'error' && <p className="error-msg" role="alert">{t('alertDrops.error')}</p>}
       {phase === 'ready' && !enabled && <p className="alert-drop-note" role="status">{t('alertDrops.disabled')}</p>}
       {phase === 'ready' && enabled && drops.length === 0 && (
-        <p className="alert-drop-note" role="status">{t('alertDrops.empty')}</p>
+        <>
+          <p className="alert-drop-note" role="status">{t('alertDrops.empty')}</p>
+          <p className="alert-drop-note" role="status">{t('alertDrops.emptyHelp')}</p>
+        </>
       )}
       {phase === 'ready' && enabled && drops.length > 0 && (
         <div className="alert-drop-scroll">

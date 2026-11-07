@@ -13,6 +13,7 @@ describe('Alert drops panel', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({ enabled: false, drops: [] }))
     render(<AlertDropsPanel symbol="BTCUSDT" refreshToken={0} />)
     expect(await screen.findByText('Alert drop recording is off.')).toBeInTheDocument()
+    expect(screen.queryByText(/When recording is on/)).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
@@ -20,6 +21,9 @@ describe('Alert drops panel', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({ enabled: true, drops: [] }))
     render(<AlertDropsPanel symbol="BTCUSDT" refreshToken={0} />)
     expect(await screen.findByText('No dropped alerts for this symbol.')).toBeInTheDocument()
+    const help = screen.getByText('When recording is on, score, cooldown, filter, and delivery suppressions appear here. An empty list means nothing was suppressed recently.')
+    expect(help).toHaveClass('alert-drop-note')
+    expect(help.tagName).toBe('P')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
@@ -35,6 +39,7 @@ describe('Alert drops panel', () => {
     }))
     const { rerender } = render(<AlertDropsPanel symbol="BTCUSDT" refreshToken={0} />)
     expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.queryByText(/When recording is on/)).not.toBeInTheDocument()
     expect(screen.getByText('Cooldown')).toBeInTheDocument()
     expect(screen.getByText('ict_fvg')).toBeInTheDocument()
     expect(screen.getByText('37')).toBeInTheDocument()

@@ -2,6 +2,7 @@
   "alertDrops": {
     "title": "Alert drops",
     "empty": "No dropped alerts for this symbol.",
+    "emptyHelp": "When recording is on, score, cooldown, filter, and delivery suppressions appear here. An empty list means nothing was suppressed recently.",
     "disabled": "Alert drop recording is off.",
     "loading": "Loading alert drops…",
     "error": "Could not load alert drops.",

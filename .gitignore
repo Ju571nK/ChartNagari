@@ -79,6 +79,7 @@ ehthumbs.db
 .claude/settings.local.json
 # ↑ .claude/agents/, .claude/settings.local.json 등 모두 포함
 # 전역 팀 config는 ~/.claude/teams/ChartAnalysis-dev/ 에 저장됨
+.claude/skills/verify/artifacts/
 
 # ─── 앱 설정 파일 (API 키 등 민감 정보 포함) ───
 config/settings.yaml

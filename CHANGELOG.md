@@ -29,6 +29,10 @@ Format:
   "delivery failed". The raw error stays in the log.
 
 ### Changed
+- When alert drop recording is on and a symbol has no rows, the status
+  line stays, and a second line names score, cooldown, filter, and
+  delivery suppressions. An empty list means nothing was suppressed
+  recently.
 - Closing a paper position asks for confirmation first. Cancel leaves the
   position open. Confirm still marks it `CLOSED_MANUAL`.
 - PR CI now runs `vitest run` on the frontend job and `go test -race ./...` on

@@ -64,7 +64,10 @@ fi
 ln -sfn "${REPO_ROOT}/web" "${ROOT}/web"
 
 BIN="${BIN_DIR}/chart-analyzer"
-if [[ ! -x "${BIN}" ]] || [[ "${REPO_ROOT}/cmd/server" -nt "${BIN}" ]]; then
+needs_build=0
+if [[ ! -x "${BIN}" ]]; then needs_build=1; fi
+if [[ "${needs_build}" -eq 0 ]] && find "${REPO_ROOT}/cmd/server" "${REPO_ROOT}/internal" -name '*.go' -newer "${BIN}" -print -quit | grep -q .; then needs_build=1; fi
+if [[ "${needs_build}" -eq 1 ]]; then
   (cd "${REPO_ROOT}" && go build -o "${BIN}" ./cmd/server)
 fi
 

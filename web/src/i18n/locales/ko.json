@@ -325,6 +325,7 @@
   "no_open_positions": "오픈 포지션 없음 — 신호 발생 시 자동으로 포지션이 생성됩니다.",
   "close_history": "청산 히스토리",
   "paper_close": "청산",
+  "paper_close_confirm": "{{symbol}}을 지금 청산할까요? 수동 청산으로 기록되며 다시 열 수 없습니다.",
   "paper_closing": "청산 중...",
   "paper_closed_manual": "수동",
   "result": "결과",

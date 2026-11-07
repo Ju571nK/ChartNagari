@@ -71,8 +71,6 @@ require_go_newer() {
 run_decision() {
   local repo="$1"
   local bin_dir="$2"
-  REPO_ROOT="${repo}"
-  BIN_DIR="${bin_dir}"
   MARKER="${WORK}/go-build-marker"
   : > "${MARKER}"
   go() {
@@ -95,7 +93,7 @@ run_decision() {
     printf '#!/bin/sh\nexit 0\n' > "${out}"
     chmod +x "${out}"
   }
-  eval "${DECISION}"
+  REPO_ROOT="${repo}" BIN_DIR="${bin_dir}" eval "${DECISION}"
   if [[ -s "${MARKER}" ]]; then
     BUILT=1
   else

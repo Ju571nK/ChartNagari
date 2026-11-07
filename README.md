@@ -22,14 +22,14 @@ English, Korean and Japanese interfaces are available. AI interpretation is opti
 
 ## What's new
 
-**Latest release: [v2.16.0.0 — Optional Forex 15-minute data](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.16.0.0)**
+**Latest release: [v2.17.0.0. Alert drops, Discord review, and safer paper closes](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.17.0.0)**
 
-Forex pairs can opt into native 15-minute candles for charting, analysis, backtests and explicitly selected 15M alerts. Yahoo requests a 60-day history window (availability depends on Yahoo); OANDA can supply M15 when configured.
+Status lists why an alert did not fire. A Discord alert links to My Trades Pending when `CHARTNAGARI_URL` is an origin a phone can open. Closing a paper position asks first, then records `CLOSED_MANUAL`.
 
-- Existing symbols, standard timeframes and alert defaults are preserved. Fifteen-minute alerts require an explicit timeframe choice; scores, cooldowns and daily caps are unchanged.
-- An offline USDJPY study found insufficient evidence to change alert defaults. HTF opportunity diagnostics remain 1H/4H, and automatic penalty calibration remains disabled.
+- With alert-drop recording on, an empty list means nothing was suppressed recently. The list covers score, cooldown, filter, and delivery.
+- HTF automatic penalty calibration and paid hosting are not in this release. Keep your config and database, rebuild the frontend, and restart the server.
 
-Upgrading? Preserve your existing settings and database, then restart the server. Read the [release notes](docs/releases/v2.16.0.0.md) for opt-in details and provider limits.
+Upgrading? Keep your existing settings and database, rebuild the frontend, then restart the server. Read the [release notes](docs/releases/v2.17.0.0.md).
 
 ## Get started
 

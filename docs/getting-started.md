@@ -1,10 +1,10 @@
 # Getting started / 설치 안내
 
-These instructions target **v2.16.0.0**. Older releases can have
+These instructions target **v2.17.0.0**. Older releases can have
 different configuration behavior. Existing users should read [migration notes](../SETTINGS.md)
 first and must not replace their settings or database with examples. This source
-release preserves existing configs and databases. Optional Forex 15-minute
-collection is disabled until explicitly enabled for the Forex watchlist; see the [release notes](releases/v2.16.0.0.md).
+release preserves existing configs and databases. See the [release notes](releases/v2.17.0.0.md).
+Optional Forex 15-minute collection stays off until you enable it for the Forex watchlist.
 
 ## Try without installing
 

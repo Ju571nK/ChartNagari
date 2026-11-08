@@ -25,7 +25,8 @@ forex:
 
 `auto` selects Yahoo when no OANDA token is saved and OANDA when one is present.
 Choose `yahoo` to keep Yahoo selected with a token saved, or `oanda` to request
-OANDA explicitly. Yahoo FX candles require no key and contain no meaningful
+OANDA explicitly. Rakuten FX is not a `forex.provider`, so candle collection
+stays on Yahoo or OANDA. Yahoo FX candles require no key and contain no meaningful
 volume. OANDA requires an eligible v20 personal access token and provides tick
 volume. Access varies by region and account; a demo/practice account alone may
 not qualify. The [Forex guide](docs/FOREX.md) links general v20 documentation

@@ -1,0 +1,11 @@
+# Copy to config.local.yaml (gitignored), then generate a private secret:
+# openssl rand -hex 32
+plugin_id: rakuten-mt4-bridge
+plugin_secret: ""
+listen: "127.0.0.1:9300"
+journal: "./rakuten-mt4-bridge-journal.db"
+state: "./rakuten-mt4-bridge-simulator.db"
+# Only not-connected runs. "MT4 EA" is listed in the manifest and is rejected.
+bridge_mode: not-connected
+# Startup refuses true. This build has no Rakuten order route.
+orders_enabled: false

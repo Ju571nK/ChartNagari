@@ -246,3 +246,15 @@ execution gateway: account selection, symbol mapping, sizing/position rules,
 global kill-switch enforcement, risk limits, durable fill reconciliation and
 audit logging. Then add schema-generated settings and explicitly reviewed broker
 adapters. Do not simply switch `OrdersEnabled` on for the Alpaca v1 host.
+
+## Rakuten MT4 bridge
+
+Rakuten FX has no official REST API. The
+[Rakuten MT4 bridge example](../examples/rakuten-mt4-bridge/README.md) is a
+separate process that uses this kit and the simulator. It does not call
+Rakuten. Leave `orders_enabled` false. The manifest lists `MT4 EA` for a later
+MT4 Expert Advisor transport. This build refuses to start in that mode. The
+commented block in `config/execution.yaml` shows how to register the plugin
+while it is disabled. The Execution tab can then inspect `GET /v1/manifest`.
+Forex candle collection stays on Yahoo or OANDA. This sidecar does not replace
+those collectors.

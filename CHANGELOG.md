@@ -18,6 +18,10 @@ Format:
 
 ### Added
 
+- A disabled Rakuten MT4 bridge order-plugin example at
+  `examples/rakuten-mt4-bridge`. It is a loopback placeholder with orders off.
+  Forex candles stay on Yahoo or OANDA.
+
 ### Changed
 
 ### Fixed

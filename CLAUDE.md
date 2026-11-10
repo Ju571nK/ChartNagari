@@ -1,28 +1,93 @@
-# CLAUDE.md — ChartNagari AI Contributor Guide
+# CLAUDE.md
 
-> When Claude Code opens this project, read this file first.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Summary
 
-ChartNagari is a local-run platform that automatically detects ICT/Wyckoff and general TA signals
+ChartNagari is a local-run platform that automatically detects ICT/Wyckoff/SMC and general TA signals
 across multiple timeframes (1W/1D/4H/1H) for US stocks and crypto, and sends alerts via Telegram/Discord.
-Go backend + TypeScript/React frontend.
+Go backend (Go 1.26+, SQLite) + TypeScript/React 18/Vite frontend.
 
-## Tech Stack
+The Go module path is `github.com/Ju571nK/Chatter` (not ChartNagari/Chartter) — use it in imports.
 
-- Backend  : Go 1.26+
-- Frontend : TypeScript + React 18 + Vite
-- DB       : SQLite (local)
-- Alerts   : Telegram Bot / Discord Webhook
-- Data     : Yahoo Finance (stocks) / Binance WebSocket (crypto)
+## Commands
 
-## Contribution Principles
+```bash
+# Backend
+go run ./cmd/server                          # API + pipeline on 127.0.0.1:8080
+go test ./...                                # all Go tests (CI also runs `go vet ./...`)
+go test ./internal/methodology/ict -run TestOrderBlock -v   # single test
+go test ./internal/methodology/... -v -race  # what CI runs on rule PRs
+make build | build-all | test | lint | run   # binary is ./chart-analyzer
 
-- Run `go test ./...` before submitting any code change — all tests must pass.
-- Follow existing patterns: zerolog structured logging, context propagation, table-driven tests.
-- New trading rules go in `internal/methodology/<category>/` and must be registered in `config/rules.yaml`.
-- Do not commit `.env` or any file containing real API keys.
-- Update `CHANGELOG.md` with a brief entry under the appropriate version/date heading.
+# Frontend (in web/)
+npm run dev                                  # Vite on :5173, proxies /api and /ws to :8080
+npm run build                                # tsc + vite build — this is the only type check/lint
+npx vitest run                               # all tests once (`npm test` starts watch mode)
+npx vitest run src/ExecutionTab.test.tsx     # single test file
+
+# Docker
+./restart.sh [quick|frontend|backend]        # no arg = full rebuild; quick = restart only (YAML changes)
+```
+
+New installs need `cp config/settings.example.yaml config/settings.yaml && chmod 600 config/settings.yaml`.
+Never overwrite an existing `config/settings.yaml` (gitignored, holds plaintext secrets).
+
+## Architecture
+
+Per symbol, per tick (`internal/pipeline`):
+
+```
+collectors → SQLite OHLCV → indicator.Compute → engine.Run (rules) → interpreter (MTF scoring, optional LLM)
+           → storage (signals) / notifier (Telegram, Discord) / hub (WebSocket) / paper trader / execution dispatcher
+```
+
+- `cmd/server/main.go` is the single wiring point: it builds collectors, the rule list, pipeline,
+  API server and MCP tool registry. Optional pipeline dependencies are attached with `Set*` methods,
+  and the pipeline depends on small interfaces that `*storage.DB` satisfies.
+- **Collectors** (`internal/collector`): Binance WebSocket for crypto; Tiingo (if key set) or Yahoo for
+  stocks; index symbols like `^VIX` always use Yahoo daily.
+- **Rules**: each implements `rule.AnalysisRule` (`Name`, `RequiredIndicators`, `Analyze`; return
+  `nil, nil` for no signal). `engine` evaluates only rules enabled in `config/rules.yaml`.
+- **Shared types** live in `pkg/models` (`Signal`, `OHLCV`, `AnalysisContext`, `TradeSignal`).
+- **API** (`internal/api`) serves REST + the built frontend from `web/dist`, and persists settings to YAML.
+- **Frontend chart overlays are separate from backend signals**: FVG/OB candidates drawn on the chart
+  are computed in the browser (`web/src/chartPatterns.ts`) from the visible candles, not from the engine.
+- **Separate processes**: `cmd/chartnagari-mcp` (MCP bridge) and `cmd/plugin-alpaca` (Alpaca paper
+  order adapter). Saving their settings in the UI does not start them or enable execution.
+- **Order plugins**: `internal/execution` dispatches HMAC-signed, deduplicated trade signals to external
+  plugins registered in `config/execution.yaml`. The public SDK is `pkg/brokerplugin` (must not import
+  `internal/`); contract in `docs/api/order-plugin-v1.openapi.yaml`, guides in `docs/order-plugins/`,
+  conformance via `cmd/plugin-check`.
+
+### Configuration
+
+`config/settings.yaml` (general settings + credentials, edited through the web Settings tab) is the
+source of truth. `.env` is legacy: it is imported once on migration and ignored afterwards
+(`version: 1` marker — do not remove). General settings are **not hot-reloaded**; restart to apply.
+Watchlist, rules, alerts, signal tuning, symbol profiles and execution each have their own YAML in
+`config/`. See `SETTINGS.md`.
+
+## Adding a Trading Rule
+
+1. Create `internal/methodology/<category>/<rule>.go` (categories: `ict`, `wyckoff`, `smc`,
+   `general_ta`, `candlestick`), with `var _ rule.AnalysisRule = (*MyRule)(nil)`.
+   Reference implementation: `internal/methodology/ict/order_block.go`.
+2. Add it to the `allRules` slice in `cmd/server/main.go` (shared with the backtest engine).
+3. Add an entry to `config/rules.yaml` whose `name` matches `Name()`.
+4. Table-driven tests in the category's `_test.go`.
+
+CI fails if `CONTRIBUTING.md` does not mention every method of `rule.AnalysisRule` — update it when
+changing `internal/rule/interface.go`.
+
+## Conventions
+
+- Run `go test ./...` before submitting any code change — all tests must pass. For frontend changes
+  also `cd web && npx vitest run` and `npm run build`.
+- zerolog structured logging (log messages in English), context propagation, table-driven tests.
+- User-facing frontend strings go through i18n: add keys to all three of
+  `web/src/i18n/locales/{en,ko,ja}.json`.
+- Update `CHANGELOG.md` under `## [Unreleased]`. `VERSION` is 4-part (`MAJOR.MINOR.PATCH.MICRO`).
 
 ## Agent Team
 

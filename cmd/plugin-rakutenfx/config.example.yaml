@@ -1,0 +1,8 @@
+# Copy to config.local.yaml (gitignored) and chmod 600. Generate both secrets
+# separately with: openssl rand -hex 32
+plugin_id: rakuten-fx-demo
+plugin_secret: ""   # shared with ChartNagari (v1 HMAC)
+bridge_token: ""    # entered as the EA's BridgeToken input; must differ from plugin_secret
+listen: "127.0.0.1:9300"
+journal: "./plugin-rakutenfx-journal.db"
+demo_server: "RakutenSecurities-Demo"   # MT4 server name; snapshots from any other server are refused

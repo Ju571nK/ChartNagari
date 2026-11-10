@@ -181,7 +181,8 @@ func TestRecentSkipsUnknownReason(t *testing.T) {
 func TestPrunePerSymbolCap(t *testing.T) {
 	db := openDropDB(t)
 	s := newTestStore(t, db, AlertDropOptions{PerSymbolCap: 2})
-	base := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	// Relative to now: prune also drops rows older than the TTL.
+	base := time.Now().UTC().Add(-time.Hour)
 	for i, rule := range []string{"a", "b", "c", "d"} {
 		s.Record(dropEvent("BTCUSDT", rule, alertdrop.Timeframe, base.Add(time.Duration(i)*time.Minute)))
 	}

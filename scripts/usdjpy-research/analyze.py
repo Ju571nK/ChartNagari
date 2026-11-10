@@ -13,7 +13,8 @@ def simulate(o, bars, index, spread, conservative):
     mid = bars[i]['close']
     long = o['direction'] == 'LONG'
     risk_pips = abs(mid - o['sl']) / .01
-    for k in range(i + 1, i + 21):
+    horizon = {'15M':20,'1H':5,'4H':2}.get(o.get('timeframe', 'legacy'), 20)
+    for k in range(i + 1, i + horizon + 1):
         b = bars[k]
         tp_hit = b['high'] >= o['tp'] if long else b['low'] <= o['tp']
         sl_hit = b['low'] <= o['sl'] if long else b['high'] >= o['sl']
@@ -21,7 +22,7 @@ def simulate(o, bars, index, spread, conservative):
             exit_price = o['sl']
         elif tp_hit:
             exit_price = o['tp']
-        elif k == i + 20:
+        elif k == i + horizon:
             exit_price = b['close']
         else:
             continue
@@ -33,7 +34,7 @@ def simulate(o, bars, index, spread, conservative):
 
 
 def duration(tf):
-    return dt.timedelta(hours=1 if tf == '1H' else 4)
+    return {'15M': dt.timedelta(minutes=15), '1H': dt.timedelta(hours=1), '4H': dt.timedelta(hours=4)}[tf]
 
 
 def stats(trades):
@@ -98,9 +99,10 @@ def main():
     args = ap.parse_args()
     j = json.loads(Path(args.input).read_text())
     lookup = {r['Name']: r['Methodology'] for r in j['rules_config']['Rules']}
-    bars4 = j['bars']['4H']
-    start = date(bars4[200]['open_time']) + duration('4H')
-    end = date(bars4[-21]['open_time']) + duration('4H')
+    horizons = {'15M':20,'1H':5,'4H':2}
+    starts = [date(j['bars'][tf][200]['open_time']) + duration(tf) for tf in horizons]
+    ends = [date(j['bars'][tf][-horizons[tf]-1]['open_time']) + duration(tf) for tf in horizons]
+    start, end = max(starts), min(ends)
     cutoff = (start + (end-start)*.7).replace(hour=0, minute=0, second=0, microsecond=0)
     groups = {'forex_default': {'ict','smc','general_ta','candlestick'},
               'ict_smc': {'ict','smc'}, 'general_ta': {'general_ta'},
@@ -108,14 +110,14 @@ def main():
               'ict_smc_candlestick': {'ict','smc','candlestick'},
               'ta_candlestick': {'general_ta','candlestick'}}
     rows, diagnostics, uncertainty = [], {}, {}
-    for tf in ['1H','4H']:
+    for tf in ['15M','1H','4H']:
         bars = j['bars'][tf]
         index = {b['open_time']: i for i,b in enumerate(bars)}
-        eligible = [o for o in j['results'][tf]['outcomes']
-                    if index[o['entry_time']] + 20 < len(bars)
+        eligible = [dict(o, timeframe=tf) for o in j['results'][tf]['outcomes']
+                    if index[o['entry_time']] + horizons[tf] < len(bars)
                     and start <= date(o['entry_time'])+duration(tf) < end]
         # Require a full exit horizon before the train/holdout boundary.
-        train_limit = max(i for i,b in enumerate(bars) if date(b['open_time'])+duration(tf) < cutoff) - 20
+        train_limit = max(i for i,b in enumerate(bars) if date(b['open_time'])+duration(tf) < cutoff) - horizons[tf]
         diagnostics[tf] = dict(bars=len(bars), first=bars[0]['open_time'], last=bars[-1]['open_time'],
                                raw_outcomes=len(j['results'][tf]['outcomes']), eligible_outcomes=len(eligible))
         # Validate the independent TP-first replay against the application's engine.
@@ -152,14 +154,14 @@ def main():
         enriched=[simulate(o,bars,index,1,True) for o in eligible if date(o['entry_time'])+duration(tf) >= cutoff]
         diagnostics[tf]['rules']={r:stats([o for o in enriched if o['rule']==r]) for r in sorted(set(o['rule'] for o in enriched))}
     report=dict(start=start.isoformat(), end=end.isoformat(), cutoff=cutoff.isoformat(),
-                train_ratio=.7, boundary_embargo_bars=20, diagnostics=diagnostics, rows=rows, uncertainty=uncertainty,
+                train_ratio=.7, boundary_embargo_bars=horizons, diagnostics=diagnostics, rows=rows, uncertainty=uncertainty,
                 replay_sha256=hashlib.sha256(Path(args.input).read_bytes()).hexdigest())
     Path(args.output).write_text(json.dumps(report,indent=2))
     csv_path=Path(args.output).with_suffix('.csv')
     with csv_path.open('w',newline='') as f:
         writer=csv.DictWriter(f,fieldnames=list(rows[0]),lineterminator="\n");writer.writeheader();writer.writerows(rows)
     print(json.dumps({k:report[k] for k in ['start','end','cutoff']},indent=2))
-    for tf in ['1H','4H']:
+    for tf in ['15M','1H','4H']:
         train=[r for r in rows if r['timeframe']==tf and r['segment']=='train' and r['mode']=='one_position_proxy'
                and r['exit_policy']=='sl_first' and r['spread_pips']==1 and r['trades']>=30]
         best=max(train,key=lambda r:(r['net_r'],-r['max_drawdown_r']),default=None)

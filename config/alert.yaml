@@ -1,5 +1,5 @@
-score_threshold: 12
-cooldown_hours: 4
+score_threshold: 10
+cooldown_hours: 2
 mtf_consensus_min: 2
 crypto_tp_mult: 1.5
 crypto_sl_mult: 0.75

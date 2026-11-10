@@ -1,9 +1,7 @@
+dxy_auto_initialized: true
 symbols:
     crypto:
         - symbol: BTCUSDT
-          exchange: binance
-          enabled: true
-        - symbol: ETHUSDT
           exchange: binance
           enabled: true
     stocks:
@@ -13,11 +11,11 @@ symbols:
         - symbol: PLTR
           exchange: nasdaq
           enabled: true
-    indices:
-        - symbol: "^VIX"
-          exchange: cboe
+    indices: []
+    forex:
+        - symbol: USDJPY
+          exchange: FX
           enabled: true
-    forex: []
 timeframes:
     - 1W
     - 1D

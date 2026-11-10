@@ -24,9 +24,18 @@ Format:
 
 ### Changed
 
+- Default config: alert `score_threshold` 12 → 10 and `cooldown_hours` 4 → 2;
+  default watchlist is BTCUSDT, TSLA, PLTR and USDJPY (ETHUSDT and ^VIX removed).
+
 ### Fixed
 
+- `TestPrunePerSymbolCap` used a fixed date and failed once it aged past the
+  7-day drop TTL.
+
 ### Docs
+
+- USDJPY 15-minute timeframe comparison (`docs/backtests/`) and links to the
+  personal AWS runbook from the READMEs and remote-connection docs.
 
 ## [2.17.0.0] - 2026-11-07
 

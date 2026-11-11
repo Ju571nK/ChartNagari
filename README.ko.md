@@ -58,6 +58,11 @@ DB와 설정은 로컬에 저장됩니다. 활성화한 시세·클라우드 AI�
 
 ## 더 알아보기
 
+**증권사·거래소 연동을 개발하고 싶다면:** [한국어 시작 안내](docs/order-plugins/ko.md)를 읽어보세요.
+[English](docs/order-plugins/en.md) · [日本語](docs/order-plugins/ja.md) 가이드도 제공합니다.
+현재 main의 실험적 개발키트로, 공개 SDK·모의 거래소·검사 도구를 제공합니다.
+플러그인 자동 설치나 바로 실계좌 주문을 지원하는 기능은 아닙니다.
+
 [설정·업그레이드](SETTINGS.md) · [아키텍처](docs/architecture.md) · [개인 상시 AWS 배포](docs/aws-personal-always-on.md) · [개발·기여 안내](CONTRIBUTING.md) · [문제 제보](https://github.com/Ju571nK/ChartNagari/issues)
 
 Justin이 만드는 오픈소스 프로젝트입니다. [MIT License](LICENSE).

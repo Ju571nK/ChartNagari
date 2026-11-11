@@ -135,6 +135,15 @@ summary { cursor: pointer; }
 .inspector-actions { padding: 16px; display: grid; gap: 8px; border-top: 1px solid rgba(91,146,121,0.2); }
 .inspector-actions button:first-child { color: var(--mint); border-color: var(--green); }
 .execution-tab { display: grid; gap: 20px; }
+.order-plugin-guide { min-width: 0; padding: 16px; border: 1px solid var(--green); border-radius: 8px; font-size: 0.85rem; line-height: 1.7; overflow-wrap: anywhere; }
+.order-plugin-guide h2 { font-size: 1rem; color: var(--mint); margin: 0 0 8px; }
+.order-plugin-guide p { margin: 8px 0; }
+.order-plugin-guide summary { cursor: pointer; color: var(--mint); padding: 10px 0; min-height: 44px; }
+.order-plugin-guide-content h3 { font-size: 0.9rem; margin: 12px 0 4px; }
+.order-plugin-guide-content ol { padding-left: 1.5em; }
+.order-plugin-guide-content li { margin: 6px 0; }
+.order-plugin-guide-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; }
+.order-plugin-guide-links a { display: inline-flex; align-items: center; min-height: 44px; }
 .execution-tab > [data-testid="plugins-area"], .execution-tab > [data-testid="global-config"], .execution-tab > [data-testid="feedback-table"] { min-width: 0; }
 @media (max-width: 1200px) {
   .chart-workspace { grid-template-columns: minmax(0, 1fr); }

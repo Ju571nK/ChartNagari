@@ -5,7 +5,7 @@ info:
   description: >-
     Separate-process plugin protocol. All requests use HMAC-SHA256 over
     plugin_id, Unix timestamp, method, escaped path including query, and
-    SHA256(raw body), joined by newlines. See ../order-plugin-kit.md.
+    SHA256(raw body), joined by newlines. See ../order-plugins/protocol.md.
     HTTP 202 is not proof of acceptance or fill. No automatic write retries.
 security:
   - PluginID: []

@@ -22,6 +22,8 @@ Format:
   order plugin v1 adapter fed by a bundled MT4 EA (`ChartNagariBridge.mq4`) that
   pushes demo account/order snapshots over loopback. Live accounts and other
   servers are refused; submission and cancellation are not implemented.
+- Execution tab order-plugin developer guide (`OrderPluginGuide`) with en/ko/ja
+  copy and links to the localized kit docs.
 
 ### Removed
 
@@ -40,6 +42,9 @@ Format:
 
 ### Docs
 
+- Moved the order-plugin developer kit into `docs/order-plugins/` (en/ja/ko
+  guides plus shared `protocol.md`); `docs/order-plugin-kit.md` redirects there.
+  READMEs and CONTRIBUTING point at the new guides.
 - USDJPY 15-minute timeframe comparison (`docs/backtests/`) and links to the
   personal AWS runbook from the READMEs and remote-connection docs.
 

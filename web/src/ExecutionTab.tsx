@@ -4,6 +4,7 @@ import KillSwitch from './KillSwitch';
 import PluginCard from './PluginCard';
 import PluginEditModal from './PluginEditModal';
 import FeedbackTable from './FeedbackTable';
+import OrderPluginGuide from './OrderPluginGuide';
 import GlobalConfigForm, { type GlobalConfig } from './GlobalConfigForm';
 
 export type Plugin = {
@@ -141,6 +142,7 @@ export default function ExecutionTab() {
 
   return (
     <div className="execution-tab">
+      <OrderPluginGuide />
       {actionError && <div className="state-message" role="alert">{t('workspace.actionFailed')}</div>}
       {configError && <div className="state-message" role="alert"><p>{t('workspace.executionUnavailable')}</p><button onClick={() => { void loadConfig().catch(() => {}); }}>{t('workspace.retry')}</button></div>}
       {!config && !configError && <p className="state-message" role="status">{t('loading')}</p>}

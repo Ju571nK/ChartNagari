@@ -58,6 +58,11 @@ DBと設定はローカルに保存されます。有効にした相場データ
 
 ## 詳しく知る
 
+**証券会社・取引所との連携を開発する方へ：** [日本語スタートガイド](docs/order-plugins/ja.md)をご覧ください。
+[English](docs/order-plugins/en.md) · [한국어](docs/order-plugins/ko.md) のガイドも用意しています。
+現在のmainにある実験的な開発キットで、公開SDK・シミュレーター・検査ツールを提供します。
+自動インストールや、すぐに実口座で注文できる機能ではありません。
+
 [設定・アップグレード](SETTINGS.md) · [アーキテクチャ](docs/architecture.md) · [個人常時稼働 AWS](docs/aws-personal-always-on.md) · [開発・貢献ガイド](CONTRIBUTING.md) · [問題の報告](https://github.com/Ju571nK/ChartNagari/issues)
 
 Justinによるオープンソースプロジェクト。[MIT License](LICENSE)。

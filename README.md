@@ -58,6 +58,10 @@ Your database and settings are stored locally. Enabled market-data, hosted AI an
 
 ## Learn more
 
-[Settings & upgrades](SETTINGS.md) · [Architecture](docs/architecture.md) · [Personal always-on on AWS](docs/aws-personal-always-on.md) · [Contributing & development](CONTRIBUTING.md) · [Order plugin developer kit](docs/order-plugin-kit.md) · [Report an issue](https://github.com/Ju571nK/ChartNagari/issues)
+**Building a broker/exchange integration?** Start with the [English guide](docs/order-plugins/en.md)
+([日本語](docs/order-plugins/ja.md) · [한국어](docs/order-plugins/ko.md)). This experimental main-branch kit includes a public SDK,
+simulator and checker, not automatic installation or ready-to-use live trading.
+
+[Settings & upgrades](SETTINGS.md) · [Architecture](docs/architecture.md) · [Personal always-on on AWS](docs/aws-personal-always-on.md) · [Contributing & development](CONTRIBUTING.md) · [Order plugin developer kit](docs/order-plugins/README.md) · [Report an issue](https://github.com/Ju571nK/ChartNagari/issues)
 
 Built by Justin. Open source under the [MIT License](LICENSE).

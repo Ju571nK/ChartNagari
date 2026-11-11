@@ -28,6 +28,7 @@ describe('ExecutionTab', () => {
     render(<ExecutionTab />);
     await waitFor(() => expect(screen.getByText(/Execution configuration could not be loaded/)).toBeInTheDocument());
     expect(screen.getByTestId('kill-switch')).toBeEmptyDOMElement();
+    expect(screen.getByRole('heading', { name: 'Order plugin developer kit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add Plugin/i })).toBeDisabled();
     globalThis.fetch = original;
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));

@@ -56,14 +56,15 @@ plugins: []
 #   3. Curl ChartNagari with a high-confluence signal and watch for /webhook 202
 #      and a follow-up POST to /api/execution/feedback marked SUBMITTED.
 #
-# Example: register the Rakuten MT4 bridge sidecar for metadata inspection only.
-# Rakuten FX has no official REST API. examples/rakuten-mt4-bridge is a loopback
-# placeholder. It does not place orders. Leave enabled false.
-# Forex candles stay on Yahoo or OANDA. Do not add a forex.provider for Rakuten.
-# The secret must match plugin_secret and be at least 32 characters.
+# Example: register the Rakuten FX MT4 demo bridge for metadata inspection only.
+# Rakuten FX has no official REST API. cmd/plugin-rakutenfx is a read-only
+# adapter fed by ChartNagariBridge.mq4 on a demo terminal. It does not place
+# orders. Leave enabled false. Forex candles stay on Yahoo or OANDA. Do not add
+# a forex.provider for Rakuten. The secret must match plugin_secret and be at
+# least 32 characters. See cmd/plugin-rakutenfx/README.md.
 #
 # plugins:
-#   - id: rakuten-mt4-bridge
+#   - id: rakuten-fx-demo
 #     url: http://127.0.0.1:9300
 #     secret: change-me-shared-hmac-secret
 #     enabled: false

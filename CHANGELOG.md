@@ -18,13 +18,15 @@ Format:
 
 ### Added
 
-- A disabled Rakuten MT4 bridge order-plugin example at
-  `examples/rakuten-mt4-bridge`. It is a loopback placeholder with orders off.
-  Forex candles stay on Yahoo or OANDA.
 - Experimental read-only Rakuten FX MT4 demo bridge: `cmd/plugin-rakutenfx`, an
   order plugin v1 adapter fed by a bundled MT4 EA (`ChartNagariBridge.mq4`) that
   pushes demo account/order snapshots over loopback. Live accounts and other
   servers are refused; submission and cancellation are not implemented.
+
+### Removed
+
+- `examples/rakuten-mt4-bridge` simulator placeholder. Use `cmd/plugin-rakutenfx`
+  for the real demo bridge, and `examples/order-plugin` for a generic kit scaffold.
 
 ### Changed
 

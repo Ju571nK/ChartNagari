@@ -1,108 +1,58 @@
-# Ollama Local LLM Setup
+# Set up local AI with Ollama
 
-ChartNagari can use [Ollama](https://ollama.com) to run a local LLM for trade-signal interpretation instead of calling cloud APIs like Anthropic or OpenAI.
+ChartNagari's AI setup wizard helps connect a local or remote Ollama model. It
+does not silently install Ollama: a browser cannot install software on the
+computer that opened the page. Install Ollama on the selected host yourself
+with the [official Ollama download](https://ollama.com/download).
 
-## Why local?
+## Choose where Ollama runs
 
-- **Privacy** — market data, analyst prompts, and interpretations never leave your machine.
-- **Cost** — no per-token billing.
-- **Offline** — works without internet once the model is pulled.
+- **ChartNagari installation device** runs Ollama on the machine running the
+  ChartNagari Go server. With Docker, that means the server/container host, not
+  necessarily your browser computer.
+- **Remote Ollama server** uses an Ollama instance already running on another
+  machine. Enter an endpoint reachable from the ChartNagari server. A `localhost`
+  address always refers to the machine/container making the connection.
 
-Downsides: requires disk space (2.6 GB for the default `gemma4:4b` model), meaningfully slower than cloud APIs, and inference quality is lower than flagship models.
+For a Docker-based ChartNagari deployment, the Ollama status card may offer
+**Enable Docker sidecar**. Choose it to write the Compose override, then run the
+displayed `docker compose up -d ollama` command from the ChartNagari project
+directory. Return to the wizard and wait for the sidecar status to become
+available before saving the model profile. This starts the Ollama container;
+the model still needs to be downloaded explicitly in the profile flow below.
 
-## Choose a path
+## First-time setup
 
-Two setup paths. Both produce the same result. **Docker sidecar is easiest** and doesn't require installing Ollama on your host OS.
+1. Open **Settings → AI** or choose AI setup during onboarding. Select the
+   ChartNagari host or a remote Ollama host.
+2. If Ollama is not installed on the selected host, use the official installer
+   link shown by the wizard. After installation, return to ChartNagari and
+   refresh status. When Ollama is installed but stopped, use **Start** to start
+   its local service.
+3. Choose a model preset, such as Qwen3, and save the profile. For a local
+   Ollama endpoint, an API key is normally not required; remote servers may
+   require authentication according to their configuration.
+4. Choose **Download model** to pull the model onto that Ollama host. Model files
+   can be several gigabytes; this is a separate, explicit action.
+5. Run the sample response test, review the output, and activate the profile.
+   Saving or downloading alone does not activate it.
 
-### Path A — Docker sidecar (recommended)
-
-Requirements: Docker Desktop or Docker Engine with `docker compose` v2.
-
-1. Open ChartNagari → Settings → AI Provider (Ollama).
-2. Click **Enable Docker sidecar**. The button copies the run command to your clipboard and shows:
-   ```
-   docker compose up -d ollama
-   ```
-3. Paste the command in your terminal at the ChartNagari repo root. Docker starts the `chart-ollama` container.
-4. Back in Settings, the status pill will flip to **Docker sidecar available → Ready, model not pulled** within 30 seconds.
-5. Click **Pull model** to download `gemma4:4b` (~2.6 GB). A progress bar tracks the pull.
-6. When complete, the pill shows **Ready — model loaded**. Click **Test connection** — you should see "OK (XXX ms)".
-7. In Settings → AI / LLM, set **LLM Provider** to `ollama` and save. Restart ChartNagari.
-
-Uninstall: delete `docker-compose.override.yml` and run `docker compose up -d`.
-
-### Path B — Native install
-
-#### macOS
-```bash
-brew install ollama
-ollama serve  # leave this running
-```
-
-Open a second terminal:
-```bash
-ollama pull gemma4:4b
-```
-
-#### Linux
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-# systemd starts ollama automatically
-ollama pull gemma4:4b
-```
-
-#### Windows
-Download the installer at https://ollama.com/download/windows. After install:
-```powershell
-ollama pull gemma4:4b
-```
-
-Back in ChartNagari, Settings → AI Provider (Ollama) should show **Ready — model loaded**. Set LLM Provider to `ollama` and restart.
-
-## Configuration
-
-Settings that affect Ollama (set via Settings UI or environment):
-
-| Setting | Default | Purpose |
-|---|---|---|
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL. For Docker sidecar, set to `http://ollama:11434`. |
-| `OLLAMA_MODEL` | `gemma4:4b` | Model tag. Other options: `gemma4:12b` (~7.2 GB), `gemma4:27b` (~15 GB), `llama3.1:8b` (~4.7 GB). |
-| `OLLAMA_TIMEOUT_SEC` | `120` | HTTP timeout for inference. Raise on slow hardware. |
+The wizard can list models already installed on the selected Ollama host. A
+profile's saved credentials remain on the ChartNagari server. Protect its
+configuration and backups.
 
 ## Troubleshooting
 
-### Port 11434 already in use
-Another Ollama instance is running. Either stop it (`ollama ps` then kill), or change `OLLAMA_HOST` to a different port in Settings.
+- **Not installed:** confirm that you installed Ollama on the host selected in
+  the wizard, rather than only on the browser computer. Refresh status.
+- **Installed but unavailable:** use **Start** for the ChartNagari host, or
+  start/check the Ollama service on the remote machine. Verify the endpoint is
+  reachable from the ChartNagari server.
+- **Model missing:** save the intended profile and explicitly download that
+  model. Confirm sufficient disk space and wait for the pull to finish.
+- **Test fails:** check the endpoint, model identifier, remote authentication,
+  host logs, and available memory. The wizard does not silently fall back to a
+  hosted or paid provider.
 
-### Model not found
-`ollama pull <model>` must have completed successfully before Test connection. In the Settings UI, click Pull model again.
-
-### Slow inference (>30s per signal)
-Small hardware often can't run larger models. Try `gemma4:4b` if you're on `gemma4:12b`. For Apple Silicon, ensure Ollama is using Metal (enabled by default on macOS).
-
-### Docker compose doesn't see the override
-Run `docker compose config` to verify the override is loaded. The `docker-compose.override.yml` must exist at the repo root.
-
-### Settings panel says "Ollama detector not configured"
-The server isn't wired for Ollama status. Restart ChartNagari — the endpoints are registered on every boot when `OLLAMA_HOST` is set.
-
-### Test connection returns 500
-Check Ollama logs: `docker logs chart-ollama` (Docker path) or `journalctl -u ollama -f` (Linux) or `ollama serve` stdout (macOS). Usual causes: out-of-memory, model download incomplete, or binding conflict.
-
-## Uninstall
-
-### Docker
-```bash
-docker compose down ollama
-rm docker-compose.override.yml
-rm -rf ./data/ollama  # deletes pulled models (bind-mount path)
-```
-
-### Native
-```bash
-ollama rm gemma4:4b  # or your chosen model
-# macOS: brew uninstall ollama
-# Linux: sudo systemctl stop ollama && sudo systemctl disable ollama
-```
-
-Then in ChartNagari Settings, change LLM Provider away from `ollama` or set it to empty.
+See [AI connection settings](../SETTINGS.md#ai-connection-setup) for profile,
+credential, and activation details.

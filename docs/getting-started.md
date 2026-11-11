@@ -72,6 +72,11 @@ and data directories, not arbitrary host paths.
 3. Connect optional data, AI and notification services in **Settings**.
    If Discord is enabled, set `clients.CHARTNAGARI_URL` to an origin your phone
    or browser can open (not only `localhost`) so Took / Skipped links work.
+   For local AI, Ollama must be installed on the selected host; the browser
+   cannot install software on the computer that opened the page. The AI setup
+   wizard guides you through checking the host, saving a profile, downloading
+   a model such as Qwen3, testing a sample response and activating it. See the
+   [AI/Ollama setup guide](OLLAMA_SETUP.md).
 4. Restart the relevant process after changing general settings. Changing
    `CHARTNAGARI_URL` needs a main-server restart before Discord embeds pick it up.
    If API-token authentication is enabled, use **Authorize changes** in Settings

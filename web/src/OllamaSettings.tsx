@@ -274,6 +274,9 @@ function StateCard({
   // NOT_INSTALLED
   return (
     <div style={{ marginTop: '0.75rem' }}>
+      <p style={{ fontSize: '0.85rem', color: 'var(--text)', margin: '0 0 0.65rem' }}>
+        {t('ollama.install_steps', { host: status.host })}
+      </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
         <span style={pillStyles.NOT_INSTALLED}>{t(pillLabels.NOT_INSTALLED)}</span>
         <a
@@ -286,17 +289,24 @@ function StateCard({
         </a>
       </div>
       {suggest.command && (
-        <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.4rem' }}>
+        <details style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+          <summary style={{ cursor: 'pointer' }}>{t('ollama.advanced_install_command')}</summary>
           <code style={{
+            display: 'inline-block',
             background: 'rgba(255,255,255,0.06)',
-            padding: '2px 6px',
+            padding: '4px 7px',
             borderRadius: '4px',
             fontFamily: 'monospace',
+            marginTop: '0.35rem',
+            overflowWrap: 'anywhere',
           }}>
             {suggest.command}
           </code>
-        </div>
+        </details>
       )}
+      <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: '0.65rem 0 0' }}>
+        {t('ollama.install_return')}
+      </p>
     </div>
   );
 }

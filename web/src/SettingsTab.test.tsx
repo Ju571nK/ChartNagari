@@ -54,6 +54,6 @@ it('shows AI setup in the AI section with legacy environment fields separate', a
   render(<SettingsTab uiMode="beginner" onSetUiMode={vi.fn()} />)
   fireEvent.click(await screen.findByRole('tab', { name: 'AI / LLM' }))
   expect(await screen.findByRole('region', { name: 'AI setup' })).toBeInTheDocument()
-  expect(screen.getByText(/ChartNagari server, not this browser computer/)).toBeInTheDocument()
+  expect(screen.getByText(/machine running ChartNagari, not this browser computer/)).toBeInTheDocument()
   expect(screen.getByText('Legacy AI environment settings')).toBeInTheDocument()
 })

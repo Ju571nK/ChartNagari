@@ -11,6 +11,9 @@ symbols:
         - symbol: PLTR
           exchange: nasdaq
           enabled: true
+        - symbol: SPCX
+          exchange: ""
+          enabled: true
     indices: []
     forex:
         - symbol: USDJPY

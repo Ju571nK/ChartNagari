@@ -4,6 +4,10 @@ Five ordered PRs for a self-hosting maintainer. Users get a working Execution ta
 
 PR ids in order: `pr-execution-schema` (already on main as #53), `pr-ci-vitest-race`, `pr-alert-drop-reasons`, `pr-discord-paper-review`, `pr-docs-mcp-hygiene`.
 
+**Status (2026-11-25): closed.** All five PRs merged: #53, #54, #57, #58, #59.
+Per-PR evidence boxes below were not backfilled; the PRs hold the evidence.
+Follow-up work moved to `docs/roadmap/v2.18.0.0.md`.
+
 ## How to read this
 
 One box is one unit of work. Check a box only when its evidence exists. The body is a how-to.
@@ -22,10 +26,10 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 ### Spawn owners
 
-- [ ] `pr-ci-vitest-race` from current trunk after merge of main.
-- [ ] `pr-alert-drop-reasons` after CI PR is open or stacked on it.
-- [ ] `pr-discord-paper-review` after alert-drop PR.
-- [ ] `pr-docs-mcp-hygiene` last (independent of alert/discord but last for blast radius).
+- [x] `pr-ci-vitest-race` from current trunk after merge of main. Merged as #54.
+- [x] `pr-alert-drop-reasons` after CI PR is open or stacked on it. Merged as #58.
+- [x] `pr-discord-paper-review` after alert-drop PR. Merged as #59.
+- [x] `pr-docs-mcp-hygiene` last (independent of alert/discord but last for blast radius). Merged as #57.
 
 File boundaries:
 

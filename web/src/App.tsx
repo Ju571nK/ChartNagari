@@ -3775,6 +3775,7 @@ export function SettingsTab({ uiMode, onSetUiMode, initialSection = 'general', c
       setSessionToken(authToken)
       setAuthToken('')
       setAuthMessage('Authorized for this tab. Reloading forgets the token.')
+      if (error) loadEnv() // a configured token also guards settings reads
     } catch (e) { setAuthMessage(e instanceof Error ? e.message : 'Authentication failed') }
   }
 

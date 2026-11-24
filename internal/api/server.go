@@ -2602,13 +2602,23 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// authMiddleware preserves anonymous local reads except connection verification.
+// sensitiveReads require the API token whenever one is configured, even in
+// local mode: a reverse proxy can expose a local server without remote_access.
+var sensitiveReads = map[string]bool{
+	"/api/connection":      true,
+	"/api/backup/db":       true,
+	"/api/settings/export": true,
+	"/api/settings/config": true,
+	"/api/env/config":      true,
+}
+
+// authMiddleware preserves anonymous local reads except sensitiveReads.
 // Remote mode additionally protects all /api/ reads. Static assets and preflights
 // remain available so the client can render its connection/authentication gate.
 // Browser WebSockets have their own one-time ticket check in connectionWS.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		protectedRead := (s.remoteAccess && strings.HasPrefix(r.URL.Path, "/api/")) || (r.URL.Path == "/api/connection" && s.apiToken != "")
+		protectedRead := (s.remoteAccess && strings.HasPrefix(r.URL.Path, "/api/")) || (sensitiveReads[r.URL.Path] && s.apiToken != "")
 		if (!s.remoteAccess && s.apiToken == "") || (r.Method == http.MethodGet && !protectedRead) || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return

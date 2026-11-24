@@ -83,18 +83,43 @@ func TestRemoteAccessReadsAndTickets(t *testing.T) {
 }
 
 func TestLocalReadCompatibility(t *testing.T) {
-	s := New(t.TempDir(), "")
-	s.WithAPIToken("admin")
-	s.WithSettingsFile(t.TempDir() + "/settings.yaml")
-	w := httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/settings/config", nil))
-	if w.Code != 200 {
-		t.Fatal("local read compatibility changed")
+	newServer := func(token string) *Server {
+		s := New(t.TempDir(), "")
+		s.WithAPIToken(token)
+		s.WithSettingsFile(t.TempDir() + "/settings.yaml")
+		return s
 	}
-	w = httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/connection", nil))
-	if w.Code != 401 {
-		t.Fatal("connection verification must authenticate even in local mode")
+	call := func(s *Server, path, token string) int {
+		r := httptest.NewRequest("GET", path, nil)
+		if token != "" {
+			r.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		return w.Code
+	}
+	withToken, noToken := newServer("admin"), newServer("")
+	for _, path := range []string{"/api/connection", "/api/backup/db", "/api/settings/export", "/api/settings/config", "/api/env/config"} {
+		t.Run(path, func(t *testing.T) {
+			for _, bad := range []string{"", "wrong"} {
+				if code := call(withToken, path, bad); code != 401 {
+					t.Fatalf("token %q: got %d, want 401", bad, code)
+				}
+			}
+			if code := call(withToken, path, "admin"); code == 401 {
+				t.Fatal("valid token rejected")
+			}
+			if path != "/api/connection" {
+				if code := call(noToken, path, ""); code == 401 {
+					t.Fatal("no token configured: read must stay open")
+				}
+			}
+		})
+	}
+	for _, path := range []string{"/api/health", "/api/symbols", "/api/demo/scan"} {
+		if code := call(withToken, path, ""); code == 401 {
+			t.Fatalf("%s: ordinary local read must stay anonymous", path)
+		}
 	}
 }
 

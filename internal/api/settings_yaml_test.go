@@ -48,7 +48,10 @@ func TestWebSettingsYAMLRoundTrip(t *testing.T) {
 	if w := call(http.MethodPut, body, "admin"); w.Code != 200 {
 		t.Fatalf("save: %d %s", w.Code, w.Body)
 	}
-	w := call(http.MethodGet, "", "")
+	if w := call(http.MethodGet, "", ""); w.Code != 401 {
+		t.Fatalf("anonymous settings read: %d", w.Code)
+	}
+	w := call(http.MethodGet, "", "admin")
 	if strings.Contains(w.Body.String(), "paper-secret") || strings.Contains(w.Body.String(), "bridge-secret") {
 		t.Fatal("GET exposed secrets")
 	}

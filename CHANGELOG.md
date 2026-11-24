@@ -37,6 +37,11 @@ Format:
 
 ### Fixed
 
+- With `api_token` set and `remote_access` off, the DB backup, settings export
+  and settings config reads (`/api/backup/db`, `/api/settings/export`,
+  `/api/settings/config`, `/api/env/config`) no longer answer without the token.
+  Settings reloads after **Authorize changes** when that read was refused.
+
 - `TestPrunePerSymbolCap` used a fixed date and failed once it aged past the
   7-day drop TTL.
 

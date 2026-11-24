@@ -22,5 +22,6 @@ Use [GitHub Private Vulnerability Reporting](https://docs.github.com/en/code-sec
 
 - `config/settings.yaml` stores `server.api_token` and provider credentials on disk. `.gitignore` excludes that file. A person who can read the file can use the token.
 - Set `server.remote_access` to `"true"` only with a token of at least 32 characters. The server refuses to start otherwise. In that mode every `/api/` request except `OPTIONS` must send `Authorization: Bearer` and the token. The token is an administrator credential. Terminate HTTPS in front of the server.
+- When `remote_access` is off and `api_token` is set, ordinary local reads stay anonymous, but `GET /api/connection`, `/api/backup/db`, `/api/settings/export`, `/api/settings/config` and `/api/env/config` require the token. Writes always require it.
 - When `remote_access` is off and `api_token` is empty, local read APIs stay open. Do not expose that server on the public internet.
 - **Local SQLite only.** The database stores OHLCV bars and signal metadata. No personal data is collected.

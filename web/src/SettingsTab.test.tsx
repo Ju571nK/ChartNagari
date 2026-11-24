@@ -21,6 +21,21 @@ it('offers in-memory authorization and clears the input after checking the curre
   expect(screen.getByRole('status')).toHaveTextContent('Token forgotten')
 })
 
+it('reloads settings after authorizing when the token-guarded read failed', async () => {
+  let authorized = false
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    if (String(input) === '/api/auth/check') { authorized = true; return new Response(null, { status: 204 }) }
+    if (String(input) === '/api/settings/config' && !authorized) return new Response('unauthorized', { status: 401 })
+    return new Response('{}', { status: 200 })
+  })
+  render(<SettingsTab uiMode="beginner" onSetUiMode={vi.fn()} />)
+  expect(await screen.findByText('Failed to load settings')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText(/Current API token/), { target: { value: 'fixture-token' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Authorize changes' }))
+  await waitFor(() => expect(screen.queryByText('Failed to load settings')).not.toBeInTheDocument())
+  expect(await screen.findByRole('status')).toHaveTextContent('Authorized for this tab')
+})
+
 it('saves only edited YAML fields and explicitly clears a masked secret', async () => {
   const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
     DB_PATH: 'data.db', API_TOKEN: '__configured__', SERVER_HOST: '127.0.0.1',

@@ -16,6 +16,8 @@ Format:
 
 ## [Unreleased]
 
+## [2.17.1.0] - 2026-11-25
+
 ### Added
 
 - Experimental read-only Rakuten FX MT4 demo bridge: `cmd/plugin-rakutenfx`, an
@@ -33,7 +35,8 @@ Format:
 ### Changed
 
 - Default config: alert `score_threshold` 12 → 10 and `cooldown_hours` 4 → 2;
-  default watchlist is BTCUSDT, TSLA, PLTR and USDJPY (ETHUSDT and ^VIX removed).
+  default watchlist is BTCUSDT, TSLA, PLTR, SPCX and USDJPY (ETHUSDT and ^VIX
+  removed).
 
 ### Fixed
 
@@ -41,7 +44,6 @@ Format:
   and settings config reads (`/api/backup/db`, `/api/settings/export`,
   `/api/settings/config`, `/api/env/config`) no longer answer without the token.
   Settings reloads after **Authorize changes** when that read was refused.
-
 - `TestPrunePerSymbolCap` used a fixed date and failed once it aged past the
   7-day drop TTL.
 

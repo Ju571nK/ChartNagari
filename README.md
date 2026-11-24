@@ -22,14 +22,14 @@ English, Korean and Japanese interfaces are available. AI interpretation is opti
 
 ## What's new
 
-**Latest release: [v2.17.0.0. Alert drops, Discord review, and safer paper closes](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.17.0.0)**
+**Latest release: [v2.17.1.0. Token-protected backups and a read-only Rakuten demo bridge](https://github.com/Ju571nK/ChartNagari/releases/tag/v2.17.1.0)**
 
-Status lists why an alert did not fire. A Discord alert links to My Trades Pending when `CHARTNAGARI_URL` is an origin a phone can open. Closing a paper position asks first, then records `CLOSED_MANUAL`.
+When `api_token` is set, the database backup, settings export and settings reads need the token even with `remote_access` off. An experimental read-only Rakuten FX MT4 demo bridge (`cmd/plugin-rakutenfx`) reports demo account and order snapshots. It cannot place or cancel orders.
 
-- With alert-drop recording on, an empty list means nothing was suppressed recently. The list covers score, cooldown, filter, and delivery.
-- HTF automatic penalty calibration and paid hosting are not in this release. Keep your config and database, rebuild the frontend, and restart the server.
+- Default alert config changed: score threshold 12 → 10, cooldown 4 → 2 hours. The default watchlist drops ETHUSDT and ^VIX and adds SPCX and USDJPY.
+- HTF automatic penalty calibration, order execution and paid hosting are not in this release.
 
-Upgrading? Keep your existing settings and database, rebuild the frontend, then restart the server. Read the [release notes](docs/releases/v2.17.0.0.md).
+Upgrading? Keep your existing settings and database, rebuild the frontend, then restart the server. If you use an API token, authorize in Settings before opening backups or settings. Read the [release notes](docs/releases/v2.17.1.0.md).
 
 ## Get started
 
